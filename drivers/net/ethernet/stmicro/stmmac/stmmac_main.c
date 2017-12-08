@@ -1453,7 +1453,7 @@ static void stmmac_dma_interrupt(struct stmmac_priv *priv)
 	if (unlikely(status & tx_hard_error_bump_tc)) {
 		/* Try to bump up the dma threshold on this failure */
 		if (unlikely(priv->xstats.threshold != SF_DMA_MODE) &&
-		    (tc <= 256)) {
+			(tc <= 256)) {
 			tc += 64;
 			if (priv->plat->force_thresh_dma_mode)
 				priv->hw->dma->dma_mode(priv->ioaddr, tc, tc);
@@ -2459,9 +2459,11 @@ static irqreturn_t stmmac_interrupt(int irq, void *dev_id)
  */
 static void stmmac_poll_controller(struct net_device *dev)
 {
-	disable_irq(dev->irq);
+	unsigned long flags;
+
+	local_irq_save(flags);
 	stmmac_interrupt(dev->irq, dev);
-	enable_irq(dev->irq);
+	local_irq_restore(flags);
 }
 #endif
 
@@ -2958,14 +2960,14 @@ int stmmac_dvr_remove(struct net_device *ndev)
 	priv->hw->dma->stop_tx(priv->ioaddr);
 
 	stmmac_set_mac(priv->ioaddr, false);
-	if (priv->pcs != STMMAC_PCS_RGMII && priv->pcs != STMMAC_PCS_TBI &&
-	    priv->pcs != STMMAC_PCS_RTBI)
-		stmmac_mdio_unregister(ndev);
 	netif_carrier_off(ndev);
 	unregister_netdev(ndev);
 	if (priv->stmmac_rst)
 		reset_control_assert(priv->stmmac_rst);
 	clk_disable_unprepare(priv->stmmac_clk);
+	if (priv->pcs != STMMAC_PCS_RGMII && priv->pcs != STMMAC_PCS_TBI &&
+	    priv->pcs != STMMAC_PCS_RTBI)
+		stmmac_mdio_unregister(ndev);
 	free_netdev(ndev);
 
 	return 0;

@@ -129,6 +129,10 @@ static void queue_process(struct work_struct *work)
 	}
 }
 
+#ifdef CONFIG_KGDB
+extern atomic_t kgdb_active;
+#endif
+
 /*
  * Check whether delayed processing was scheduled for our NIC. If so,
  * we attempt to grab the poll lock and use ->poll() to pump the card.
@@ -148,6 +152,9 @@ static int poll_one_napi(struct napi_struct *napi, int budget)
 	 * synchronized by this test which is only made while
 	 * holding the napi->poll_lock.
 	 */
+#ifdef CONFIG_KGDB
+	if (atomic_read(&kgdb_active) < 0)
+#endif
 	if (!test_bit(NAPI_STATE_SCHED, &napi->state))
 		return budget;
 
@@ -175,11 +182,11 @@ static void poll_napi(struct net_device *dev, int budget)
 	}
 }
 
-static void netpoll_poll_dev(struct net_device *dev)
+void netpoll_poll_dev(struct net_device *dev)
 {
 	const struct net_device_ops *ops;
 	struct netpoll_info *ni = rcu_dereference_bh(dev->npinfo);
-	int budget = 0;
+	int budget = 16;
 
 	/* Don't do any rx activity if the dev_lock mutex is held
 	 * the dev_open/close paths use this to block netpoll activity
@@ -277,7 +284,7 @@ static void zap_completion_queue(void)
 	put_cpu_var(softnet_data);
 }
 
-static struct sk_buff *find_skb(struct netpoll *np, int len, int reserve)
+struct sk_buff *find_skb(struct netpoll *np, int len, int reserve)
 {
 	int count = 0;
 	struct sk_buff *skb;

@@ -1859,6 +1859,16 @@ static inline bool netdev_uses_dsa(struct net_device *dev)
 	return false;
 }
 
+static inline bool netdev_uses_stpid_tags(struct net_device *dev)
+{
+#ifdef CONFIG_NET_DSA_TAG_STPID
+	if (dev->dsa_ptr != NULL)
+		return dsa_uses_stpid_tags(dev->dsa_ptr);
+#endif
+
+	return 0;
+}
+
 /**
  *	netdev_priv - access network device private data
  *	@dev: network device

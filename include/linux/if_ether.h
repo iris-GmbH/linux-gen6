@@ -22,6 +22,7 @@
 
 #include <linux/skbuff.h>
 #include <uapi/linux/if_ether.h>
+#define ETH_P_STPID    0x001D          /* STPID switch tagging         */
 
 static inline struct ethhdr *eth_hdr(const struct sk_buff *skb)
 {

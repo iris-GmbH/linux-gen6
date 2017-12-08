@@ -147,6 +147,7 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 
 			data->reset_gpio = of_get_named_gpio(np,
 						"snps,reset-gpio", 0);
+
 			if (data->reset_gpio < 0)
 				return 0;
 
@@ -160,11 +161,11 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 		active_low = data->active_low;
 
 		if (!gpio_request(reset_gpio, "mdio-reset")) {
-			gpio_direction_output(reset_gpio, active_low ? 1 : 0);
+			gpio_direction_output(reset_gpio, 1);
 			udelay(data->delays[0]);
-			gpio_set_value(reset_gpio, active_low ? 0 : 1);
+			gpio_set_value_cansleep(reset_gpio, active_low ? 0 : 1);
 			udelay(data->delays[1]);
-			gpio_set_value(reset_gpio, active_low ? 1 : 0);
+			gpio_set_value_cansleep(reset_gpio, active_low ? 1 : 0);
 			udelay(data->delays[2]);
 		}
 	}
