@@ -8,6 +8,7 @@
  * Licensed under the GPL-2 or later.
  */
 
+#include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/bitops.h>
@@ -17,11 +18,22 @@
 #include <linux/skbuff.h>
 #include <linux/platform_device.h>
 
+#include <linux/spi/spi.h>
+#include <linux/gpio.h>
+
 #include <linux/can/dev.h>
 #include <linux/can/error.h>
+#include "bfin_can.h"
 
-#include <asm/bfin_can.h>
+#ifdef CONFIG_ARCH_HEADER_IN_MACH
+#include <mach/portmux.h>
+#else
 #include <asm/portmux.h>
+#endif
+
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_address.h>
 
 #define DRV_NAME "bfin_can"
 #define BFIN_CAN_TIMEOUT 100
@@ -38,6 +50,7 @@ struct bfin_can_priv {
 	int tx_irq;
 	int err_irq;
 	unsigned short *pin_list;
+	struct spi_device *spi;
 };
 
 /*
@@ -45,7 +58,7 @@ struct bfin_can_priv {
  */
 static const struct can_bittiming_const bfin_can_bittiming_const = {
 	.name = DRV_NAME,
-	.tseg1_min = 1,
+	.tseg1_min = 2,
 	.tseg1_max = 16,
 	.tseg2_min = 1,
 	.tseg2_max = 8,
@@ -78,8 +91,8 @@ static int bfin_can_set_bittiming(struct net_device *dev)
 	if (priv->can.ctrlmode & CAN_CTRLMODE_3_SAMPLES)
 		timing |= SAM;
 
-	bfin_write(&reg->clock, clk);
-	bfin_write(&reg->timing, timing);
+	writew(clk, &reg->clock);
+	writew(timing, &reg->timing);
 
 	netdev_info(dev, "setting CLOCK=0x%04x TIMING=0x%04x\n", clk, timing);
 
@@ -94,16 +107,14 @@ static void bfin_can_set_reset_mode(struct net_device *dev)
 	int i;
 
 	/* disable interrupts */
-	bfin_write(&reg->mbim1, 0);
-	bfin_write(&reg->mbim2, 0);
-	bfin_write(&reg->gim, 0);
+	writew(0, &reg->mbim1);
+	writew(0, &reg->mbim2);
+	writew(0, &reg->gim);
 
 	/* reset can and enter configuration mode */
-	bfin_write(&reg->control, SRS | CCR);
-	SSYNC();
-	bfin_write(&reg->control, CCR);
-	SSYNC();
-	while (!(bfin_read(&reg->control) & CCA)) {
+	writew(SRS | CCR, &reg->control);
+	writew(CCR, &reg->control);
+	while (!(readw(&reg->control) & CCA)) {
 		udelay(10);
 		if (--timeout == 0) {
 			netdev_err(dev, "fail to enter configuration mode\n");
@@ -116,34 +127,33 @@ static void bfin_can_set_reset_mode(struct net_device *dev)
 	 * by writing to CAN Mailbox Configuration Registers 1 and 2
 	 * For all bits: 0 - Mailbox disabled, 1 - Mailbox enabled
 	 */
-	bfin_write(&reg->mc1, 0);
-	bfin_write(&reg->mc2, 0);
+	writew(0, &reg->mc1);
+	writew(0, &reg->mc2);
 
 	/* Set Mailbox Direction */
-	bfin_write(&reg->md1, 0xFFFF);   /* mailbox 1-16 are RX */
-	bfin_write(&reg->md2, 0);   /* mailbox 17-32 are TX */
+	writew(0xFFFF, &reg->md1);   /* mailbox 1-16 are RX */
+	writew(0, &reg->md2);   /* mailbox 17-32 are TX */
 
 	/* RECEIVE_STD_CHL */
 	for (i = 0; i < 2; i++) {
-		bfin_write(&reg->chl[RECEIVE_STD_CHL + i].id0, 0);
-		bfin_write(&reg->chl[RECEIVE_STD_CHL + i].id1, AME);
-		bfin_write(&reg->chl[RECEIVE_STD_CHL + i].dlc, 0);
-		bfin_write(&reg->msk[RECEIVE_STD_CHL + i].amh, 0x1FFF);
-		bfin_write(&reg->msk[RECEIVE_STD_CHL + i].aml, 0xFFFF);
+		writew(0, &reg->chl[RECEIVE_STD_CHL + i].id0);
+		writew(AME, &reg->chl[RECEIVE_STD_CHL + i].id1);
+		writew(0, &reg->chl[RECEIVE_STD_CHL + i].dlc);
+		writew(0x1FFF, &reg->msk[RECEIVE_STD_CHL + i].amh);
+		writew(0xFFFF, &reg->msk[RECEIVE_STD_CHL + i].aml);
 	}
 
 	/* RECEIVE_EXT_CHL */
 	for (i = 0; i < 2; i++) {
-		bfin_write(&reg->chl[RECEIVE_EXT_CHL + i].id0, 0);
-		bfin_write(&reg->chl[RECEIVE_EXT_CHL + i].id1, AME | IDE);
-		bfin_write(&reg->chl[RECEIVE_EXT_CHL + i].dlc, 0);
-		bfin_write(&reg->msk[RECEIVE_EXT_CHL + i].amh, 0x1FFF);
-		bfin_write(&reg->msk[RECEIVE_EXT_CHL + i].aml, 0xFFFF);
+		writew(0, &reg->chl[RECEIVE_EXT_CHL + i].id0);
+		writew(AME | IDE, &reg->chl[RECEIVE_EXT_CHL + i].id1);
+		writew(0, &reg->chl[RECEIVE_EXT_CHL + i].dlc);
+		writew(0x1FFF, &reg->msk[RECEIVE_EXT_CHL + i].amh);
+		writew(0xFFFF, &reg->msk[RECEIVE_EXT_CHL + i].aml);
 	}
 
-	bfin_write(&reg->mc2, BIT(TRANSMIT_CHL - 16));
-	bfin_write(&reg->mc1, BIT(RECEIVE_STD_CHL) + BIT(RECEIVE_EXT_CHL));
-	SSYNC();
+	writew(BIT(TRANSMIT_CHL - 16), &reg->mc2);
+	writew(BIT(RECEIVE_STD_CHL) + BIT(RECEIVE_EXT_CHL), &reg->mc1);
 
 	priv->can.state = CAN_STATE_STOPPED;
 }
@@ -157,9 +167,9 @@ static void bfin_can_set_normal_mode(struct net_device *dev)
 	/*
 	 * leave configuration mode
 	 */
-	bfin_write(&reg->control, bfin_read(&reg->control) & ~CCR);
+	writew(readw(&reg->control) & ~CCR, &reg->control);
 
-	while (bfin_read(&reg->status) & CCA) {
+	while (readw(&reg->status) & CCA) {
 		udelay(10);
 		if (--timeout == 0) {
 			netdev_err(dev, "fail to leave configuration mode\n");
@@ -170,26 +180,25 @@ static void bfin_can_set_normal_mode(struct net_device *dev)
 	/*
 	 * clear _All_  tx and rx interrupts
 	 */
-	bfin_write(&reg->mbtif1, 0xFFFF);
-	bfin_write(&reg->mbtif2, 0xFFFF);
-	bfin_write(&reg->mbrif1, 0xFFFF);
-	bfin_write(&reg->mbrif2, 0xFFFF);
+	writew(0xFFFF, &reg->mbtif1);
+	writew(0xFFFF, &reg->mbtif2);
+	writew(0xFFFF, &reg->mbrif1);
+	writew(0xFFFF, &reg->mbrif2);
 
 	/*
 	 * clear global interrupt status register
 	 */
-	bfin_write(&reg->gis, 0x7FF); /* overwrites with '1' */
+	writew(0x7FF, &reg->gis); /* overwrites with '1' */
 
 	/*
 	 * Initialize Interrupts
 	 * - set bits in the mailbox interrupt mask register
 	 * - global interrupt mask
 	 */
-	bfin_write(&reg->mbim1, BIT(RECEIVE_STD_CHL) + BIT(RECEIVE_EXT_CHL));
-	bfin_write(&reg->mbim2, BIT(TRANSMIT_CHL - 16));
+	writew(BIT(RECEIVE_STD_CHL) + BIT(RECEIVE_EXT_CHL), &reg->mbim1);
+	writew(BIT(TRANSMIT_CHL - 16), &reg->mbim2);
 
-	bfin_write(&reg->gim, EPIM | BOIM | RMLIM);
-	SSYNC();
+	writew(EPIM | BOIM | RMLIM, &reg->gim);
 }
 
 static void bfin_can_start(struct net_device *dev)
@@ -226,7 +235,7 @@ static int bfin_can_get_berr_counter(const struct net_device *dev,
 	struct bfin_can_priv *priv = netdev_priv(dev);
 	struct bfin_can_regs __iomem *reg = priv->membase;
 
-	u16 cec = bfin_read(&reg->cec);
+	u16 cec = readw(&reg->cec);
 
 	bec->txerr = cec >> 8;
 	bec->rxerr = cec;
@@ -252,28 +261,28 @@ static int bfin_can_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* fill id */
 	if (id & CAN_EFF_FLAG) {
-		bfin_write(&reg->chl[TRANSMIT_CHL].id0, id);
+		writew(id, &reg->chl[TRANSMIT_CHL].id0);
 		val = ((id & 0x1FFF0000) >> 16) | IDE;
 	} else
 		val = (id << 2);
 	if (id & CAN_RTR_FLAG)
 		val |= RTR;
-	bfin_write(&reg->chl[TRANSMIT_CHL].id1, val | AME);
+	writew(val | AME, &reg->chl[TRANSMIT_CHL].id1);
 
 	/* fill payload */
 	for (i = 0; i < 8; i += 2) {
 		val = ((7 - i) < dlc ? (data[7 - i]) : 0) +
 			((6 - i) < dlc ? (data[6 - i] << 8) : 0);
-		bfin_write(&reg->chl[TRANSMIT_CHL].data[i], val);
+		writew(val, &reg->chl[TRANSMIT_CHL].data[i]);
 	}
 
 	/* fill data length code */
-	bfin_write(&reg->chl[TRANSMIT_CHL].dlc, dlc);
+	writew(dlc, &reg->chl[TRANSMIT_CHL].dlc);
 
 	can_put_echo_skb(skb, dev, 0);
 
 	/* set transmit request */
-	bfin_write(&reg->trs2, BIT(TRANSMIT_CHL - 16));
+	writew(BIT(TRANSMIT_CHL - 16), &reg->trs2);
 
 	return 0;
 }
@@ -296,26 +305,26 @@ static void bfin_can_rx(struct net_device *dev, u16 isrc)
 	/* get id */
 	if (isrc & BIT(RECEIVE_EXT_CHL)) {
 		/* extended frame format (EFF) */
-		cf->can_id = ((bfin_read(&reg->chl[RECEIVE_EXT_CHL].id1)
+		cf->can_id = ((readw(&reg->chl[RECEIVE_EXT_CHL].id1)
 			     & 0x1FFF) << 16)
-			     + bfin_read(&reg->chl[RECEIVE_EXT_CHL].id0);
+			     + readw(&reg->chl[RECEIVE_EXT_CHL].id0);
 		cf->can_id |= CAN_EFF_FLAG;
 		obj = RECEIVE_EXT_CHL;
 	} else {
 		/* standard frame format (SFF) */
-		cf->can_id = (bfin_read(&reg->chl[RECEIVE_STD_CHL].id1)
+		cf->can_id = (readw(&reg->chl[RECEIVE_STD_CHL].id1)
 			     & 0x1ffc) >> 2;
 		obj = RECEIVE_STD_CHL;
 	}
-	if (bfin_read(&reg->chl[obj].id1) & RTR)
+	if (readw(&reg->chl[obj].id1) & RTR)
 		cf->can_id |= CAN_RTR_FLAG;
 
 	/* get data length code */
-	cf->can_dlc = get_can_dlc(bfin_read(&reg->chl[obj].dlc) & 0xF);
+	cf->can_dlc = get_can_dlc(readw(&reg->chl[obj].dlc) & 0xF);
 
 	/* get payload */
 	for (i = 0; i < 8; i += 2) {
-		val = bfin_read(&reg->chl[obj].data[i]);
+		val = readw(&reg->chl[obj].data[i]);
 		cf->data[7 - i] = (7 - i) < cf->can_dlc ? val : 0;
 		cf->data[6 - i] = (6 - i) < cf->can_dlc ? (val >> 8) : 0;
 	}
@@ -369,7 +378,7 @@ static int bfin_can_err(struct net_device *dev, u16 isrc, u16 status)
 
 	if (state != priv->can.state && (state == CAN_STATE_ERROR_WARNING ||
 				state == CAN_STATE_ERROR_PASSIVE)) {
-		u16 cec = bfin_read(&reg->cec);
+		u16 cec = readw(&reg->cec);
 		u8 rxerr = cec;
 		u8 txerr = cec >> 8;
 
@@ -420,23 +429,23 @@ static irqreturn_t bfin_can_interrupt(int irq, void *dev_id)
 	struct net_device_stats *stats = &dev->stats;
 	u16 status, isrc;
 
-	if ((irq == priv->tx_irq) && bfin_read(&reg->mbtif2)) {
+	if ((irq == priv->tx_irq) && readw(&reg->mbtif2)) {
 		/* transmission complete interrupt */
-		bfin_write(&reg->mbtif2, 0xFFFF);
+		writew(0xFFFF, &reg->mbtif2);
 		stats->tx_packets++;
-		stats->tx_bytes += bfin_read(&reg->chl[TRANSMIT_CHL].dlc);
+		stats->tx_bytes += readw(&reg->chl[TRANSMIT_CHL].dlc);
 		can_get_echo_skb(dev, 0);
 		netif_wake_queue(dev);
-	} else if ((irq == priv->rx_irq) && bfin_read(&reg->mbrif1)) {
+	} else if ((irq == priv->rx_irq) && readw(&reg->mbrif1)) {
 		/* receive interrupt */
-		isrc = bfin_read(&reg->mbrif1);
-		bfin_write(&reg->mbrif1, 0xFFFF);
+		isrc = readw(&reg->mbrif1);
+		writew(0xFFFF, &reg->mbrif1);
 		bfin_can_rx(dev, isrc);
-	} else if ((irq == priv->err_irq) && bfin_read(&reg->gis)) {
+	} else if ((irq == priv->err_irq) && readw(&reg->gis)) {
 		/* error interrupt */
-		isrc = bfin_read(&reg->gis);
-		status = bfin_read(&reg->esr);
-		bfin_write(&reg->gis, 0x7FF);
+		isrc = readw(&reg->gis);
+		status = readw(&reg->esr);
+		writew(0x7FF, &reg->gis);
 		bfin_can_err(dev, isrc, status);
 	} else {
 		return IRQ_NONE;
@@ -532,33 +541,120 @@ static const struct net_device_ops bfin_can_netdev_ops = {
 	.ndo_change_mtu         = can_change_mtu,
 };
 
+#ifdef CONFIG_OF
+static const struct of_device_id adi_can_of_match[] = {
+	{
+		.compatible = "adi,can",
+	},
+	{},
+};
+
+MODULE_DEVICE_TABLE(of, adi_can_of_match);
+#endif
+
+static int phy_set_normal_mode(struct spi_device *spi)
+{
+	struct spi_message msg;
+	struct spi_transfer x;
+	int err;
+
+	u8 data[2];
+	u8 rcv[2];
+
+	data[0] = (0x1<<1);
+	data[1] = 0x7;
+
+	spi_message_init(&msg);
+	memset(&x, 0, sizeof(x));
+
+	spi->mode |= SPI_MODE_1;
+	spi->bits_per_word = 8;
+	err = spi_setup(spi);
+	x.tx_buf = data;
+	x.rx_buf = rcv;
+	x.len = 2;
+
+	spi_message_add_tail(&x, &msg);
+	err = spi_sync(spi, &msg);
+
+	return err;
+}
+
+static int dummy_probe(struct spi_device *spi)
+{
+	return 0;
+}
+
+static int dummy_remove(struct spi_device *spi)
+{
+	return 0;
+}
+
+static struct spi_driver dummy_driver = {
+	.driver.name = "dummy",
+	.probe       = dummy_probe,
+	.remove      = dummy_remove,
+};
+
+static int phy1145_startup(struct bfin_can_priv *priv, u16 spi_bus,
+			   u16 spi_cs, u32 spi_clk)
+{
+	int ret;
+	struct spi_master *master;
+	struct spi_board_info board = {
+		.modalias               = "dummy",
+		.max_speed_hz           = spi_clk,
+		.bus_num                = spi_bus,
+		.chip_select            = spi_cs,
+	};
+
+	master = spi_busnum_to_master(0);
+	if (!master)
+		return -EPROBE_DEFER;
+	priv->spi = spi_new_device(master, &board);
+	if (!priv->spi)
+		return -EINVAL;
+	ret = spi_register_driver(&dummy_driver);
+	if (ret < 0) {
+		spi_unregister_device(priv->spi);
+		return ret;
+	}
+
+	phy_set_normal_mode(priv->spi);
+
+	return 0;
+}
+
 static int bfin_can_probe(struct platform_device *pdev)
 {
 	int err;
+	struct device_node *np = pdev->dev.of_node;
 	struct net_device *dev;
 	struct bfin_can_priv *priv;
 	struct resource *res_mem, *rx_irq, *tx_irq, *err_irq;
 	unsigned short *pdata;
+	struct clk *clk_source;
 
-	pdata = dev_get_platdata(&pdev->dev);
-	if (!pdata) {
-		dev_err(&pdev->dev, "No platform data provided!\n");
-		err = -EINVAL;
-		goto exit;
-	}
+	if (!np)
+		return -ENODEV;
+
+	const struct of_device_id *match;
+
+	match = of_match_device(of_match_ptr(adi_can_of_match), &pdev->dev);
+
+	pdata = (unsigned short *)pdev->dev.platform_data;
 
 	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (res_mem == NULL) {
+		dev_err(&pdev->dev, "Cannot get IORESOURCE_MEM\n");
+		return -ENOENT;
+	}
+
 	rx_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	tx_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 1);
 	err_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 2);
 	if (!res_mem || !rx_irq || !tx_irq || !err_irq) {
 		err = -EINVAL;
-		goto exit;
-	}
-
-	if (!request_mem_region(res_mem->start, resource_size(res_mem),
-				dev_name(&pdev->dev))) {
-		err = -EBUSY;
 		goto exit;
 	}
 
@@ -574,12 +670,24 @@ static int bfin_can_probe(struct platform_device *pdev)
 	}
 
 	priv = netdev_priv(dev);
-	priv->membase = (void __iomem *)res_mem->start;
+
+	priv->membase = devm_ioremap_resource(&pdev->dev, res_mem);
+	if (IS_ERR((void *)priv->membase)) {
+		dev_err(&pdev->dev, "Cannot map IO\n");
+		return PTR_ERR((void *)priv->membase);
+	}
+
 	priv->rx_irq = rx_irq->start;
 	priv->tx_irq = tx_irq->start;
 	priv->err_irq = err_irq->start;
 	priv->pin_list = pdata;
-	priv->can.clock.freq = get_sclk();
+
+	clk_source = devm_clk_get(&pdev->dev, "can");
+	if (IS_ERR(clk_source)) {
+		dev_err(dev, "can not get can clock\n");
+		return PTR_ERR(clk_source);
+	}
+	priv->can.clock.freq = clk_get_rate(clk_source);
 
 	platform_set_drvdata(pdev, dev);
 	SET_NETDEV_DEV(dev, &pdev->dev);
@@ -600,8 +708,44 @@ static int bfin_can_probe(struct platform_device *pdev)
 		"(&reg_base=%p, rx_irq=%d, tx_irq=%d, err_irq=%d, sclk=%d)\n",
 		DRV_NAME, priv->membase, priv->rx_irq,
 		priv->tx_irq, priv->err_irq, priv->can.clock.freq);
+
+	if (of_property_match_string(np, "phy-name", "tja1055") >= 0) {
+		struct gpio_desc *en_gpio, *stb_gpio;
+
+		en_gpio = devm_gpiod_get_index(&pdev->dev, "phy", 0);
+		if (IS_ERR(en_gpio)) {
+			err = PTR_ERR(en_gpio);
+			if (err != -ENOENT && err != -ENOSYS)
+				goto exit_candev_unreg;
+		}
+		gpiod_direction_output(en_gpio, 1);
+
+		stb_gpio = devm_gpiod_get_index(&pdev->dev, "phy", 1);
+		if (IS_ERR(stb_gpio)) {
+			err = PTR_ERR(stb_gpio);
+			if (err != -ENOENT && err != -ENOSYS)
+				goto exit_candev_unreg;
+		}
+		gpiod_direction_output(stb_gpio, 0);
+	}
+
+	if (of_property_match_string(np, "phy-name", "tja1145") >= 0) {
+		u16 spi_bus, spi_cs;
+		u32 spi_clk;
+		of_property_read_u16(np, "phy-spibus", &spi_bus);
+		of_property_read_u16(np, "phy-spics", &spi_cs);
+		of_property_read_u32(np, "phy-spiclk", &spi_clk);
+		err = phy1145_startup(priv, spi_bus, spi_cs, spi_clk);
+		if (err < 0) {
+			dev_err(&pdev->dev, "Can't start can phy\n");
+			goto exit_candev_unreg;
+		}
+	}
+
 	return 0;
 
+exit_candev_unreg:
+	unregister_candev(dev);
 exit_candev_free:
 	free_candev(dev);
 exit_peri_pin_free:
@@ -641,9 +785,8 @@ static int bfin_can_suspend(struct platform_device *pdev, pm_message_t mesg)
 
 	if (netif_running(dev)) {
 		/* enter sleep mode */
-		bfin_write(&reg->control, bfin_read(&reg->control) | SMR);
-		SSYNC();
-		while (!(bfin_read(&reg->intr) & SMACK)) {
+		writew(readw(&reg->control) | SMR, &reg->control);
+		while (!(readw(&reg->intr) & SMACK)) {
 			udelay(10);
 			if (--timeout == 0) {
 				netdev_err(dev, "fail to enter sleep mode\n");
@@ -663,8 +806,7 @@ static int bfin_can_resume(struct platform_device *pdev)
 
 	if (netif_running(dev)) {
 		/* leave sleep mode */
-		bfin_write(&reg->intr, 0);
-		SSYNC();
+		writew(0, &reg->intr);
 	}
 
 	return 0;
@@ -681,6 +823,7 @@ static struct platform_driver bfin_can_driver = {
 	.resume = bfin_can_resume,
 	.driver = {
 		.name = DRV_NAME,
+		.of_match_table = of_match_ptr(adi_can_of_match),
 	},
 };
 
