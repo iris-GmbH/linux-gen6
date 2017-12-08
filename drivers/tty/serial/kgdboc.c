@@ -149,8 +149,11 @@ static void cleanup_kgdboc(void)
 	if (kgdb_unregister_nmi_console())
 		return;
 	kgdboc_unregister_kbd();
-	if (configured == 1)
+	if (configured == 1) {
+		kgdb_tty_driver->ops->kgdboc_port_shutdown(kgdb_tty_driver,
+					kgdb_tty_line);
 		kgdb_unregister_io_module(&kgdboc_io_ops);
+	}
 }
 
 static int configure_kgdboc(void)
@@ -206,6 +209,9 @@ do_register:
 		goto nmi_con_failed;
 
 	configured = 1;
+
+	kgdb_tty_driver->ops->kgdboc_port_startup(kgdb_tty_driver,
+					kgdb_tty_line);
 
 	return 0;
 
