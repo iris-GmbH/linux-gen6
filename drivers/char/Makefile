@@ -14,7 +14,16 @@ obj-$(CONFIG_MSPEC)		+= mspec.o
 obj-$(CONFIG_UV_MMTIMER)	+= uv_mmtimer.o
 obj-$(CONFIG_IBM_BSR)		+= bsr.o
 obj-$(CONFIG_SGI_MBCS)		+= mbcs.o
+obj-$(CONFIG_BFIN_DMA_INTERFACE) += bfin-dma.o
 obj-$(CONFIG_BFIN_OTP)		+= bfin-otp.o
+obj-$(CONFIG_BFIN_PPI)		+= bfin_ppi.o
+obj-$(CONFIG_SC58X_PCIE_EP)     += sc58x_pcie_ep.o
+obj-$(CONFIG_SC58X_PCIE)        += sc58x_pcie.o
+obj-$(CONFIG_BFIN_EPPI)          += bfin_eppi.o
+obj-$(CONFIG_BFIN_SIMPLE_TIMER)	+= bfin_simple_timer.o
+obj-$(CONFIG_BFIN_CRC)		+= bfin_crc.o
+obj-$(CONFIG_BFIN_SPORT)	+= bfin_sport.o
+obj-$(CONFIG_BFIN_LINKPORT)	+= bfin_lp.o
 
 obj-$(CONFIG_PRINTER)		+= lp.o
 
