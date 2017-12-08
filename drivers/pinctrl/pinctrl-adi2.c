@@ -436,10 +436,10 @@ static int adi_gpio_irq_type(struct irq_data *d, unsigned int type)
 
 	if (type & (IRQ_TYPE_EDGE_RISING | IRQ_TYPE_EDGE_FALLING)) {
 		writel(pintmask, &pint_regs->edge_set);
-		__irq_set_handler_locked(irq, handle_edge_irq);
+		irq_set_handler_locked(d, handle_edge_irq);
 	} else {
 		writel(pintmask, &pint_regs->edge_clear);
-		__irq_set_handler_locked(irq, handle_level_irq);
+		irq_set_handler_locked(d, handle_level_irq);
 	}
 
 out:
@@ -852,6 +852,32 @@ static int adi_gpio_to_irq(struct gpio_chip *chip, unsigned offset)
 		return irq_create_mapping(port->domain, offset);
 }
 
+#ifdef CONFIG_OF
+static const struct of_device_id adi_pinctrl_of_match[] = {
+	{
+		.compatible = "adi,adi2-pinctrl",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, adi_pinctrl_of_match);
+
+static const struct of_device_id adi_pint_of_match[] = {
+	{
+		.compatible = "adi,pint",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, adi_pint_of_match);
+
+static const struct of_device_id adi_gport_of_match[] = {
+	{
+		.compatible = "adi,gport",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, adi_gport_of_match);
+#endif
+
 static int adi_pint_map_port(struct gpio_pint *pint, bool assign, u8 map,
 	struct irq_domain *domain)
 {
@@ -1068,7 +1094,7 @@ static int adi_gpio_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, port);
 
-	port->chip.dev			= &pdev->dev;
+	//port->chip.dev			= &pdev->dev;
 	port->chip.label		= "adi-gpio";
 	port->chip.direction_input	= adi_gpio_direction_input;
 	port->chip.get			= adi_gpio_get_value;

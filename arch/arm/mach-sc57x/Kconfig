@@ -10,6 +10,9 @@ choice
 config	MACH_SC573_EZKIT
 	bool "ADI sc573 EZKIT board"
 
+config	MACH_SC57X_GEN6
+	bool "ADI sc57x on iris Gen6 board"
+
 endchoice
 
 config ARCH_SC57X_SLAVECORE_COUNT
