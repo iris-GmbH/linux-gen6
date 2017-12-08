@@ -288,6 +288,11 @@ struct tty_operations {
 	int (*get_icount)(struct tty_struct *tty,
 				struct serial_icounter_struct *icount);
 	void (*show_fdinfo)(struct tty_struct *tty, struct seq_file *m);
+#if defined(CONFIG_KGDB_SERIAL_CONSOLE) || \
+	defined(CONFIG_KGDB_SERIAL_CONSOLE_MODULE)
+	int (*kgdboc_port_startup)(struct tty_driver *driver, int line);
+	void (*kgdboc_port_shutdown)(struct tty_driver *driver, int line);
+#endif
 #ifdef CONFIG_CONSOLE_POLL
 	int (*poll_init)(struct tty_driver *driver, int line, char *options);
 	int (*poll_get_char)(struct tty_driver *driver, int line);
