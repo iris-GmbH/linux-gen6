@@ -464,7 +464,7 @@ endif # if CRYPTO_DEV_UX500
 
 config CRYPTO_DEV_BFIN_CRC
 	tristate "Support for Blackfin CRC hardware"
-	depends on BF60x
+	depends on BF60x || ARCH_SC58X || ARCH_SC57X
 	help
 	  Newer Blackfin processors have CRC hardware. Select this if you
 	  want to use the Blackfin CRC module.
