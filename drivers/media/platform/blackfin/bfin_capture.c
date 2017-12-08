@@ -31,17 +31,22 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 #include <linux/types.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
 
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-dma-contig.h>
-
-#include <asm/dma.h>
-
 #include <media/blackfin/bfin_capture.h>
 #include <media/blackfin/ppi.h>
+
+#ifdef CONFIG_ARCH_HEADER_IN_MACH
+#include <mach/dma.h>
+#else
+#include <asm/dma.h>
+#endif
 
 #define CAPTURE_DRV_NAME        "bfin_capture"
 #define BCAP_MIN_NUM_BUF        2
@@ -431,6 +436,9 @@ static void bcap_stop_streaming(struct vb2_queue *vq)
 				"stream off failed in subdev\n");
 
 	/* release all active buffers */
+	if (bcap_dev->cur_frm)
+		vb2_buffer_done(&bcap_dev->cur_frm->vb, VB2_BUF_STATE_ERROR);
+
 	while (!list_empty(&bcap_dev->dma_queue)) {
 		bcap_dev->cur_frm = list_entry(bcap_dev->dma_queue.next,
 						struct bcap_buffer, list);
@@ -506,13 +514,15 @@ static irqreturn_t bcap_isr(int irq, void *dev_id)
 {
 	struct ppi_if *ppi = dev_id;
 	struct bcap_device *bcap_dev = ppi->priv;
+	struct timeval timevalue;
 	struct vb2_buffer *vb = &bcap_dev->cur_frm->vb;
 	dma_addr_t addr;
 
 	spin_lock(&bcap_dev->lock);
 
 	if (!list_empty(&bcap_dev->dma_queue)) {
-		v4l2_get_timestamp(&vb->v4l2_buf.timestamp);
+		do_gettimeofday(&timevalue);
+		vb->v4l2_buf.timestamp = timevalue;
 		if (ppi->err) {
 			vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
 			ppi->err = false;
@@ -904,6 +914,64 @@ static struct v4l2_file_operations bcap_fops = {
 	.poll = bcap_poll
 };
 
+#ifdef CONFIG_OF
+static int get_int_prop(struct device_node *dn, const char *s)
+{
+	int ret;
+	u32 val;
+
+	ret = of_property_read_u32(dn, s, &val);
+	if (ret)
+		return 0;
+	return val;
+}
+
+static const struct of_device_id adi_cap_match[] = {
+	{ .compatible = "adi,cap", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, adi_cap_match);
+
+static struct bfin_capture_config *adi_get_config(struct platform_device *pdev)
+{
+	struct bfin_capture_config *config;
+	struct device_node *node = pdev->dev.of_node;
+	struct ppi_info *info;
+	const char *string;
+	struct resource *res;
+
+	config = (struct bfin_capture_config *)pdev->dev.platform_data;
+	if (!config) {
+		dev_err(&pdev->dev, "failed to get platform data\n");
+		return -ENXIO;
+	}
+
+	/*Initialize ppi info struct*/
+	info = devm_kzalloc(&pdev->dev, sizeof(*info), GFP_KERNEL);
+	if (!info) {
+		dev_err(&pdev->dev, "failed to alloc ppi info\n");
+		return -ENOMEM;
+	}
+	info->type = (enum ppi_type)get_int_prop(node, "type");
+	info->dma_ch = get_int_prop(node, "dma-channel");
+	info->irq_err = platform_get_irq(pdev, 0);
+	info->spu = get_int_prop(node, "spu_securep_id");
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	info->base = devm_ioremap_resource(&pdev->dev, res);
+	if (!(info->base)) {
+		dev_err(&pdev->dev, "failed to get mem resource");
+		return -ENOMEM;
+	}
+
+	config->i2c_adapter_id = get_int_prop(node, "i2c_bus_id");
+	of_property_read_string(node, "card-name", &string);
+	config->card_name = (char *)string;
+	config->ppi_info = info;
+
+	return config;
+}
+#endif
+
 static int bcap_probe(struct platform_device *pdev)
 {
 	struct bcap_device *bcap_dev;
@@ -912,13 +980,26 @@ static int bcap_probe(struct platform_device *pdev)
 	struct bfin_capture_config *config;
 	struct vb2_queue *q;
 	struct bcap_route *route;
+	struct of_device_id *match;
+	struct device *dev = &pdev->dev;
 	int ret;
 
+#ifdef CONFIG_OF
+	match = of_match_device(adi_cap_match, &pdev->dev);
+	if (!match) {
+		dev_err(dev, "failed to matching of_match node\n");
+		return -ENODEV;
+	}
+
+	if (dev->of_node)
+		config = adi_get_config(pdev);
+#else
 	config = pdev->dev.platform_data;
 	if (!config || !config->num_inputs) {
 		v4l2_err(pdev->dev.driver, "Unable to get board config\n");
 		return -ENODEV;
 	}
+#endif
 
 	bcap_dev = kzalloc(sizeof(*bcap_dev), GFP_KERNEL);
 	if (!bcap_dev) {
@@ -1120,6 +1201,9 @@ static int bcap_remove(struct platform_device *pdev)
 static struct platform_driver bcap_driver = {
 	.driver = {
 		.name  = CAPTURE_DRV_NAME,
+#ifdef CONFIG_OF
+		.of_match_table = adi_cap_match,
+#endif
 	},
 	.probe = bcap_probe,
 	.remove = bcap_remove,
