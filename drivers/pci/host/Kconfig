@@ -40,6 +40,15 @@ config PCI_TEGRA
 	  Say Y here if you want support for the PCIe host controller found
 	  on NVIDIA Tegra SoCs.
 
+config PCI_SC58X
+	bool "ADI SC58X PCIe controller"
+	depends on ARCH_SC58X
+	help
+	  Say Y here if you want to enable PCIE support on SC58X SoC.
+	  This controller has a dual mode core which operates in root
+	  complex port mode for this driver. It is compliant with PCIE
+	  Base 3.0 Specification.
+
 config PCI_RCAR_GEN2
 	bool "Renesas R-Car Gen2 Internal PCI controller"
 	depends on ARM
