@@ -35,4 +35,6 @@ config NET_DSA_TAG_EDSA
 config NET_DSA_TAG_TRAILER
 	bool
 
+config NET_DSA_TAG_STPID
+	bool
 endif

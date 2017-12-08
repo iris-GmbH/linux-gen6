@@ -66,4 +66,12 @@ config NET_DSA_BCM_SF2
 	  This enables support for the Broadcom Starfighter 2 Ethernet
 	  switch chips.
 
+config NET_DSA_KSZ8893M
+	tristate "MICREL KSZ8893MQL/BL ethernet switch chip support"
+	depends on SPI
+	select NET_DSA
+	select NET_DSA_TAG_STPID
+	---help---
+	  This enables support for the Micrel KSZ8893MQL/BL
+	  ethernet switch chips.
 endmenu

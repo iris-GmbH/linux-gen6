@@ -650,6 +650,11 @@ dsa_slave_create(struct dsa_switch *ds, struct device *parent,
 		p->xmit = trailer_netdev_ops.xmit;
 		break;
 #endif
+#ifdef CONFIG_NET_DSA_TAG_STPID
+	case DSA_TAG_PROTO_STPID:
+		p->xmit = stpid_netdev_ops.xmit;
+		break;
+#endif
 #ifdef CONFIG_NET_DSA_TAG_BRCM
 	case DSA_TAG_PROTO_BRCM:
 		p->xmit = brcm_netdev_ops.xmit;

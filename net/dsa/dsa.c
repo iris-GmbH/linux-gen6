@@ -272,6 +272,11 @@ dsa_switch_setup(struct dsa_switch_tree *dst, int index,
 			dst->rcv = trailer_netdev_ops.rcv;
 			break;
 #endif
+#ifdef CONFIG_NET_DSA_TAG_STPID
+		case DSA_TAG_PROTO_STPID:
+			dst->rcv = stpid_netdev_ops.rcv;
+			break;
+#endif
 #ifdef CONFIG_NET_DSA_TAG_BRCM
 		case DSA_TAG_PROTO_BRCM:
 			dst->rcv = brcm_netdev_ops.rcv;
@@ -371,6 +376,31 @@ static void dsa_switch_destroy(struct dsa_switch *ds)
 #endif
 }
 
+/* link polling *************************************************************/
+static void dsa_link_poll_work(struct work_struct *ugly)
+{
+	struct dsa_switch_tree *dst;
+	int i;
+
+	dst = container_of(ugly, struct dsa_switch_tree, link_poll_work);
+
+	for (i = 0; i < dst->pd->nr_chips; i++) {
+		struct dsa_switch *ds = dst->ds[i];
+
+		if (ds != NULL && ds->drv->poll_link != NULL)
+			ds->drv->poll_link(ds);
+	}
+
+	mod_timer(&dst->link_poll_timer, round_jiffies(jiffies + HZ));
+}
+
+static void dsa_link_poll_timer(unsigned long _dst)
+{
+	struct dsa_switch_tree *dst = (void *)_dst;
+
+	schedule_work(&dst->link_poll_work);
+}
+
 #ifdef CONFIG_PM_SLEEP
 static int dsa_switch_suspend(struct dsa_switch *ds)
 {
@@ -415,32 +445,6 @@ static int dsa_switch_resume(struct dsa_switch *ds)
 	return 0;
 }
 #endif
-
-
-/* link polling *************************************************************/
-static void dsa_link_poll_work(struct work_struct *ugly)
-{
-	struct dsa_switch_tree *dst;
-	int i;
-
-	dst = container_of(ugly, struct dsa_switch_tree, link_poll_work);
-
-	for (i = 0; i < dst->pd->nr_chips; i++) {
-		struct dsa_switch *ds = dst->ds[i];
-
-		if (ds != NULL && ds->drv->poll_link != NULL)
-			ds->drv->poll_link(ds);
-	}
-
-	mod_timer(&dst->link_poll_timer, round_jiffies(jiffies + HZ));
-}
-
-static void dsa_link_poll_timer(unsigned long _dst)
-{
-	struct dsa_switch_tree *dst = (void *)_dst;
-
-	schedule_work(&dst->link_poll_work);
-}
 
 
 /* platform driver init and cleanup *****************************************/
