@@ -33,6 +33,7 @@ config BLACKFIN
 	select ARCH_WANT_IPC_PARSE_VERSION
 	select GENERIC_ATOMIC64
 	select GENERIC_IRQ_PROBE
+	select USE_GENERIC_SMP_HELPERS if SMP
 	select GENERIC_IRQ_SHOW
 	select HAVE_NMI_WATCHDOG if NMI_WATCHDOG
 	select GENERIC_SMP_IDLE_THREAD
@@ -255,6 +256,15 @@ config HOTPLUG_CPU
 	depends on SMP
 	default y
 
+comment "Core B Support"
+
+if !SMP
+config BFIN_COREB
+        bool "Enable Core B loader"
+	depends on (BF561 || BF60x)
+        default n
+endif
+
 config BF_REV_MIN
 	int
 	default 0 if (BF51x || BF52x || (BF54x && !BF54xM)) || BF60x
@@ -362,6 +372,11 @@ config MEM_MT47H64M16
 	depends on (BFIN609_EZKIT)
 	default y
 
+config MEM_MT47H64M16
+	bool
+	depends on (BFIN609_EZKIT)
+	default y
+
 source "arch/blackfin/mach-bf518/Kconfig"
 source "arch/blackfin/mach-bf527/Kconfig"
 source "arch/blackfin/mach-bf533/Kconfig"
@@ -398,6 +413,12 @@ config BOOT_LOAD
 	  Note that you need to keep this value above 4k (0x1000) as this
 	  memory region is used to capture NULL pointer references as well
 	  as some core kernel functions.
+
+config PHY_RAM_BASE_ADDRESS
+	hex "Physical RAM Base"
+	default 0x0
+	help
+	  set BF609 FPGA physical SRAM base address
 
 config PHY_RAM_BASE_ADDRESS
 	hex "Physical RAM Base"
@@ -643,7 +664,7 @@ config MIN_VCO_HZ
 
 config MAX_SCLK_HZ
 	int
-	default 200000000 if BF609
+	default 300000000 if BF609
 	default 133333333
 
 config MIN_SCLK_HZ
@@ -998,6 +1019,16 @@ config BFIN_GPTIMERS
 	  To compile this driver as a module, choose M here: the module
 	  will be called gptimers.
 
+config HAVE_PWM
+	tristate "Enable PWM API support"
+	depends on BFIN_GPTIMERS
+	help
+	  Enable support for the Pulse Width Modulation framework (as
+	  found in linux/pwm.h).
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pwm.
+
 choice
 	prompt "Uncached DMA region"
 	default DMA_UNCACHED_1M
@@ -1304,7 +1335,7 @@ config PM_BFIN_WAKE_GP
 	  (all processors, except ADSP-BF549). This option sets
 	  the general-purpose wake-up enable (GPWE) control bit to enable
 	  wake-up upon detection of an active low signal on the /GPW (PH7) pin.
-	  On ADSP-BF549 this option enables the same functionality on the
+	  On ADSP-BF549 this option enables the the same functionality on the
 	  /MRXON pin also PH7.
 
 config PM_BFIN_WAKE_PA15
@@ -1428,6 +1459,7 @@ source "drivers/cpufreq/Kconfig"
 config BFIN_CPU_FREQ
 	bool
 	depends on CPU_FREQ
+	select CPU_FREQ_TABLE
 	default y
 
 config CPU_VOLTAGE

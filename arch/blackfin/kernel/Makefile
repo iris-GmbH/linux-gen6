@@ -16,6 +16,7 @@ else
     obj-y += time.o
 endif
 
+obj-$(CONFIG_BINFMT_ELF_FDPIC)       += binfmt_elf_fdpic.o
 obj-$(CONFIG_GPIO_ADI)               += bfin_gpio.o
 obj-$(CONFIG_DYNAMIC_FTRACE)         += ftrace.o
 obj-$(CONFIG_FUNCTION_TRACER)        += ftrace-entry.o

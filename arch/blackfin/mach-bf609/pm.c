@@ -119,6 +119,7 @@ struct STRUCT_ROM_SYSCTRL configvalues;
 uint32_t dactionflags;
 
 #define FUNC_ROM_SYSCONTROL 0xC8000080
+#define FUNC_ROM_MEMCPY     0xC8000024
 __attribute__((l1_data))
 static uint32_t (* const bfrom_SysControl)(uint32_t action_flags, struct STRUCT_ROM_SYSCTRL *settings, void *reserved) = (void *)FUNC_ROM_SYSCONTROL;
 
@@ -191,6 +192,8 @@ void bfin_hibernate(unsigned long mask, unsigned long pol_mask)
 	bfin_write32(DPM0_WAKE_POL, pol_mask);
 	bfin_write32(DPM0_PGCNTR, 0x0000FFFF);
 	bfin_write32(DPM0_HIB_DIS, 0xFFFF);
+
+	printk(KERN_DEBUG "hibernate: restore %x pgcnt %x\n", bfin_read32(DPM0_RESTORE0), bfin_read32(DPM0_PGCNTR));
 
 	bf609_hibernate();
 }

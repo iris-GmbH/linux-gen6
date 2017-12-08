@@ -178,6 +178,11 @@ static struct resource bfin_rotary_resources[] = {
 		.flags = IORESOURCE_MEM,
 	},
 	{
+		.start = CNT_CONFIG,
+		.end   = CNT_CONFIG + 0xff,
+		.flags = IORESOURCE_MEM,
+	},
+	{
 		.start = IRQ_CNT,
 		.end = IRQ_CNT,
 		.flags = IORESOURCE_IRQ,
@@ -671,11 +676,11 @@ static struct musb_hdrc_config musb_config = {
 };
 
 static struct musb_hdrc_platform_data musb_plat = {
-#if defined(CONFIG_USB_MUSB_HDRC) && defined(CONFIG_USB_GADGET_MUSB_HDRC)
+#if defined(CONFIG_USB_MUSB_DUAL_ROLE)
 	.mode		= MUSB_OTG,
-#elif defined(CONFIG_USB_MUSB_HDRC)
+#elif defined(CONFIG_USB_MUSB_HOST)
 	.mode		= MUSB_HOST,
-#elif defined(CONFIG_USB_GADGET_MUSB_HDRC)
+#elif defined(CONFIG_USB_MUSB_GADGET)
 	.mode		= MUSB_PERIPHERAL,
 #endif
 	.config		= &musb_config,

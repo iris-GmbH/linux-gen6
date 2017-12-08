@@ -730,6 +730,8 @@ int peripheral_request_list(const unsigned short per[], const char *label)
 	u16 cnt;
 	int ret;
 
+	if (per == NULL)
+		return -ENODEV;
 	for (cnt = 0; per[cnt] != 0; cnt++) {
 
 		ret = peripheral_request(per[cnt], label);
@@ -778,6 +780,8 @@ EXPORT_SYMBOL(peripheral_free);
 void peripheral_free_list(const unsigned short per[])
 {
 	u16 cnt;
+	if (per == NULL)
+		return;
 	for (cnt = 0; per[cnt] != 0; cnt++)
 		peripheral_free(per[cnt]);
 }

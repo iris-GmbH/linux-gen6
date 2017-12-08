@@ -13,9 +13,10 @@
 #include <asm/irq_handler.h>
 #include <asm/bfin5xx_spi.h>
 #include <asm/bfin_sport.h>
-#include <asm/bfin_can.h>
 #include <asm/bfin_dma.h>
 #include <asm/dpmc.h>
+
+#include <asm/can.h>
 
 void __init program_IAR(void)
 {

@@ -62,21 +62,13 @@ static inline void CSYNC(void)
 #define csync(x) CSYNC(x)
 
 #if ANOMALY_05000312 || ANOMALY_05000244
-#define SSYNC(scratch)	\
-	cli scratch;	\
-	nop; nop; nop;	\
-	SSYNC;		\
-	sti scratch;
-
-#define CSYNC(scratch)	\
-	cli scratch;	\
-	nop; nop; nop;	\
-	CSYNC;		\
-	sti scratch;
+#define SSYNC(scratch) cli scratch; nop; nop; nop; SSYNC; sti scratch;
+#define CSYNC(scratch) cli scratch; nop; nop; nop; CSYNC; sti scratch;
 
 #else
 #define SSYNC(scratch) SSYNC;
 #define CSYNC(scratch) CSYNC;
+
 #endif /* ANOMALY_05000312 & ANOMALY_05000244 handling */
 
 #endif /* __ASSEMBLY__ */

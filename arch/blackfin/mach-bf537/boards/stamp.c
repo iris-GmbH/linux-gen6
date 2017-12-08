@@ -43,6 +43,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/userspace-consumer.h>
+#include <linux/gpio.h>
 
 /*
  * Name the Board for the /proc/cpuinfo
@@ -2419,13 +2420,13 @@ static struct resource bfin_sport0_resources[] = {
 		.flags = IORESOURCE_MEM,
 	},
 	{
-		.start = IRQ_SPORT0_RX,
-		.end = IRQ_SPORT0_RX+1,
+		.start = IRQ_SPORT0_TX,
+		.end = IRQ_SPORT0_TX+1,
 		.flags = IORESOURCE_IRQ,
 	},
 	{
-		.start = IRQ_SPORT0_TX,
-		.end = IRQ_SPORT0_TX+1,
+		.start = IRQ_SPORT0_RX,
+		.end = IRQ_SPORT0_RX+1,
 		.flags = IORESOURCE_IRQ,
 	},
 	{
@@ -2636,6 +2637,13 @@ static struct platform_device bfin_ad73311_machine = {
 #if IS_ENABLED(CONFIG_SND_SOC_AD73311)
 static struct platform_device bfin_ad73311_codec_device = {
 	.name = "ad73311",
+	.id = -1,
+};
+#endif
+
+#if IS_ENABLED(CONFIG_SND_SOC_AD74111)
+static struct platform_device bfin_ad74111_codec_device = {
+	.name = "ad74111",
 	.id = -1,
 };
 #endif
@@ -2892,6 +2900,10 @@ static struct platform_device *stamp_devices[] __initdata = {
 
 #if IS_ENABLED(CONFIG_SND_SOC_AD73311)
 	&bfin_ad73311_codec_device,
+#endif
+
+#if IS_ENABLED(CONFIG_SND_SOC_AD74111)
+	&bfin_ad74111_codec_device,
 #endif
 
 #if IS_ENABLED(CONFIG_SND_BF5XX_SOC_I2S)

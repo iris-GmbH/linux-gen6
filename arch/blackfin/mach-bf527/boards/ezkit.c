@@ -114,11 +114,11 @@ static struct musb_hdrc_config musb_config = {
 };
 
 static struct musb_hdrc_platform_data musb_plat = {
-#if defined(CONFIG_USB_MUSB_HDRC) && defined(CONFIG_USB_GADGET_MUSB_HDRC)
+#if defined(CONFIG_USB_MUSB_DUAL_ROLE)
 	.mode		= MUSB_OTG,
-#elif defined(CONFIG_USB_MUSB_HDRC)
+#elif defined(CONFIG_USB_MUSB_HOST)
 	.mode		= MUSB_HOST,
-#elif defined(CONFIG_USB_GADGET_MUSB_HDRC)
+#elif defined(CONFIG_USB_MUSB_GADGET)
 	.mode		= MUSB_PERIPHERAL,
 #endif
 	.config		= &musb_config,
@@ -569,6 +569,21 @@ static struct platform_device bfin_i2s = {
 #if IS_ENABLED(CONFIG_SND_BF5XX_SOC_AD1836)
 static const char * const ad1836_link[] = {
 	"bfin-i2s.0",
+	"spi0.4",
+};
+static struct platform_device bfin_ad1836_machine = {
+	.name = "bfin-snd-ad1836",
+	.id = -1,
+	.dev = {
+		.platform_data = (void *)ad1836_link,
+	},
+};
+#endif
+
+#if defined(CONFIG_SND_BF5XX_SOC_AD1836) \
+	        || defined(CONFIG_SND_BF5XX_SOC_AD1836_MODULE)
+static const char * const ad1836_link[] = {
+	"bfin-tdm.0",
 	"spi0.4",
 };
 static struct platform_device bfin_ad1836_machine = {
@@ -1267,6 +1282,11 @@ static struct platform_device *stamp_devices[] __initdata = {
 #endif
 
 #if IS_ENABLED(CONFIG_SND_BF5XX_SOC_AD1836)
+	&bfin_ad1836_machine,
+#endif
+
+#if defined(CONFIG_SND_BF5XX_SOC_AD1836) || \
+	defined(CONFIG_SND_BF5XX_SOC_AD1836_MODULE)
 	&bfin_ad1836_machine,
 #endif
 };

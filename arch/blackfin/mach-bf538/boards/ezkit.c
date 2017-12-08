@@ -761,8 +761,11 @@ static struct platform_device i2c_bfin_twi1_device = {
 	.id = 1,
 	.num_resources = ARRAY_SIZE(bfin_twi1_resource),
 	.resource = bfin_twi1_resource,
+	.dev = {
+		.platform_data = &bfin_twi1_pins,
+	},
 };
-#endif	/* CONFIG_I2C_BLACKFIN_TWI */
+#endif
 
 #if IS_ENABLED(CONFIG_KEYBOARD_GPIO)
 #include <linux/gpio_keys.h>

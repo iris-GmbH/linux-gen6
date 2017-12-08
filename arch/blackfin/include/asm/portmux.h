@@ -23,15 +23,30 @@ int bfin_internal_set_wake(unsigned int irq, unsigned int state);
 #define gpio_pint_regs bfin_pint_regs
 #define adi_internal_set_wake bfin_internal_set_wake
 
-#define peripheral_request(per, label) (0)
-#define peripheral_free(per)
-#define peripheral_request_list(per, label) (0)
-#define peripheral_free_list(per)
+static inline int peripheral_request(unsigned short per, const char *label)
+{
+	return 0;
+}
+static inline void peripheral_free(unsigned short per) {}
+static inline int peripheral_request_list(const unsigned short per[],
+					  const char *label)
+{
+	return 0;
+}
+static inline void peripheral_free_list(const unsigned short per[]) {}
+int pinmux_request(unsigned short per, const char *label);
+void pinmux_free(unsigned short per);
+int pinmux_request_list(const unsigned short per[], const char *label);
+void pinmux_free_list(const unsigned short per[]);
 #else
 int peripheral_request(unsigned short per, const char *label);
 void peripheral_free(unsigned short per);
 int peripheral_request_list(const unsigned short per[], const char *label);
 void peripheral_free_list(const unsigned short per[]);
+#define pinmux_request(per, label) peripheral_request(per, label);
+#define pinmux_free(fer) peripheral_free(fer);
+#define pinmux_request_list(per, label) peripheral_request_list(per, label);
+#define pinmux_free_list(per) peripheral_free_list(per);
 #endif
 
 #include <linux/err.h>

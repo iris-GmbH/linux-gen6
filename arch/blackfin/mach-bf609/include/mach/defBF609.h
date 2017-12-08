@@ -12,11 +12,11 @@
 
 /* The following are the #defines needed by ADSP-BF609 that are not in the common header */
 /* =========================
-	PIXC Registers
+        PIXC Registers
    ========================= */
 
 /* =========================
-	PIXC0
+        PIXC0
    ========================= */
 #define PIXC0_CTL                   0xFFC19000         /* PIXC0 Control Register */
 #define PIXC0_PPL                   0xFFC19004         /* PIXC0 Pixels Per Line Register */
@@ -40,11 +40,11 @@
 #define PIXC0_REVID                 0xFFC19054         /* PIXC0 PIXC Revision Id */
 
 /* =========================
-	PVP Registers
+        PVP Registers
    ========================= */
 
 /* =========================
-	PVP0
+        PVP0
    ========================= */
 #define PVP0_REVID                  0xFFC1A000         /* PVP0 Revision ID */
 #define PVP0_CTL                    0xFFC1A004         /* PVP0 Control */

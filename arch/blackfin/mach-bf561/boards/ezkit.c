@@ -330,6 +330,33 @@ static struct platform_device bfin_spi0_device = {
 };
 #endif
 
+#if defined(CONFIG_ICC)
+#include <asm/icc.h>
+#define BFIN_ICC_NAME "icc"
+
+static struct icc_peer_platform_data bfin_icc_peer_data[] = {
+	{
+		.peerid = 1,
+		.irq = IRQ_SUPPLE_0,
+		.notify = IRQ_SUPPLE_0,
+		.phy_peer_mem = L2_START,
+	},
+};
+
+static struct icc_platform_data bfin_icc_data = {
+	.peer_count = ARRAY_SIZE(bfin_icc_peer_data),
+	.peer_info = bfin_icc_peer_data,
+};
+
+static struct platform_device bfin_icc_device = {
+	.name = BFIN_ICC_NAME,
+	.id = 0,
+	.dev = {
+		.platform_data = &bfin_icc_data,
+	},
+};
+#endif
+
 static struct spi_board_info bfin_spi_board_info[] __initdata = {
 #if IS_ENABLED(CONFIG_SND_BF5XX_SOC_AD183X)
 	{
@@ -531,6 +558,20 @@ static struct platform_device bfin_ac97 = {
 
 #if IS_ENABLED(CONFIG_SND_BF5XX_SOC_AD1836)
 static const char * const ad1836_link[] = {
+	"bfin-tdm.0",
+	"spi0.4",
+};
+static struct platform_device bfin_ad1836_machine = {
+	.name = "bfin-snd-ad1836",
+	.id = -1,
+	.dev = {
+		.platform_data = (void *)ad1836_link,
+	},
+};
+#endif
+
+#if IS_ENABLED(CONFIG_SND_BF5XX_SOC_AD1836)
+static const char * const ad1836_link[] = {
 	"bfin-i2s.0",
 	"spi0.4",
 };
@@ -575,6 +616,10 @@ static struct platform_device *ezkit_devices[] __initdata = {
 #endif
 #endif
 
+#if defined(CONFIG_ICC)
+	&bfin_icc_device,
+#endif
+
 #if IS_ENABLED(CONFIG_KEYBOARD_GPIO)
 	&bfin_device_gpiokeys,
 #endif
@@ -604,6 +649,11 @@ static struct platform_device *ezkit_devices[] __initdata = {
 #endif
 
 #if IS_ENABLED(CONFIG_SND_BF5XX_SOC_AD1836)
+	&bfin_ad1836_machine,
+#endif
+
+#if defined(CONFIG_SND_BF5XX_SOC_AD1836) || \
+	defined(CONFIG_SND_BF5XX_SOC_AD1836_MODULE)
 	&bfin_ad1836_machine,
 #endif
 };

@@ -337,7 +337,8 @@ static void bfin_sec_set_ssi_coreid(unsigned int sid, unsigned int coreid)
 	uint32_t reg_sctl = bfin_read_SEC_SCTL(sid);
 
 	reg_sctl &= ((uint32_t)~SEC_SCTL_CTG);
-	bfin_write_SEC_SCTL(sid, reg_sctl | ((coreid << 20) & SEC_SCTL_CTG));
+
+	bfin_write_SEC_SCTL(sid, reg_sctl | ((coreid << 24) & SEC_SCTL_CTG));
 
 	hard_local_irq_restore(flags);
 }
@@ -416,11 +417,10 @@ void bfin_sec_raise_irq(unsigned int irq)
 	hard_local_irq_restore(flags);
 }
 
-static void init_software_driven_irq(void)
+void init_software_driven_irq(void)
 {
 	bfin_sec_set_ssi_coreid(34, 0);
 	bfin_sec_set_ssi_coreid(35, 1);
-
 	bfin_sec_enable_sci(35);
 	bfin_sec_enable_ssi(35);
 	bfin_sec_set_ssi_coreid(36, 0);
@@ -484,7 +484,7 @@ void handle_sec_fault(uint32_t sec_gstat)
 }
 
 static struct irqaction bfin_fault_irq = {
-	.name = "Blackfin fault",
+        .name = "Blackfin fault",
 };
 
 static irqreturn_t bfin_fault_routine(int irq, void *data)
@@ -519,6 +519,28 @@ static irqreturn_t bfin_fault_routine(int irq, void *data)
 }
 #endif /* SEC_GCTL */
 
+#ifdef CONFIG_ICC
+int icc_irq_set_affinity(unsigned int irq, const struct cpumask *mask)
+{
+	unsigned long flags = hard_local_irq_save();
+# ifdef CONFIG_BF561
+	unsigned mask_bank = BFIN_SYSIRQ(irq) / 32;
+	unsigned mask_bit = BFIN_SYSIRQ(irq) % 32;
+	if (cpumask_test_cpu(0, mask))
+		bfin_write_SIC_IMASK(mask_bank,
+				bfin_read_SIC_IMASK(mask_bank) |
+				(1 << mask_bit));
+	if (cpumask_test_cpu(1, mask))
+		bfin_write_SICB_IMASK(mask_bank,
+				bfin_read_SICB_IMASK(mask_bank) |
+				(1 << mask_bit));
+# elif CONFIG_BF60x
+	bfin_sec_set_ssi_coreid(BFIN_SYSIRQ(irq), cpumask_any_but(mask, 0));
+# endif
+	hard_local_irq_restore(flags);
+}
+#endif
+
 static struct irq_chip bfin_core_irqchip = {
 	.name = "CORE",
 	.irq_mask = bfin_core_mask_irq,
@@ -541,6 +563,7 @@ static struct irq_chip bfin_internal_irqchip = {
 static struct irq_chip bfin_sec_irqchip = {
 	.name = "SEC",
 	.irq_mask_ack = bfin_sec_mask_ack_irq,
+	.irq_ack = bfin_sec_mask_ack_irq,
 	.irq_mask = bfin_sec_mask_ack_irq,
 	.irq_unmask = bfin_sec_unmask_irq,
 	.irq_eoi = bfin_sec_unmask_irq,

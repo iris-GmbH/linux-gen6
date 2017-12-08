@@ -10,6 +10,7 @@
 #ifdef CONFIG_SMP
 
 #include <linux/linkage.h>
+#include <asm/barrier.h>
 
 asmlinkage unsigned long __raw_xchg_1_asm(volatile void *ptr, unsigned long value);
 asmlinkage unsigned long __raw_xchg_2_asm(volatile void *ptr, unsigned long value);
@@ -62,6 +63,8 @@ static inline unsigned long __cmpxchg(volatile void *ptr, unsigned long old,
 		tmp = __raw_cmpxchg_4_asm(ptr, new, old);
 		break;
 	}
+
+	smp_mb();
 
 	return tmp;
 }

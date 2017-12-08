@@ -32,11 +32,12 @@
 #include <asm/early_printk.h>
 #include <asm/irq_handler.h>
 #include <asm/pda.h>
-#ifdef CONFIG_BF60x
-#include <mach/pm.h>
-#endif
+#include <asm/pm.h>
 #ifdef CONFIG_SCB_PRIORITY
 #include <asm/scb.h>
+#endif
+#ifdef CONFIG_BF60x
+#include <mach/pm.h>
 #endif
 
 u16 _bfin_swrst;
@@ -209,9 +210,29 @@ void __init bfin_relocate_l1_mem(void)
 
 	blackfin_dma_early_init();
 
+
+#if  defined(CONFIG_BFIN_COREB) && defined(CONFIG_BF60x)
+	/* unlock coreb and load a dummy startup code to coreb L1, then
+	 * reset coreb, put coreb in idle
+	 */
+	coreb_enable();
+
+	if (L1_CODE_LENGTH && text_l1_len)
+		early_dma_memcpy((void *)COREB_L1_CODE_START, _text_l1_lma,
+				text_l1_len);
+
+	bfin_write32(RCU0_CRCTL, 0x2);
+
+	while (!(bfin_read32(RCU0_CRSTAT) & 0x2))
+		continue;
+
+	bfin_write32(RCU0_CRCTL, 0);
+#endif
+
 	/* if necessary, copy L1 text to L1 instruction SRAM */
 	if (L1_CODE_LENGTH && text_l1_len)
 		early_dma_memcpy(_stext_l1, _text_l1_lma, text_l1_len);
+
 
 	/* if necessary, copy L1 data to L1 data bank A SRAM */
 	if (L1_DATA_A_LENGTH && data_l1_len)
@@ -546,8 +567,8 @@ static __init void parse_cmdline_early(char *cmdline_p)
  *  [_rambase, _ramstart]:		kernel image
  *  [memory_start, memory_end]:		dynamic memory managed by kernel
  *  [memory_end, _ramend]:		reserved memory
- *  	[memory_mtd_start(memory_end),
- *  		memory_mtd_start + mtd_size]:	rootfs (if any)
+ *	[memory_mtd_start(memory_end),
+ *		memory_mtd_start + mtd_size]:	rootfs (if any)
  *	[_ramend - DMA_UNCACHED_REGION,
  *		_ramend]:			uncached DMA region
  *  [_ramend, physical_mem_end]:	memory not managed by kernel
@@ -1464,5 +1485,5 @@ void __init cmdline_init(const char *r0)
 {
 	early_shadow_stamp();
 	if (r0)
-		strncpy(command_line, r0, COMMAND_LINE_SIZE);
+		strlcpy(command_line, r0, COMMAND_LINE_SIZE);
 }

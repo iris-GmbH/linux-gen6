@@ -11,6 +11,8 @@
 
 #include <asm/unaligned.h>
 
+#define FLAT_FLAG_L1STK  0x0020 /* use a 4k stack in L1 scratch memory.  */
+
 #define	flat_argvp_envp_on_stack()		0
 #define	flat_old_ram_flag(flags)		(flags)
 
