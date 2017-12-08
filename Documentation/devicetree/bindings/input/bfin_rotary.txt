@@ -1,0 +1,41 @@
+ADI Rotary
+
+Required properties:
+- compatible	: "adi,rotary" for rotary device on sc58x SoC family.
+- reg		: address range of rotary registers
+- interrupts	: rotary event
+- rotary_up_key	: set rotary UP KEY_### or BTN_### in case you prefer
+		  rotary to send EV_KEY otherwise set 0
+- rotary_down_key : set rotary DOWN KEY_### or BTN_### in case you prefer
+		    rotary to send EV_KEY otherwise set 0
+- rotary_button_key : set rotary BUTTON KEY_### or BTN_###
+- rotary_rel_code : set rotary Relative Axis REL_### in case you prefer
+		    rotary to send EV_REL otherwise set 0
+- debounce	: select the noice filtering characteristics of inputs
+- debounce_en	: enable debounce
+- cnt_mode	: counter operation mode 0..5
+- boundary_mode	: boundary register mode 0..3
+- invert_czm	: invert CZM pin polarity
+- invert_cud	: invert CUD pin polarity
+- invert_cdg	: invert CDG pin polarity
+
+Example:
+
+rotary@0x3100B000 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	compatible = "adi,rotary";
+	reg = <0x3100B000 0xFF>;
+	interrupts = <0 126 0>;
+	rotary_up_key = <103>;		/* KEY_UP */
+	rotary_down_key = <108>;	/* KEY_DOWN */
+	rotary_rel_code = <0x08>;	/* REL_WHEEL */
+	rotary_button_key = <28>;	/* KEY_ENTER */
+	debounce = /bits/ 16 <10>;	/* 0..17 */
+	debounce_en = /bits/ 16 <1>;
+	cnt_mode = /bits/ 16 <0>;	/* CNTMODE_QUADENC */
+	boundary_mode = /bits/ 16 <0>;	/* BNDMODE_COMP */
+	invert_czm = /bits/ 16 <0>;
+	invert_cud = /bits/ 16 <0>;
+	invert_cdg = /bits/ 16 <0>;
+};

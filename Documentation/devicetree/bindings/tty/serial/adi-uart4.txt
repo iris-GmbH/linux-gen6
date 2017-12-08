@@ -1,0 +1,26 @@
+* ADI Universal Asynchronous Receiver/Transmitter revision 4 (UART)
+
+Required properties:
+- compatible : Should be "arm,adi-uart4"
+- reg : Address and length of the register set for the device
+- interrupts : Should contain uart tx, rx, status interrupts
+- dma-channel : tx, rx dma channel
+- pinctrl-names, pinctrl-0: Please refer to pinctrl-bindings.txt
+
+Optional properties:
+- adi,uart-has-rtscts : Indicate the uart has rts and cts
+
+Example:
+
+uart0: uart@0x31003000 {
+	       compatible = "arm,adi-uart4";
+	       reg = <0x31003000 0x40>;
+	       dma-channel = <20>, <21>;
+	       pinctrl-names = "default", "hwflow";
+	       pinctrl-0 = <&uart0_default>;
+	       pinctrl-1 = <&uart0_hwflow>;
+	       interrupt-parent = <&gic>;
+	       interrupts = <0 114 0>,
+			  <0 115 0>,
+			  <0 116 0>;
+       };

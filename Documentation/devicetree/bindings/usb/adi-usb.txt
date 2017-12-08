@@ -1,0 +1,59 @@
+ADI Universal Serial Bus(USB) GLUE
+
+USB GLUE
+~~~~~~~~
+Required properties
+ - compatible: Should be "ADI,musb".
+ - reg: offset and length of "USB Controller Registers".
+ - reg-names: "mc".
+ - interrupts: USB interrupt number.
+ - interrupt-names: Should be "mc" or "dma".
+ - mentor,multipoint: Should be "1". It means that the musb controller supports multipoint.
+ - mentor,num-eps: Should be "16".  Specifies the number of endpoints.
+ - mentor,ram-bits: Should be "12". Specifies the ram address size.
+ - mentor,power: Should be "500". This signifies the controller can supply up to
+   500mA when operating in host mode.
+ - phys: the phandle for the PHY device.
+
+Optional properties
+ - spu_securep_id: Specifies the number of usb spu.
+ - mentor,dyn-fifo: Enable dynamic fifo or not.
+ - mode: Specifies the type of controller. "3" represent OTG. "1" signifies HOST and "2"
+   represents PERIPHERAL.
+
+USB PHY
+~~~~~~~
+ - compatible: Should be "usb-nop-xceiv".
+ - reg: offset and length of "PHY Controller Registers".
+ - reg-names: Should be "phy".
+
+Supported chips
+~~~~~~~~~~~~~~~
+sc58x
+
+Example
+~~~~~~~
+usb0_phy: usb-phy@310c1390 {
+	compatible = "usb-nop-xceiv";
+	reg = <0x310c1390 0x10>;
+	reg-names = "phy";
+};
+
+usb0: usb@310c1000 {
+	compatible = "ADI,musb";
+	reg = <0x310c1000 0x390>;
+	reg-names = "mc";
+	interrupts = <0 132 0>,
+	             <0 133 0>;
+	interrupt-names = "mc", "dma";
+	spu_securep_id = <153>;
+
+	mode = <3>;
+	mentor,multipoint = <1>;
+	mentor,num-eps = <16>;
+	mentor,ram-bits = <12>;
+	mentor,dma-channels = <8>;
+	memtor,dyn-fifo = <0>;
+	mentor,power = <500>;
+	phys = <&usb0_phy>;
+};

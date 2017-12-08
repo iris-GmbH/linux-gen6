@@ -1,0 +1,18 @@
+ADI Cryptographic Accelerator included in sc58x chips.
+
+Required properties:
+- compatible : Should be "adi,hmac-crc"
+- reg : Should contain CRC registers location and length
+- interrupts : Should contain CRC interrupt number
+- dma_channel : source memory dma channel used by the CRC
+- crypto_crc_poly : initial poly data for crc calculation
+
+Example:
+
+crc0: crc@0x31001200 {
+	compatible = "adi,hmac-crc";
+	reg = <0x31001200 0xFF>;
+	interrupts = <0 176 0>;
+	dma_channel = <8>;
+	crypto_crc_poly = <0x5c5c5c5c>;
+};

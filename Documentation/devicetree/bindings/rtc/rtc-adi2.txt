@@ -1,0 +1,18 @@
+ADI Real Time Clock v2
+
+Required properties:
+- compatible	: "adi,rtc2" for RTC on sc58x SoC family.
+- reg		: Address range of rtc registers
+- interrupts	: rtc events
+- calibration	: The time seconds correction at the end of every day. Range
+		  1 ~ 7 means to delay 0 to 7 seconds. Range 9 ~ 15 means to
+		  speed up 1 ~ 7 seconds.
+
+Example:
+
+rtc@0x310C8000 {
+	compatible = "adi,rtc2";
+	reg = <0x310C8000 0x100>;
+	interrupts = <0 165 0>;
+	calibration = /bits/ 8 <0>;
+};

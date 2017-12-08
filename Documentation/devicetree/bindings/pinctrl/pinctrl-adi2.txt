@@ -1,0 +1,91 @@
+ADI pinmux controller
+
+Required properties:
+- compatible	: "adi,adi2-pinctrl"
+- reg		: Address range of the pinctrl registers
+- interrupt-controller  : Marks the device node as an interrupt controller
+
+Please refer to pinctrl-bindings.txt in this directory for details of the common
+pinctrl bindings used by client devices.
+
+ADI2 pinmux nodes act as a container for subnodes.
+
+[pin state node]
+Each of these subnodes represents some desired configuration for a group of pins.
+
+Required subnode-properties:
+- adi,group : An array of strings. Each string contains the name of a group.
+- adi,function: A string containing the name of the function to mux to the
+  group.
+
+  Valid values for group and function names can be found from looking at the
+  group and function arrays in driver files:
+  drivers/pinctrl/pinctrl-adi2-sc58x.c
+
+
+ADI pint controller
+
+A gpio interrupt multiplex device owned by a pinmux controller.
+
+Required properties:
+- compatible	: "adi,pint"
+- reg		: Address range of the pint registers
+- interrupts	: Interrupts used by every pint device
+
+ADI gport controller
+
+A gpio port device owned by a pinmux controller.
+
+Required properties:
+- compatible	: "adi,gport"
+- reg		: Address range of the gpio port registers
+- gpio-controller : Indicates this device is a GPIO controller
+- port_width	: Pin count of this gpio port
+- gpio-ranges	: refer to bindings/gpio/gpio.txt
+- pint_id	: Pint device id that gpio interrupts of this gpio port maps to
+- pint_assign	: A gpio port can be mapped into either low 16 bits[false] or
+		  high 16 bits[true] of a pint device.
+- pint_map	: Mapping code of a gpio port in a pint device
+
+Optional subnode-properties:
+- port_gpio_base: Global GPIO index of this gpio port, not set or -1 means
+		  minimum available index.
+
+
+For example, pinctrl might have subnodes like the following:
+
+ pint0: pint@0x31005000 {
+         compatible = "adi,pint";
+         reg = <0x31005000 0xFF>;
+         interrupts = <0 70 0>;
+ };
+
+ gpa: gport@0x31004000 {
+         compatible = "adi,gport";
+         reg = <0x31004000 0x7F>;
+         port_gpio_base = <0>;
+         port_width = <16>;
+         gpio-ranges = <&pinctrl0 0 0 16>;
+         pint_id =  /bits/ 8 <0>;
+         pint_assign;
+         pint_map =  /bits/ 8 <0>;
+ };
+
+ uart {
+         uart0_pins_a: uart0@0 {
+                 adi,group = "uart0grp";
+                 adi,function = "uart0";
+         };
+         uart0_hwflow_pins_a: uart0@1 {
+                 adi,pins = "uart0_hwflowgrp";
+                 adi,function = "uart0";
+         };
+ };
+
+For a specific board, if it wants to use uart0 without hardware flow control
+by default, it can add the following to its board-specific .dts file.
+uart0: uart@0x31003000 {
+	pinctrl-names = "default", "hwflow";
+	pinctrl-0 = <&uart0_pins_a>;
+	pinctrl-1 = <&uart0_hwflow_pins_a>;
+}

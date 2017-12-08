@@ -1,0 +1,21 @@
+* ADI DMA2
+
+Required properties:
+- compatible : Should be "adi,dma2"
+- reg : Should contain registers location and length
+- interrupts : Should contain the interrupt numbers of DMA channels.
+
+Optional properties:
+- spu_securep_id: the secure config entry of this DMA channel in SPU.
+
+Supported chips:
+sc58x
+
+Examples:
+
+dma0: dma@0x31022000 {
+	compatible = "adi,dma2";
+	reg = <0x31022000 0x7F>;
+	interrupts = <84>;
+	spu_securep_id = <66>;
+};
