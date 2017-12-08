@@ -16,13 +16,22 @@
 #include <linux/platform_data/pinctrl-adi2.h>
 #include <linux/irqdomain.h>
 #include <linux/irqchip/chained_irq.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_address.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/pinctrl/machine.h>
+#include <linux/slab.h>
 #include <linux/syscore_ops.h>
 #include <linux/gpio.h>
+#include <mach/gpio.h>
+#ifdef CONFIG_ARCH_HEADER_IN_MACH
+#include <mach/portmux.h>
+#else
 #include <asm/portmux.h>
+#endif
 #include "pinctrl-adi2.h"
 #include "core.h"
 
@@ -337,7 +346,6 @@ static unsigned int adi_gpio_irq_startup(struct irq_data *d)
 
 	if (!port) {
 		pr_err("GPIO IRQ %d :Not exist\n", d->irq);
-		/* FIXME: negative return code will be ignored */
 		return -ENODEV;
 	}
 
@@ -613,10 +621,49 @@ static int adi_get_group_pins(struct pinctrl_dev *pctldev, unsigned selector,
 	return 0;
 }
 
+static int adi_dt_node_to_map(struct pinctrl_dev *pctldev,
+		struct device_node *np, struct pinctrl_map **map,
+		unsigned *num_maps)
+{
+	struct adi_pinctrl *pinctrl = pinctrl_dev_get_drvdata(pctldev);
+	int func_num, group_num, i;
+
+	func_num = of_property_count_strings(np, "adi,function");
+	group_num = of_property_count_strings(np, "adi,group");
+	if (func_num <= 0 || group_num <= 0 || func_num != group_num) {
+		dev_err(pinctrl->dev, "function or group lists are invalid\n");
+		return -ENODEV;
+	}
+
+	*map = kzalloc(sizeof(**map) * func_num, GFP_KERNEL);
+	if (!*map)
+		return -ENOMEM;
+
+	for (i = 0; i < func_num; i++) {
+		(*map)[i].type = PIN_MAP_TYPE_MUX_GROUP;
+		of_property_read_string_index(np, "adi,group", i,
+				&(*map)[i].data.mux.group);
+		of_property_read_string_index(np, "adi,function", i,
+				&(*map)[i].data.mux.function);
+	}
+
+	*num_maps = func_num;
+
+	return 0;
+}
+
+static void adi_dt_free_map(struct pinctrl_dev *pctldev,
+		struct pinctrl_map *map, unsigned num_maps)
+{
+	kfree(map);
+}
+
 static struct pinctrl_ops adi_pctrl_ops = {
 	.get_groups_count = adi_get_groups_count,
 	.get_group_name = adi_get_group_name,
 	.get_group_pins = adi_get_group_pins,
+	.dt_node_to_map = adi_dt_node_to_map,
+	.dt_free_map = adi_dt_free_map,
 };
 
 static int adi_pinmux_set(struct pinctrl_dev *pctldev, unsigned func_id,
@@ -710,6 +757,7 @@ static struct pinctrl_desc adi_pinmux_desc = {
 	.name = DRIVER_NAME,
 	.pctlops = &adi_pctrl_ops,
 	.pmxops = &adi_pinmux_ops,
+	.strict = true,
 	.owner = THIS_MODULE,
 };
 
@@ -803,6 +851,32 @@ static int adi_gpio_to_irq(struct gpio_chip *chip, unsigned offset)
 	else
 		return irq_create_mapping(port->domain, offset);
 }
+
+#ifdef CONFIG_OF
+static const struct of_device_id adi_pinctrl_of_match[] = {
+	{
+		.compatible = "adi,adi2-pinctrl",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, adi_pinctrl_of_match);
+
+static const struct of_device_id adi_pint_of_match[] = {
+	{
+		.compatible = "adi,pint",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, adi_pint_of_match);
+
+static const struct of_device_id adi_gport_of_match[] = {
+	{
+		.compatible = "adi,gport",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, adi_gport_of_match);
+#endif
 
 static int adi_pint_map_port(struct gpio_pint *pint, bool assign, u8 map,
 	struct irq_domain *domain)
@@ -945,15 +1019,47 @@ static int adi_gpio_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	const struct adi_pinctrl_gpio_platform_data *pdata;
+	struct adi_pinctrl_gpio_platform_data of_pdata;
 	struct resource *res;
 	struct gpio_port *port;
+	const struct of_device_id *match;
+	struct device_node *node = pdev->dev.of_node;
+#ifndef CONFIG_OF
 	char pinctrl_devname[DEVNAME_SIZE];
+	int ret1;
+#endif
 	static int gpio;
 	int ret = 0;
 
-	pdata = dev->platform_data;
-	if (!pdata)
-		return -EINVAL;
+	match = of_match_device(of_match_ptr(adi_gport_of_match), dev);
+	if (match) {
+		memset(&of_pdata, 0, sizeof(of_pdata));
+		of_pdata.port_gpio_base = -1;
+
+		if (of_property_read_u32(node, "port_width",
+			&of_pdata.port_width)) {
+			dev_err(dev, "port_width is missing\n");
+			return -EINVAL;
+		}
+		if (of_property_read_u8(node, "pint_id", &of_pdata.pint_id)) {
+			dev_err(dev, "pint_id is missing\n");
+			return -EINVAL;
+		}
+		of_pdata.pint_assign = of_property_read_bool(node,
+					"pint_assign");
+		if (of_property_read_u8(node, "pint_map",
+			&of_pdata.pint_map)) {
+			dev_err(dev, "pint_map is missing\n");
+			return -EINVAL;
+		}
+		of_property_read_u32(node, "port_gpio_base",
+			&of_pdata.port_gpio_base);
+		pdata = &of_pdata;
+	} else {
+		pdata = dev->platform_data;
+		if (!pdata)
+			return -EINVAL;
+	}
 
 	port = devm_kzalloc(dev, sizeof(struct gpio_port), GFP_KERNEL);
 	if (!port) {
@@ -989,6 +1095,7 @@ static int adi_gpio_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, port);
 
+	port->chip.dev			= &pdev->dev;
 	port->chip.label		= "adi-gpio";
 	port->chip.direction_input	= adi_gpio_direction_input;
 	port->chip.get			= adi_gpio_get_value;
@@ -997,12 +1104,12 @@ static int adi_gpio_probe(struct platform_device *pdev)
 	port->chip.request		= adi_gpio_request;
 	port->chip.free			= adi_gpio_free;
 	port->chip.to_irq		= adi_gpio_to_irq;
-	if (pdata->port_gpio_base > 0)
+#ifdef CONFIG_OF
+	port->chip.of_node		= dev->of_node;
+#endif
+	if (pdata->port_gpio_base >= 0)
 		port->chip.base		= pdata->port_gpio_base;
-	else
-		port->chip.base		= gpio;
 	port->chip.ngpio		= port->width;
-	gpio = port->chip.base + port->width;
 
 	ret = gpiochip_add(&port->chip);
 	if (ret) {
@@ -1011,6 +1118,7 @@ static int adi_gpio_probe(struct platform_device *pdev)
 	}
 
 	/* Add gpio pin range */
+#ifndef CONFIG_OF
 	snprintf(pinctrl_devname, DEVNAME_SIZE, "pinctrl-adi2.%d",
 		pdata->pinctrl_id);
 	pinctrl_devname[DEVNAME_SIZE - 1] = 0;
@@ -1019,8 +1127,10 @@ static int adi_gpio_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev, "Fail to add pin range to %s.\n",
 				pinctrl_devname);
-		goto out_remove_gpiochip;
+		ret1 = gpiochip_remove(&port->chip);
+		goto out_remove_domain;
 	}
+#endif
 
 	list_add_tail(&port->node, &adi_gpio_port_list);
 
@@ -1093,6 +1203,7 @@ static struct platform_driver adi_pinctrl_driver = {
 	.remove		= adi_pinctrl_remove,
 	.driver		= {
 		.name	= DRIVER_NAME,
+		.of_match_table = of_match_ptr(adi_pinctrl_of_match),
 	},
 };
 
@@ -1101,6 +1212,7 @@ static struct platform_driver adi_gpio_pint_driver = {
 	.remove		= adi_gpio_pint_remove,
 	.driver		= {
 		.name	= "adi-gpio-pint",
+		.of_match_table = of_match_ptr(adi_pint_of_match),
 	},
 };
 
@@ -1109,6 +1221,7 @@ static struct platform_driver adi_gpio_driver = {
 	.remove		= adi_gpio_remove,
 	.driver		= {
 		.name	= "adi-gpio",
+		.of_match_table = of_match_ptr(adi_gport_of_match),
 	},
 };
 
@@ -1144,3 +1257,120 @@ arch_initcall(adi_pinctrl_setup);
 MODULE_AUTHOR("Sonic Zhang <sonic.zhang@analog.com>");
 MODULE_DESCRIPTION("ADI gpio2 pin control driver");
 MODULE_LICENSE("GPL");
+
+
+extern int pin_request(struct pinctrl_dev *pctldev,
+			int pin, const char *owner,
+			struct pinctrl_gpio_range *gpio_range);
+
+extern const char *pin_free(struct pinctrl_dev *pctldev, int pin,
+			struct pinctrl_gpio_range *gpio_range);
+
+/* ADI direct peripheral pin request APIs. Don't send upstream */
+int pinmux_request(unsigned short fer, const char *label)
+{
+	struct pinctrl_dev *pctldev;
+	struct gpio_port *port;
+	struct pinctrl_gpio_range *range;
+	unsigned long flags;
+	u8 offset;
+	unsigned pin = P_IDENT(fer);
+	int ret;
+
+	pctldev = get_pinctrl_dev_from_devname("pinctrl-adi2.0");
+	if (pctldev == NULL)
+		return -ENODEV;
+
+	ret = pin_request(pctldev, pin, label, NULL);
+	if (ret < 0) {
+		dev_err(pctldev->dev,
+			"could not request pin %d on device %s\n",
+			pin, pinctrl_dev_get_name(pctldev));
+		return ret;
+	}
+
+	range = pinctrl_find_gpio_range_from_pin(pctldev, pin);
+	if (range == NULL) {
+		dev_err(pctldev->dev,
+		       "%s: Peripheral PIN %d doesn't exist!\n",
+		       __func__, pin);
+		return -ENODEV;
+	}
+
+	port = container_of(range->gc, struct gpio_port, chip);
+
+	offset = pin_to_offset(range, pin);
+
+	spin_lock_irqsave(&port->lock, flags);
+
+	portmux_setup(port, offset, P_FUNCT2MUX(fer));
+	port_setup(port, offset, false);
+
+	spin_unlock_irqrestore(&port->lock, flags);
+
+	return 0;
+
+}
+EXPORT_SYMBOL(pinmux_request);
+
+void pinmux_free(unsigned short fer)
+{
+	struct pinctrl_dev *pctldev;
+	struct gpio_port *port;
+	struct pinctrl_gpio_range *range;
+	unsigned long flags;
+	u8 offset;
+	unsigned pin = P_IDENT(fer);
+
+	pctldev = get_pinctrl_dev_from_devname("pinctrl-adi2.0");
+	if (pctldev == NULL)
+		return;
+
+	pin_free(pctldev, pin, NULL);
+
+	range = pinctrl_find_gpio_range_from_pin(pctldev, pin);
+	if (range == NULL)
+		return;
+
+	port = container_of(range->gc, struct gpio_port, chip);
+
+	offset = pin_to_offset(range, pin);
+
+	spin_lock_irqsave(&port->lock, flags);
+
+	port_setup(port, offset, true);
+
+	spin_unlock_irqrestore(&port->lock, flags);
+
+	return;
+}
+EXPORT_SYMBOL(pinmux_free);
+
+int pinmux_request_list(const unsigned short per[], const char *label)
+{
+	u16 cnt;
+	int ret;
+
+	for (cnt = 0; per[cnt] != 0; cnt++) {
+
+		ret = pinmux_request(per[cnt], label);
+
+		if (ret < 0) {
+			for ( ; cnt > 0; cnt--)
+				peripheral_free(per[cnt - 1]);
+
+			return ret;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(pinmux_request_list);
+
+void pinmux_free_list(const unsigned short per[])
+{
+	u16 cnt;
+	for (cnt = 0; per[cnt] != 0; cnt++)
+		pinmux_free(per[cnt]);
+}
+EXPORT_SYMBOL(pinmux_free_list);
