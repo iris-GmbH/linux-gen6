@@ -394,7 +394,7 @@ config I2C_BCM_KONA
 
 config I2C_BLACKFIN_TWI
 	tristate "Blackfin TWI I2C support"
-	depends on BLACKFIN
+	depends on BLACKFIN || ARCH_SC58X || ARCH_SC57X
 	depends on !BF561 && !BF531 && !BF532 && !BF533
 	help
 	  This is the I2C bus driver for Blackfin on-chip TWI interface.

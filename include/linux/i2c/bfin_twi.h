@@ -62,6 +62,7 @@ struct bfin_twi_iface {
 	int			cur_mode;
 	int			manual_stop;
 	int			result;
+	unsigned int		twi_clk;
 	struct i2c_adapter	adap;
 	struct completion	complete;
 	struct i2c_msg		*pmsg;
