@@ -30,8 +30,13 @@
 #include <linux/spi/adi_spi3.h>
 #include <linux/types.h>
 
+#ifdef CONFIG_ARCH_HEADER_IN_MACH
+#include <mach/dma.h>
+#include <mach/portmux.h>
+#else
 #include <asm/dma.h>
 #include <asm/portmux.h>
+#endif
 
 enum adi_spi_state {
 	START_STATE,
@@ -100,7 +105,6 @@ struct adi_spi_device {
 	u32 clock;
 	u32 ssel;
 
-	u8 cs;
 	u16 cs_chg_udelay; /* Some devices require > 255usec delay */
 	u32 cs_gpio;
 	u32 tx_dummy_val; /* tx value for rx only transfer */
@@ -152,54 +156,17 @@ static int adi_spi_flush(struct adi_spi_master *drv_data)
 /* Chip select operation functions for cs_change flag */
 static void adi_spi_cs_active(struct adi_spi_master *drv_data, struct adi_spi_device *chip)
 {
-	if (likely(chip->cs < MAX_CTRL_CS)) {
-		u32 reg;
-		reg = ioread32(&drv_data->regs->ssel);
-		reg &= ~chip->ssel;
-		iowrite32(reg, &drv_data->regs->ssel);
-	} else {
-		gpio_set_value(chip->cs_gpio, 0);
-	}
+	gpio_set_value(chip->cs_gpio, 0);
 }
 
 static void adi_spi_cs_deactive(struct adi_spi_master *drv_data,
 				struct adi_spi_device *chip)
 {
-	if (likely(chip->cs < MAX_CTRL_CS)) {
-		u32 reg;
-		reg = ioread32(&drv_data->regs->ssel);
-		reg |= chip->ssel;
-		iowrite32(reg, &drv_data->regs->ssel);
-	} else {
-		gpio_set_value(chip->cs_gpio, 1);
-	}
+	gpio_set_value(chip->cs_gpio, 1);
 
 	/* Move delay here for consistency */
 	if (chip->cs_chg_udelay)
 		udelay(chip->cs_chg_udelay);
-}
-
-/* enable or disable the pin muxed by GPIO and SPI CS to work as SPI CS */
-static inline void adi_spi_cs_enable(struct adi_spi_master *drv_data,
-					struct adi_spi_device *chip)
-{
-	if (chip->cs < MAX_CTRL_CS) {
-		u32 reg;
-		reg = ioread32(&drv_data->regs->ssel);
-		reg |= chip->ssel >> 8;
-		iowrite32(reg, &drv_data->regs->ssel);
-	}
-}
-
-static inline void adi_spi_cs_disable(struct adi_spi_master *drv_data,
-					struct adi_spi_device *chip)
-{
-	if (chip->cs < MAX_CTRL_CS) {
-		u32 reg;
-		reg = ioread32(&drv_data->regs->ssel);
-		reg &= ~(chip->ssel >> 8);
-		iowrite32(reg, &drv_data->regs->ssel);
-	}
 }
 
 /* stop controller and re-config current chip*/
@@ -219,9 +186,6 @@ static void adi_spi_restore_state(struct adi_spi_master *drv_data)
 
 	adi_spi_enable(drv_data);
 	drv_data->tx_num = drv_data->rx_num = 0;
-	/* we always choose tx transfer initiate */
-	iowrite32(SPI_RXCTL_REN, &drv_data->regs->rx_control);
-	iowrite32(SPI_TXCTL_TEN | SPI_TXCTL_TTI, &drv_data->regs->tx_control);
 	adi_spi_cs_active(drv_data, chip);
 }
 
@@ -234,7 +198,6 @@ static inline void dummy_read(struct adi_spi_master *drv_data)
 
 static void adi_spi_u8_write(struct adi_spi_master *drv_data)
 {
-	dummy_read(drv_data);
 	while (drv_data->tx < drv_data->tx_end) {
 		iowrite32(*(u8 *)(drv_data->tx++), &drv_data->regs->tfifo);
 		while (ioread32(&drv_data->regs->status) & SPI_STAT_RFE)
@@ -246,10 +209,11 @@ static void adi_spi_u8_write(struct adi_spi_master *drv_data)
 static void adi_spi_u8_read(struct adi_spi_master *drv_data)
 {
 	u32 tx_val = drv_data->cur_chip->tx_dummy_val;
+	struct spi_transfer *t = drv_data->cur_transfer;
 
-	dummy_read(drv_data);
 	while (drv_data->rx < drv_data->rx_end) {
-		iowrite32(tx_val, &drv_data->regs->tfifo);
+		if (t->rx_nbits != 4)
+			iowrite32(tx_val, &drv_data->regs->tfifo);
 		while (ioread32(&drv_data->regs->status) & SPI_STAT_RFE)
 			cpu_relax();
 		*(u8 *)(drv_data->rx++) = ioread32(&drv_data->regs->rfifo);
@@ -258,7 +222,6 @@ static void adi_spi_u8_read(struct adi_spi_master *drv_data)
 
 static void adi_spi_u8_duplex(struct adi_spi_master *drv_data)
 {
-	dummy_read(drv_data);
 	while (drv_data->rx < drv_data->rx_end) {
 		iowrite32(*(u8 *)(drv_data->tx++), &drv_data->regs->tfifo);
 		while (ioread32(&drv_data->regs->status) & SPI_STAT_RFE)
@@ -275,7 +238,6 @@ static const struct adi_spi_transfer_ops adi_spi_transfer_ops_u8 = {
 
 static void adi_spi_u16_write(struct adi_spi_master *drv_data)
 {
-	dummy_read(drv_data);
 	while (drv_data->tx < drv_data->tx_end) {
 		iowrite32(*(u16 *)drv_data->tx, &drv_data->regs->tfifo);
 		drv_data->tx += 2;
@@ -288,10 +250,11 @@ static void adi_spi_u16_write(struct adi_spi_master *drv_data)
 static void adi_spi_u16_read(struct adi_spi_master *drv_data)
 {
 	u32 tx_val = drv_data->cur_chip->tx_dummy_val;
+	struct spi_transfer *t = drv_data->cur_transfer;
 
-	dummy_read(drv_data);
 	while (drv_data->rx < drv_data->rx_end) {
-		iowrite32(tx_val, &drv_data->regs->tfifo);
+		if (t->rx_nbits != 4)
+			iowrite32(tx_val, &drv_data->regs->tfifo);
 		while (ioread32(&drv_data->regs->status) & SPI_STAT_RFE)
 			cpu_relax();
 		*(u16 *)drv_data->rx = ioread32(&drv_data->regs->rfifo);
@@ -301,7 +264,6 @@ static void adi_spi_u16_read(struct adi_spi_master *drv_data)
 
 static void adi_spi_u16_duplex(struct adi_spi_master *drv_data)
 {
-	dummy_read(drv_data);
 	while (drv_data->rx < drv_data->rx_end) {
 		iowrite32(*(u16 *)drv_data->tx, &drv_data->regs->tfifo);
 		drv_data->tx += 2;
@@ -320,7 +282,6 @@ static const struct adi_spi_transfer_ops adi_spi_transfer_ops_u16 = {
 
 static void adi_spi_u32_write(struct adi_spi_master *drv_data)
 {
-	dummy_read(drv_data);
 	while (drv_data->tx < drv_data->tx_end) {
 		iowrite32(*(u32 *)drv_data->tx, &drv_data->regs->tfifo);
 		drv_data->tx += 4;
@@ -333,10 +294,11 @@ static void adi_spi_u32_write(struct adi_spi_master *drv_data)
 static void adi_spi_u32_read(struct adi_spi_master *drv_data)
 {
 	u32 tx_val = drv_data->cur_chip->tx_dummy_val;
+	struct spi_transfer *t = drv_data->cur_transfer;
 
-	dummy_read(drv_data);
 	while (drv_data->rx < drv_data->rx_end) {
-		iowrite32(tx_val, &drv_data->regs->tfifo);
+		if (t->rx_nbits != 4)
+			iowrite32(tx_val, &drv_data->regs->tfifo);
 		while (ioread32(&drv_data->regs->status) & SPI_STAT_RFE)
 			cpu_relax();
 		*(u32 *)drv_data->rx = ioread32(&drv_data->regs->rfifo);
@@ -346,7 +308,6 @@ static void adi_spi_u32_read(struct adi_spi_master *drv_data)
 
 static void adi_spi_u32_duplex(struct adi_spi_master *drv_data)
 {
-	dummy_read(drv_data);
 	while (drv_data->rx < drv_data->rx_end) {
 		iowrite32(*(u32 *)drv_data->tx, &drv_data->regs->tfifo);
 		drv_data->tx += 4;
@@ -429,6 +390,14 @@ static int adi_spi_setup_transfer(struct adi_spi_master *drv)
 	}
 	cr = ioread32(&drv->regs->control) & ~SPI_CTL_SIZE;
 	cr |= cr_width;
+
+	cr &= ~SPI_CTL_SOSI;
+	cr &= ~SPI_CTL_MIOM;
+	if (t->rx_nbits == 4 || t->tx_nbits == 4)
+		cr |= SPI_CTL_MIO_QUAD;
+	else if (t-> rx_nbits == 2 || t->tx_nbits == 4)
+		cr |= SPI_CTL_MIO_DUAL;
+
 	iowrite32(cr, &drv->regs->control);
 
 	/* speed setup */
@@ -516,13 +485,19 @@ static int adi_spi_dma_xfer(struct adi_spi_master *drv_data)
 	dma_config |= DMAFLOW_STOP | RESTART | DI_EN;
 	set_dma_config(drv_data->tx_dma, dma_config);
 	set_dma_config(drv_data->rx_dma, dma_config | WNR);
-	enable_dma(drv_data->tx_dma);
 	enable_dma(drv_data->rx_dma);
 
-	iowrite32(SPI_RXCTL_REN | SPI_RXCTL_RDR_NE,
-			&drv_data->regs->rx_control);
-	iowrite32(SPI_TXCTL_TEN | SPI_TXCTL_TTI | SPI_TXCTL_TDR_NF,
-			&drv_data->regs->tx_control);
+	if (!drv_data->tx && t->rx_nbits == 4) {
+		iowrite32(SPI_RXCTL_REN | SPI_RXCTL_RTI | SPI_RXCTL_RDR_NE,
+				&drv_data->regs->rx_control);
+		iowrite32(0, &drv_data->regs->tx_control);
+	} else {
+		enable_dma(drv_data->tx_dma);
+		iowrite32(SPI_RXCTL_REN | SPI_RXCTL_RDR_NE,
+				&drv_data->regs->rx_control);
+		iowrite32(SPI_TXCTL_TEN | SPI_TXCTL_TTI | SPI_TXCTL_TDR_NF,
+				&drv_data->regs->tx_control);
+	}
 
 	return 0;
 }
@@ -530,6 +505,14 @@ static int adi_spi_dma_xfer(struct adi_spi_master *drv_data)
 static int adi_spi_pio_xfer(struct adi_spi_master *drv_data)
 {
 	struct spi_message *msg = drv_data->cur_msg;
+	struct spi_transfer *t = drv_data->cur_transfer;
+
+	dummy_read(drv_data);
+
+	iowrite32(SPI_RXCTL_REN,
+			&drv_data->regs->rx_control);
+	iowrite32(SPI_TXCTL_TEN | SPI_TXCTL_TTI,
+			&drv_data->regs->tx_control);
 
 	if (!drv_data->rx) {
 		/* write only half duplex */
@@ -538,6 +521,12 @@ static int adi_spi_pio_xfer(struct adi_spi_master *drv_data)
 			return -EIO;
 	} else if (!drv_data->tx) {
 		/* read only half duplex */
+		if (t->rx_nbits == 4) {
+			iowrite32(SPI_RXCTL_REN | SPI_RXCTL_RTI,
+					&drv_data->regs->rx_control);
+			iowrite32(0, &drv_data->regs->tx_control);
+		}
+
 		drv_data->ops->read(drv_data);
 		if (drv_data->rx != drv_data->rx_end)
 			return -EIO;
@@ -633,22 +622,6 @@ static int adi_spi_transfer_one_message(struct spi_master *master,
 	return 0;
 }
 
-#define MAX_SPI_SSEL	7
-
-static const u16 ssel[][MAX_SPI_SSEL] = {
-	{P_SPI0_SSEL1, P_SPI0_SSEL2, P_SPI0_SSEL3,
-	P_SPI0_SSEL4, P_SPI0_SSEL5,
-	P_SPI0_SSEL6, P_SPI0_SSEL7},
-
-	{P_SPI1_SSEL1, P_SPI1_SSEL2, P_SPI1_SSEL3,
-	P_SPI1_SSEL4, P_SPI1_SSEL5,
-	P_SPI1_SSEL6, P_SPI1_SSEL7},
-
-	{P_SPI2_SSEL1, P_SPI2_SSEL2, P_SPI2_SSEL3,
-	P_SPI2_SSEL4, P_SPI2_SSEL5,
-	P_SPI2_SSEL6, P_SPI2_SSEL7},
-};
-
 static int adi_spi_setup(struct spi_device *spi)
 {
 	struct adi_spi_master *drv_data = spi_master_get_devdata(spi->master);
@@ -673,25 +646,17 @@ static int adi_spi_setup(struct spi_device *spi)
 			chip->cs_chg_udelay = chip_info->cs_chg_udelay;
 			chip->tx_dummy_val = chip_info->tx_dummy_val;
 			chip->enable_dma = chip_info->enable_dma;
+		} else if (spi->dev.of_node) {
+			if (of_find_property(spi->dev.of_node,
+						"dma-mode", NULL))
+				chip->enable_dma = true;
 		}
-		chip->cs = spi->chip_select;
-
-		if (chip->cs < MAX_CTRL_CS) {
-			chip->ssel = (1 << chip->cs) << 8;
-			ret = peripheral_request(ssel[spi->master->bus_num]
-					[chip->cs-1], dev_name(&spi->dev));
-			if (ret) {
-				dev_err(&spi->dev, "peripheral_request() error\n");
-				goto error;
-			}
-		} else {
-			chip->cs_gpio = chip->cs - MAX_CTRL_CS;
-			ret = gpio_request_one(chip->cs_gpio, GPIOF_OUT_INIT_HIGH,
-						dev_name(&spi->dev));
-			if (ret) {
-				dev_err(&spi->dev, "gpio_request_one() error\n");
-				goto error;
-			}
+		chip->cs_gpio = spi->chip_select;
+		ret = gpio_request_one(chip->cs_gpio, GPIOF_OUT_INIT_HIGH,
+					dev_name(&spi->dev));
+		if (ret) {
+			dev_err(&spi->dev, "gpio_request_one() error\n");
+			goto error;
 		}
 		spi_set_ctldata(spi, chip);
 	}
@@ -711,7 +676,6 @@ static int adi_spi_setup(struct spi_device *spi)
 
 	chip->clock = hz_to_spi_clock(drv_data->sclk, spi->max_speed_hz);
 
-	adi_spi_cs_enable(drv_data, chip);
 	adi_spi_cs_deactive(drv_data, chip);
 
 	return 0;
@@ -727,19 +691,11 @@ error:
 static void adi_spi_cleanup(struct spi_device *spi)
 {
 	struct adi_spi_device *chip = spi_get_ctldata(spi);
-	struct adi_spi_master *drv_data = spi_master_get_devdata(spi->master);
 
 	if (!chip)
 		return;
 
-	if (chip->cs < MAX_CTRL_CS) {
-		peripheral_free(ssel[spi->master->bus_num]
-					[chip->cs-1]);
-		adi_spi_cs_disable(drv_data, chip);
-	} else {
-		gpio_free(chip->cs_gpio);
-	}
-
+	gpio_free(chip->cs_gpio);
 	kfree(chip);
 	spi_set_ctldata(spi, NULL);
 }
@@ -792,6 +748,34 @@ static irqreturn_t adi_spi_rx_dma_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t spi_irq_err(int irq, void *dev_id)
+{
+	struct adi_spi_master *drv_data = dev_id;
+	u32 status;
+
+	status = ioread32(&drv_data->regs->status);
+	if (status & SPI_STAT_ROE)
+		dev_err(&drv_data->master->dev, "spi rx overrun\n");
+	iowrite32(status, &drv_data->regs->status);
+	drv_data->state = ERROR_STATE;
+	iowrite32(0, &drv_data->regs->tx_control);
+	iowrite32(0, &drv_data->regs->rx_control);
+	disable_dma(drv_data->tx_dma);
+	disable_dma(drv_data->rx_dma);
+	tasklet_schedule(&drv_data->pump_transfers);
+	return IRQ_HANDLED;
+}
+
+#ifdef CONFIG_OF
+static const struct of_device_id adi_spi_of_match[] = {
+	{
+		.compatible = "adi,spi3",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, adi_spi_of_match);
+#endif
+
 static int adi_spi_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -799,11 +783,11 @@ static int adi_spi_probe(struct platform_device *pdev)
 	struct spi_master *master;
 	struct adi_spi_master *drv_data;
 	struct resource *mem, *res;
-	unsigned int tx_dma, rx_dma;
+	unsigned int tx_dma, rx_dma, num_cs, bus_num;
 	struct clk *sclk;
 	int ret;
 
-	if (!info) {
+	if (!info && !dev->of_node) {
 		dev_err(dev, "platform data missing!\n");
 		return -ENODEV;
 	}
@@ -814,19 +798,42 @@ static int adi_spi_probe(struct platform_device *pdev)
 		return PTR_ERR(sclk);
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_DMA, 0);
-	if (!res) {
-		dev_err(dev, "can not get tx dma resource\n");
-		return -ENXIO;
-	}
-	tx_dma = res->start;
+	if (dev->of_node) {
+		ret = of_property_read_u32_index(dev->of_node,
+				"dma-channel", 0, &tx_dma);
+		if (ret) {
+			dev_err(dev, "can not get tx dma resource\n");
+			return ret;
+		}
+		ret = of_property_read_u32_index(dev->of_node,
+				"dma-channel", 1, &rx_dma);
+		if (ret) {
+			dev_err(dev, "can not get rx dma resource\n");
+			return ret;
+		}
+		ret = of_property_read_u32(dev->of_node, "num-cs", &num_cs);
+		if (ret) {
+			dev_err(dev, "can not get total number of cs\n");
+			return ret;
+		}
+		bus_num = -1;
+	} else {
+		res = platform_get_resource(pdev, IORESOURCE_DMA, 0);
+		if (!res) {
+			dev_err(dev, "can not get tx dma resource\n");
+			return -ENXIO;
+		}
+		tx_dma = res->start;
 
-	res = platform_get_resource(pdev, IORESOURCE_DMA, 1);
-	if (!res) {
-		dev_err(dev, "can not get rx dma resource\n");
-		return -ENXIO;
+		res = platform_get_resource(pdev, IORESOURCE_DMA, 1);
+		if (!res) {
+			dev_err(dev, "can not get rx dma resource\n");
+			return -ENXIO;
+		}
+		rx_dma = res->start;
+		num_cs = info->num_chipselect;
+		bus_num = pdev->id;
 	}
-	rx_dma = res->start;
 
 	/* allocate master with space for drv_data */
 	master = spi_alloc_master(dev, sizeof(*drv_data));
@@ -837,27 +844,41 @@ static int adi_spi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, master);
 
 	/* the mode bits supported by this driver */
-	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST;
+	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST |
+				SPI_TX_DUAL | SPI_TX_QUAD |
+				SPI_RX_DUAL | SPI_RX_QUAD;
 
-	master->bus_num = pdev->id;
-	master->num_chipselect = info->num_chipselect;
+	master->dev.of_node = dev->of_node;
+	master->bus_num = bus_num;
+	master->num_chipselect = num_cs;
 	master->cleanup = adi_spi_cleanup;
 	master->setup = adi_spi_setup;
 	master->transfer_one_message = adi_spi_transfer_one_message;
-	master->bits_per_word_mask = SPI_BPW_MASK(32) | SPI_BPW_MASK(16) |
-				     SPI_BPW_MASK(8);
+	master->bits_per_word_mask = BIT(32 - 1) | BIT(16 - 1) | BIT(8 - 1);
 
 	drv_data = spi_master_get_devdata(master);
 	drv_data->master = master;
 	drv_data->tx_dma = tx_dma;
 	drv_data->rx_dma = rx_dma;
-	drv_data->pin_req = info->pin_req;
 	drv_data->sclk = clk_get_rate(sclk);
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	drv_data->regs = devm_ioremap_resource(dev, mem);
 	if (IS_ERR(drv_data->regs)) {
 		ret = PTR_ERR(drv_data->regs);
+		goto err_put_master;
+	}
+
+	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+	if (!res) {
+		dev_err(dev, "can not get spi error irq\n");
+		ret = -ENXIO;
+		goto err_put_master;
+	}
+	ret = devm_request_irq(dev, res->start, spi_irq_err,
+			0, "SPI ERROR", drv_data);
+	if (ret) {
+		dev_err(dev, "can not request spi error irq\n");
 		goto err_put_master;
 	}
 
@@ -876,16 +897,10 @@ static int adi_spi_probe(struct platform_device *pdev)
 	}
 	set_dma_callback(drv_data->rx_dma, adi_spi_rx_dma_isr, drv_data);
 
-	/* request CLK, MOSI and MISO */
-	ret = peripheral_request_list(drv_data->pin_req, "adi-spi3");
-	if (ret < 0) {
-		dev_err(dev, "can not request spi pins\n");
-		goto err_free_rx_dma;
-	}
-
 	iowrite32(SPI_CTL_MSTR | SPI_CTL_CPHA, &drv_data->regs->control);
 	iowrite32(0x0000FE00, &drv_data->regs->ssel);
 	iowrite32(0x0, &drv_data->regs->delay);
+	iowrite32(SPI_IMSK_SET_ROM, &drv_data->regs->emaskst);
 
 	tasklet_init(&drv_data->pump_transfers,
 			adi_spi_pump_transfers, (unsigned long)drv_data);
@@ -893,13 +908,13 @@ static int adi_spi_probe(struct platform_device *pdev)
 	ret = devm_spi_register_master(dev, master);
 	if (ret) {
 		dev_err(dev, "can not  register spi master\n");
-		goto err_free_peripheral;
+		goto err_free_rx_dma;
 	}
 
+	dev_info(dev, "registered ADI SPI controller %s\n",
+					dev_name(&master->dev));
 	return ret;
 
-err_free_peripheral:
-	peripheral_free_list(drv_data->pin_req);
 err_free_rx_dma:
 	free_dma(rx_dma);
 err_free_tx_dma:
@@ -916,7 +931,6 @@ static int adi_spi_remove(struct platform_device *pdev)
 	struct adi_spi_master *drv_data = spi_master_get_devdata(master);
 
 	adi_spi_disable(drv_data);
-	peripheral_free_list(drv_data->pin_req);
 	free_dma(drv_data->rx_dma);
 	free_dma(drv_data->tx_dma);
 	return 0;
@@ -973,6 +987,7 @@ static struct platform_driver adi_spi_driver = {
 	.driver	= {
 		.name	= "adi-spi3",
 		.pm     = &adi_spi_pm_ops,
+		.of_match_table = of_match_ptr(adi_spi_of_match),
 	},
 	.remove		= adi_spi_remove,
 };
