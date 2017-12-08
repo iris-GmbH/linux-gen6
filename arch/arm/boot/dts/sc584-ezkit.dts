@@ -1,0 +1,261 @@
+/*
+ * Device tree for ADI sc584-ezkit board
+ *
+ * Copyright 2014 Analog Devices Inc.
+ *
+ * Licensed under the GPL-2 or later.
+ *
+ */
+
+/dts-v1/;
+
+#include "sc58x.dtsi"
+
+/ {
+	model = "ADI sc584-ezkit";
+	compatible = "adi,sc584-ezkit", "adi,sc58x";
+
+	aliases {
+		ethernet0 = &emac0;
+	};
+
+	memory@89000000 {
+		device_type = "memory";
+		reg = <0x89000000 0x7000000>;
+	};
+
+	scb {
+		i2c0: twi@0x31001400 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "adi,twi";
+			reg = <0x31001400 0xFF>;
+			interrupts = <0 123 0>;
+			clock-khz = <100>;
+			ssw0: gpio@0x21 {
+				compatible = "microchip,mcp23017";
+				gpio-controller;
+				#gpio-cells = <2>;
+				reg = <0x21>;
+			};
+			ssw1: gpio@0x22 {
+				compatible = "microchip,mcp23017";
+				gpio-controller;
+				#gpio-cells = <2>;
+				reg = <0x22>;
+			};
+			adau1979: adau1979@0x11 {
+				compatible = "adi,adau1977";
+				reg = <0x11>;
+				reset-gpio = <&gpa 14 0>;
+			};
+			adau1962: adau1962@0x4 {
+				compatible = "adi,adau1962";
+				reg = <0x4>;
+				reset-gpio = <&gpa 14 0>;
+			};
+		};
+
+		spi_0: spi@0x31042000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "adi,spi3";
+			reg = <0x31042000 0xFF>;
+			interrupts = <0 109 0>;
+			num-cs = <128>;
+			dma-channel = <22>, <23>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi0_default>;
+
+			ad7879_touchscreen {
+				#address-cells = <1>;
+				#size-cells = <1>;
+				compatible = "adi,ad7879";
+				spi-max-frequency = <5000000>;
+				reg = <32>;
+				gpio = <49>;
+				gpio-base = <102>;
+				spi-cpha;
+				spi-cpol;
+			};
+
+			spidev {
+				#address-cells = <1>;
+				#size-cells = <1>;
+				compatible = "rohm,dh2228fv";
+				spi-max-frequency = <5000000>;
+				reg = <44>;
+			};
+		};
+
+		spi_2: spi@0x31044000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "adi,spi3";
+			reg = <0x31044000 0xFF>;
+			interrupts = <0 71 0>;
+			num-cs = <128>;
+			dma-channel = <26>, <27>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi2_quad>;
+
+			flash: w25q32@0 {
+				#address-cells = <1>;
+				#size-cells = <1>;
+				compatible = "winbond,w25q32";
+				spi-max-frequency = <5000000>;
+				reg = <38>;
+				spi-cpol;
+				spi-cpha;
+				spi-rx-bus-width = <4>;
+				dma-mode;
+
+				partition@0 {
+					label = "uboot (spi)";
+					reg = <0x0 0x80000>;
+				};
+				partition@1 {
+					label = "kernel (spi)";
+					reg = <0x80000 0x580000>;
+				};
+				partition@2 {
+					label = "root file system (spi)";
+					reg = <0x600000 0xa00000>;
+				};
+			};
+		};
+
+		can1: can@0x31000a00 {
+			compatible = "adi,can";
+			reg = <0x31000a00 0x5FF>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&can1_default>;
+			phy-name = "tja1145";
+			phy-spibus = /bits/ 16 <0>;
+			phy-spiclk = <1000000>;
+			phy-spics = /bits/ 16 <44>;	/* GPIO_PC12 */
+			interrupt-parent = <&gic>;
+			interrupts = <0 87 0>,
+				     <0 88 0>,
+				     <0 89 0>;
+		};
+
+		rotary@0x3100B000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "adi,rotary";
+			reg = <0x3100B000 0xFF>;
+			interrupts = <0 126 0>;
+			rotary_rel_code = <0x08>;	/* REL_WHEEL */
+			rotary_button_key = <28>;	/* KEY_ENTER */
+			debounce = /bits/ 16 <10>;	/* 0..17 */
+			debounce_en = /bits/ 16 <1>;
+			cnt_mode = /bits/ 16 <0>;	/* CNTMODE_QUADENC */
+			boundary_mode = /bits/ 16 <0>;	/* BNDMODE_COMP */
+			invert_czm = /bits/ 16 <0>;
+			invert_cud = /bits/ 16 <0>;
+			invert_cdg = /bits/ 16 <0>;
+		};
+
+		lp0: linkport@0 {
+			compatible = "linkport0";
+			interrupt-parent = <&gic>;
+			interrupts = <0 77 0>,
+				     <0 78 0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&lp0_default>;
+		};
+
+		lp1: linkport@1 {
+			compatible = "linkport1";
+			interrupt-parent = <&gic>;
+			interrupts = <0 79 0>,
+				     <0 80 0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&lp1_default>;
+		};
+
+		lcd@0 {
+			compatible = "sc58x,lcd";
+			reg = <0x31040000 0xFF>;
+			interrupts = <0 83 0>;
+			dma-channel = <28>;
+			cs-gpio = <39>;
+			spu_securep_id = <95>;
+			pinctrl-names = "default","ppi_16b","ppi_24b";
+			pinctrl-0 = <&ppi0_8b>;
+			pinctrl-1 = <&ppi0_16b>;
+			pinctrl-2 = <&ppi0_24b>;
+		};
+
+		i2s: i2s@0 {
+			compatible = "sc5xx,i2s-dai";
+			reg = <0x31002400 0x80>, <0x31002480 0x80>;
+			interrupts = <0 61 0>, <0 63 0>;
+			dma-channel = <10>, <11>;
+		};
+
+		sound {
+			compatible = "sc5xx,asoc-card";
+			adi,cpu-dai = <&i2s>;
+			adi,codec = <&adau1962>, <&adau1979>;
+		};
+
+		emac0: ethernet@0x3100C000 {
+			compatible = "snps,dwmac", "snps,dwmac-3.710";
+			reg = <0x3100C000 0x2000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 148 0>;
+			interrupt-names = "macirq";
+			snps,reset-gpio = <&gpb 14 0>;
+			snps,reset-active-low;
+			snps,reset-delays-us = <0 200 500>;
+			snps,fixed-burst;
+			snps,burst_len = <0x8>;	/* BLEN16 */
+			snps,pbl = <2>;
+			snps,force_sf_dma_mode;
+			snps,perfect-filter-entries = <32>;
+			phy-mode = "rgmii";
+			clock-names = "stmmaceth";
+			pinctrl-names = "default";
+			pinctrl-0 = <&eth0_default>;
+		};
+
+		pinctrl@0 {
+			ppi {
+				ppi0_8b: ppi0@0 {
+					adi,group = "ppi0_8bgrp";
+					adi,function = "ppi0";
+				};
+				ppi0_16b: ppi0@1 {
+					adi,group = "ppi0_16bgrp";
+					adi,function = "ppi0";
+				};
+				ppi0_24b: ppi0@2 {
+					adi,group = "ppi0_24bgrp";
+					adi,function = "ppi0";
+				};
+			};
+
+			linkport {
+				lp0_default: lp0@0 {
+					adi,group = "lp0grp";
+					adi,function = "lp0";
+				};
+				lp1_default: lp1@0 {
+					adi,group = "lp1grp";
+					adi,function = "lp1";
+				};
+			};
+
+			eth {
+				eth0_default: eth0@0 {
+					adi,group = "eth0grp";
+					adi,function = "eth0";
+				};
+			};
+
+
+		};
+	};
+};
