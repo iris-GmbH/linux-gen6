@@ -306,8 +306,12 @@ static void txstate(struct musb *musb, struct musb_request *req)
 		size_t request_size;
 
 		/* setup DMA, then program endpoint CSR */
+#if !defined(CONFIG_BLACKFIN) || defined(USE_MODE1) || defined(CONFIG_BF60x)
 		request_size = min_t(size_t, request->length - request->actual,
 					musb_ep->dma->max_len);
+#else
+		request_size = fifo_count;	/* Anomaly 05000456 */
+#endif
 
 		use_dma = (request->dma != DMA_ADDR_INVALID && request_size);
 
@@ -315,7 +319,7 @@ static void txstate(struct musb *musb, struct musb_request *req)
 
 #if defined(CONFIG_USB_INVENTRA_DMA) || defined(CONFIG_USB_UX500_DMA)
 		{
-			if (request_size < musb_ep->packet_sz)
+			if (request_size <= musb_ep->packet_sz)
 				musb_ep->dma->desired_mode = 0;
 			else
 				musb_ep->dma->desired_mode = 1;

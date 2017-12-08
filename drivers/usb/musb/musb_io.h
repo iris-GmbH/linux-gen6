@@ -48,6 +48,7 @@
  * @read_fifo:	platform specific function to read fifo
  * @write_fifo:	platform specific function to write fifo
  */
+
 struct musb_io {
 	u32	quirks;
 	u32	(*ep_offset)(u8 epnum, u16 offset);

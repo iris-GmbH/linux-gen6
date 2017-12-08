@@ -6,7 +6,9 @@
 # (M)HDRC = (Multipoint) Highspeed Dual-Role Controller
 config USB_MUSB_HDRC
 	tristate 'Inventra Highspeed Dual Role Controller (TI, ADI, ...)'
-	depends on (USB || USB_GADGET)
+	depends on USB && USB_GADGET
+	depends on (ARM || (BF54x && !BF544) || (BF52x && !BF522 && !BF523) || (BF60x))
+	select USB_OTG_UTILS
 	help
 	  Say Y here if your system has a dual role high speed USB
 	  controller based on the Mentor Graphics silicon IP.  Then
@@ -96,7 +98,7 @@ config USB_MUSB_DSPS
 
 config USB_MUSB_BLACKFIN
 	tristate "Blackfin"
-	depends on (BF54x && !BF544) || (BF52x && ! BF522 && !BF523)
+	depends on (BF54x && !BF544) || (BF52x && ! BF522 && !BF523) || (BF60x)
 	depends on NOP_USB_XCEIV
 
 config USB_MUSB_UX500
@@ -110,6 +112,12 @@ config USB_MUSB_JZ4740
 	depends on USB_MUSB_GADGET
 	depends on USB_OTG_BLACKLIST_HUB
 
+config USB_MUSB_ADI
+	tristate "ADI"
+	depends on ARCH_SC58X = y || ARCH_SC57X = y
+	help
+	  Enable usb on ADI platforms.
+
 config USB_MUSB_AM335X_CHILD
 	tristate
 
@@ -117,7 +125,7 @@ choice
 	prompt 'MUSB DMA mode'
 	default MUSB_PIO_ONLY if ARCH_MULTIPLATFORM || USB_MUSB_JZ4740
 	default USB_UX500_DMA if USB_MUSB_UX500
-	default USB_INVENTRA_DMA if USB_MUSB_OMAP2PLUS || USB_MUSB_BLACKFIN
+	default USB_INVENTRA_DMA if USB_MUSB_OMAP2PLUS || USB_MUSB_BLACKFIN || USB_MUSB_ADI
 	default USB_TI_CPPI_DMA if USB_MUSB_DAVINCI
 	default USB_TUSB_OMAP_DMA if USB_MUSB_TUSB6010
 	default MUSB_PIO_ONLY if USB_MUSB_TUSB6010 || USB_MUSB_DA8XX || USB_MUSB_AM35X \
@@ -135,7 +143,7 @@ config USB_UX500_DMA
 
 config USB_INVENTRA_DMA
 	bool 'Inventra'
-	depends on USB_MUSB_OMAP2PLUS || USB_MUSB_BLACKFIN
+	depends on USB_MUSB_OMAP2PLUS || USB_MUSB_BLACKFIN || USB_MUSB_ADI
 	help
 	  Enable DMA transfers using Mentor's engine.
 

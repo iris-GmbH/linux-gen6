@@ -2117,6 +2117,11 @@ void composite_resume(struct usb_gadget *gadget)
 /*-------------------------------------------------------------------------*/
 
 static const struct usb_gadget_driver composite_driver_template = {
+#ifdef CONFIG_USB_GADGET_SUPERSPEED
+	.max_speed	= USB_SPEED_SUPER,
+#else
+	.max_speed	= USB_SPEED_HIGH,
+#endif
 	.bind		= composite_bind,
 	.unbind		= composite_unbind,
 
@@ -2163,7 +2168,8 @@ int usb_composite_probe(struct usb_composite_driver *driver)
 
 	gadget_driver->function =  (char *) driver->name;
 	gadget_driver->driver.name = driver->name;
-	gadget_driver->max_speed = driver->max_speed;
+	gadget_driver->max_speed =
+		min_t(u8, gadget_driver->max_speed, driver->max_speed);
 
 	return usb_gadget_probe_driver(gadget_driver);
 }
