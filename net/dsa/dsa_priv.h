@@ -185,4 +185,7 @@ static inline struct dsa_port *dsa_get_cpu_port(struct dsa_switch_tree *dst)
 	return dst->cpu_dp;
 }
 
+/* tag_stpid.c */
+int stpid_xmit(struct sk_buff *skb, struct net_device *dev);
+
 #endif

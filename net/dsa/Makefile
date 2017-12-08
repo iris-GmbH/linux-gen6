@@ -12,3 +12,4 @@ dsa_core-$(CONFIG_NET_DSA_TAG_LAN9303) += tag_lan9303.o
 dsa_core-$(CONFIG_NET_DSA_TAG_MTK) += tag_mtk.o
 dsa_core-$(CONFIG_NET_DSA_TAG_QCA) += tag_qca.o
 dsa_core-$(CONFIG_NET_DSA_TAG_TRAILER) += tag_trailer.o
+dsa_core-$(CONFIG_NET_DSA_TAG_STPID) += tag_stpid.o
