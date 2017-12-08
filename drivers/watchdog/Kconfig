@@ -638,6 +638,17 @@ config ST_LPC_WATCHDOG
 	  To compile this driver as a module, choose M here: the
 	  module will be called st_lpc_wdt.
 
+config ADI_WATCHDOG
+	tristate "adi watchdog"
+	select WATCHDOG_CORE
+	help
+	  This is the driver for the hardware watchdog
+	  on the adi sc58x/sc57x family processors, if you wish to have
+	  watchdog support enabled, say Y, otherwise say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called adi_wdt.
+
 config TEGRA_WATCHDOG
 	tristate "Tegra watchdog"
 	depends on (ARCH_TEGRA || COMPILE_TEST) && HAS_IOMEM
