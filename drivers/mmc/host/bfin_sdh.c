@@ -427,7 +427,7 @@ static void sdh_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	if (ios->power_mode == MMC_POWER_ON && ios->clock) {
 		unsigned char clk_div;
-		clk_div = (get_sclk() / ios->clock - 1) / 2;
+		clk_div = (host->sclk / ios->clock - 1) / 2;
 		clk_div = min_t(unsigned char, clk_div, 0xFF);
 		clk_ctl |= clk_div;
 		clk_ctl |= CLK_E;
@@ -449,7 +449,7 @@ static void sdh_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	dev_dbg(mmc_dev(host->mmc), "SDH: clk_div = 0x%x actual clock:%ld expected clock:%d\n",
 		host->clk_div,
-		host->clk_div ? get_sclk() / (2 * (host->clk_div + 1)) : 0,
+		host->clk_div ? host->sclk / (2 * (host->clk_div + 1)) : 0,
 		ios->clock);
 }
 
@@ -639,10 +639,6 @@ static int sdh_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM
 static int sdh_suspend(struct platform_device *dev, pm_message_t state)
 {
-	struct bfin_sd_host *drv_data = get_sdh_data(dev);
-
-	peripheral_free_list(drv_data->pin_req);
-
 	return 0;
 }
 
@@ -651,13 +647,8 @@ static int sdh_resume(struct platform_device *dev)
 	struct bfin_sd_host *drv_data = get_sdh_data(dev);
 	int ret = 0;
 
-	ret = peripheral_request_list(drv_data->pin_req, DRIVER_NAME);
-	if (ret) {
-		dev_err(&dev->dev, "unable to request peripheral pins\n");
-		return ret;
-	}
-
 	sdh_reset();
+
 	return ret;
 }
 #else
