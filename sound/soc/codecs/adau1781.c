@@ -1,7 +1,7 @@
 /*
  * Driver for ADAU1781/ADAU1781 codec
  *
- * Copyright 2011-2013 Analog Devices Inc.
+ * Copyright 2011 Analog Devices Inc.
  * Author: Lars-Peter Clausen <lars@metafoo.de>
  *
  * Licensed under the GPL-2 or later.
@@ -17,10 +17,9 @@
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <sound/tlv.h>
-#include <linux/platform_data/adau17x1.h>
+#include <sound/adau17x1.h>
 
 #include "adau17x1.h"
-#include "adau1781.h"
 
 #define ADAU1781_DMIC_BEEP_CTRL		0x4008
 #define ADAU1781_LEFT_PGA		0x400e
@@ -41,7 +40,7 @@
 #define ADAU1381_FIRMWARE "adau1381.bin"
 #define ADAU1781_FIRMWARE "adau1781.bin"
 
-static const struct reg_default adau1781_reg_defaults[] = {
+static struct reg_default adau1781_reg_defaults[] = {
 	{ ADAU1781_DMIC_BEEP_CTRL,		0x00 },
 	{ ADAU1781_LEFT_PGA,			0xc7 },
 	{ ADAU1781_RIGHT_PGA,			0xc7 },
@@ -83,19 +82,21 @@ static const struct reg_default adau1781_reg_defaults[] = {
 
 static const DECLARE_TLV_DB_SCALE(adau1781_speaker_tlv, 0, 200, 0);
 
-static const DECLARE_TLV_DB_RANGE(adau1781_pga_tlv,
+static const unsigned int adau1781_pga_tlv[] = {
+	TLV_DB_RANGE_HEAD(4),
 	0, 1, TLV_DB_SCALE_ITEM(0, 600, 0),
 	2, 3, TLV_DB_SCALE_ITEM(1000, 400, 0),
 	4, 4, TLV_DB_SCALE_ITEM(1700, 0, 0),
-	5, 7, TLV_DB_SCALE_ITEM(2000, 600, 0)
-);
+	5, 7, TLV_DB_SCALE_ITEM(2000, 600, 0),
+};
 
-static const DECLARE_TLV_DB_RANGE(adau1781_beep_tlv,
+static const unsigned int adau1781_beep_tlv[] = {
+	TLV_DB_RANGE_HEAD(4),
 	0, 1, TLV_DB_SCALE_ITEM(0, 600, 0),
 	2, 3, TLV_DB_SCALE_ITEM(1000, 400, 0),
 	4, 4, TLV_DB_SCALE_ITEM(-2300, 0, 0),
-	5, 7, TLV_DB_SCALE_ITEM(2000, 600, 0)
-);
+	5, 7, TLV_DB_SCALE_ITEM(2000, 600, 0),
+};
 
 static const DECLARE_TLV_DB_SCALE(adau1781_sidetone_tlv, -1800, 300, 1);
 
@@ -108,15 +109,15 @@ static const char * const adau1781_bias_select_text[] = {
 	"Enhanced performance",
 };
 
-static SOC_ENUM_SINGLE_DECL(adau1781_adc_bias_enum,
+static const SOC_ENUM_SINGLE_DECL(adau1781_adc_bias_enum,
 		ADAU17X1_REC_POWER_MGMT, 3, adau1781_bias_select_text);
-static SOC_ENUM_SINGLE_DECL(adau1781_speaker_bias_enum,
+static const SOC_ENUM_SINGLE_DECL(adau1781_speaker_bias_enum,
 		ADAU17X1_PLAY_POWER_MGMT, 6, adau1781_speaker_bias_select_text);
-static SOC_ENUM_SINGLE_DECL(adau1781_dac_bias_enum,
+static const SOC_ENUM_SINGLE_DECL(adau1781_dac_bias_enum,
 		ADAU17X1_PLAY_POWER_MGMT, 4, adau1781_bias_select_text);
-static SOC_ENUM_SINGLE_DECL(adau1781_playback_bias_enum,
+static const SOC_ENUM_SINGLE_DECL(adau1781_playback_bias_enum,
 		ADAU17X1_PLAY_POWER_MGMT, 2, adau1781_bias_select_text);
-static SOC_ENUM_SINGLE_DECL(adau1781_capture_bias_enum,
+static const SOC_ENUM_SINGLE_DECL(adau1781_capture_bias_enum,
 		ADAU17X1_REC_POWER_MGMT, 1, adau1781_bias_select_text);
 
 static const struct snd_kcontrol_new adau1781_controls[] = {
@@ -149,24 +150,20 @@ static const struct snd_kcontrol_new adau1781_beep_mixer_controls[] = {
 };
 
 static const struct snd_kcontrol_new adau1781_left_mixer_controls[] = {
-	SOC_DAPM_SINGLE_AUTODISABLE("Switch",
-		ADAU1781_LEFT_PLAYBACK_MIXER, 5, 1, 0),
+	SOC_DAPM_SINGLE("Switch", ADAU1781_LEFT_PLAYBACK_MIXER, 5, 1, 0),
 	SOC_DAPM_SINGLE_TLV("Beep Playback Volume",
 		ADAU1781_LEFT_PLAYBACK_MIXER, 1, 8, 0, adau1781_sidetone_tlv),
 };
 
 static const struct snd_kcontrol_new adau1781_right_mixer_controls[] = {
-	SOC_DAPM_SINGLE_AUTODISABLE("Switch",
-		ADAU1781_RIGHT_PLAYBACK_MIXER, 6, 1, 0),
+	SOC_DAPM_SINGLE("Switch", ADAU1781_RIGHT_PLAYBACK_MIXER, 6, 1, 0),
 	SOC_DAPM_SINGLE_TLV("Beep Playback Volume",
 		ADAU1781_LEFT_PLAYBACK_MIXER, 1, 8, 0, adau1781_sidetone_tlv),
 };
 
 static const struct snd_kcontrol_new adau1781_mono_mixer_controls[] = {
-	SOC_DAPM_SINGLE_AUTODISABLE("Left Switch",
-		ADAU1781_MONO_PLAYBACK_MIXER, 7, 1, 0),
-	SOC_DAPM_SINGLE_AUTODISABLE("Right Switch",
-		 ADAU1781_MONO_PLAYBACK_MIXER, 6, 1, 0),
+	SOC_DAPM_SINGLE("Left Switch", ADAU1781_MONO_PLAYBACK_MIXER, 7, 1, 0),
+	SOC_DAPM_SINGLE("Right Switch", ADAU1781_MONO_PLAYBACK_MIXER, 6, 1, 0),
 	SOC_DAPM_SINGLE_TLV("Beep Playback Volume",
 		ADAU1781_MONO_PLAYBACK_MIXER, 2, 8, 0, adau1781_sidetone_tlv),
 };
@@ -214,7 +211,7 @@ static const struct snd_soc_dapm_widget adau1781_dapm_widgets[] = {
 	SND_SOC_DAPM_SUPPLY("Digital Mic", ADAU1781_DIG_PWDN1, 1, 0, NULL, 0),
 
 	SND_SOC_DAPM_SUPPLY("Sound Engine", ADAU1781_DIG_PWDN0, 0, 0, NULL, 0),
-	SND_SOC_DAPM_SUPPLY_S("SYSCLK", 1, ADAU1781_DIG_PWDN0, 1, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("SYSCLK", ADAU1781_DIG_PWDN0, 1, 0, NULL, 0),
 
 	SND_SOC_DAPM_SUPPLY("Zero Crossing Detector", ADAU1781_DIG_PWDN1, 2, 0,
 		NULL, 0),
@@ -258,17 +255,14 @@ static const struct snd_soc_dapm_route adau1781_dapm_routes[] = {
 	{ "Sound Engine", NULL, "SYSCLK" },
 	{ "DSP", NULL, "Sound Engine" },
 
-	{ "Left Decimator", NULL, "ADC Engine" },
-	{ "Right Decimator", NULL, "ADC Engine" },
-
 	{ "AIFCLK", NULL, "SYSCLK" },
 
-	{ "Playback", NULL, "Serial Input Routing" },
-	{ "Playback", NULL, "Serial Ports" },
-	{ "Playback", NULL, "Clock Domain Transfer" },
-	{ "Capture", NULL, "Serial Output Routing" },
-	{ "Capture", NULL, "Serial Ports" },
-	{ "Capture", NULL, "Clock Domain Transfer" },
+	{ "AIFIN", NULL, "Serial Input Routing" },
+	{ "AIFIN", NULL, "Serial Ports" },
+	{ "AIFIN", NULL, "Clock Domain Transfer" },
+	{ "AIFOUT", NULL, "Serial Output Routing" },
+	{ "AIFOUT", NULL, "Serial Ports" },
+	{ "AIFOUT", NULL, "Clock Domain Transfer" },
 
 	{ "AOUTL", NULL, "Left Lineout Mixer" },
 	{ "AOUTR", NULL, "Right Lineout Mixer" },
@@ -278,23 +272,29 @@ static const struct snd_soc_dapm_route adau1781_dapm_routes[] = {
 static const struct snd_soc_dapm_route adau1781_adc_dapm_routes[] = {
 	{ "Left PGA", NULL, "LMIC" },
 	{ "Right PGA", NULL, "RMIC" },
+	{ "Left ADC", NULL, "Left PGA" },
+	{ "Right ADC", NULL, "Right PGA" },
 
-	{ "Left Decimator", NULL, "Left PGA" },
-	{ "Right Decimator", NULL, "Right PGA" },
+	{ "Left ADC", NULL, "ADC Engine" },
+	{ "Right ADC", NULL, "ADC Engine" },
+
+	{ "AIFOUT", NULL, "Left ADC" },
+	{ "AIFOUT", NULL, "Right ADC" },
 };
 
 static const char * const adau1781_dmic_select_text[] = {
 	"DMIC1", "DMIC2",
 };
 
-static SOC_ENUM_SINGLE_VIRT_DECL(adau1781_dmic_select_enum,
+static const SOC_ENUM_SINGLE_DECL(adau1781_dmic_select_enum, 0, 0,
 	adau1781_dmic_select_text);
 
 static const struct snd_kcontrol_new adau1781_dmic_mux =
-	SOC_DAPM_ENUM("DMIC Select", adau1781_dmic_select_enum);
+	SOC_DAPM_ENUM_VIRT("DMIC Select", adau1781_dmic_select_enum);
 
 static const struct snd_soc_dapm_widget adau1781_dmic_dapm_widgets[] = {
-	SND_SOC_DAPM_MUX("DMIC Select", SND_SOC_NOPM, 0, 0, &adau1781_dmic_mux),
+	SND_SOC_DAPM_VIRT_MUX("DMIC Select", SND_SOC_NOPM, 0, 0,
+		&adau1781_dmic_mux),
 
 	SND_SOC_DAPM_ADC("DMIC1", NULL, ADAU1781_DMIC_BEEP_CTRL, 4, 0),
 	SND_SOC_DAPM_ADC("DMIC2", NULL, ADAU1781_DMIC_BEEP_CTRL, 5, 0),
@@ -306,12 +306,12 @@ static const struct snd_soc_dapm_route adau1781_dmic_dapm_routes[] = {
 
 	{ "DMIC1", NULL, "Digital Mic" },
 	{ "DMIC2", NULL, "Digital Mic" },
+	{ "DMIC1", NULL, "ADC Engine" },
+	{ "DMIC2", NULL, "ADC Engine" },
 
 	{ "DMIC Select", "DMIC1", "DMIC1" },
 	{ "DMIC Select", "DMIC2", "DMIC2" },
-
-	{ "Left Decimator", NULL, "DMIC Select" },
-	{ "Right Decimator", NULL, "DMIC Select" },
+	{ "AIFOUT", NULL, "DMIC Select" },
 };
 
 static int adau1781_set_bias_level(struct snd_soc_codec *codec,
@@ -367,8 +367,8 @@ static bool adau1781_readable_register(struct device *dev, unsigned int reg)
 	return adau17x1_readable_register(dev, reg);
 }
 
-static int adau1781_set_input_mode(struct adau *adau, unsigned int reg,
-	bool differential)
+static int adau1781_set_input_mode(struct adau *adau, bool differential,
+	unsigned int reg)
 {
 	unsigned int val;
 
@@ -376,18 +376,18 @@ static int adau1781_set_input_mode(struct adau *adau, unsigned int reg,
 		val = ADAU1781_INPUT_DIFFERNTIAL;
 	else
 		val = 0;
+	regmap_update_bits(adau->regmap, reg, ADAU1781_INPUT_DIFFERNTIAL, val);
 
-	return regmap_update_bits(adau->regmap, reg,
-		ADAU1781_INPUT_DIFFERNTIAL, val);
+	return 0;
 }
 
-static int adau1781_codec_probe(struct snd_soc_codec *codec)
+static int adau1781_probe(struct snd_soc_codec *codec)
 {
 	struct adau1781_platform_data *pdata = dev_get_platdata(codec->dev);
 	struct adau *adau = snd_soc_codec_get_drvdata(codec);
 	int ret;
 
-	ret = adau17x1_add_widgets(codec);
+	ret = adau17x1_probe(codec);
 	if (ret)
 		return ret;
 
@@ -421,25 +421,39 @@ static int adau1781_codec_probe(struct snd_soc_codec *codec)
 			return ret;
 	}
 
-	ret = adau17x1_add_routes(codec);
-	if (ret < 0)
-		return ret;
+	switch (adau->type) {
+	case ADAU1381:
+		firmware = ADAU1381_FIRMWARE;
+		break;
+	case ADAU1781:
+		firmware = ADAU1781_FIRMWARE;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = adau17x1_load_firmware(adau, codec->dev, firmware);
+	if (ret)
+		dev_warn(codec->dev, "Failed to load firmware\n");
+
+	adau1781_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	return 0;
 }
 
-static const struct snd_soc_codec_driver adau1781_codec_driver = {
-	.probe = adau1781_codec_probe,
-	.resume = adau17x1_resume,
-	.set_bias_level = adau1781_set_bias_level,
-	.suspend_bias_off = true,
+static struct snd_soc_codec_driver adau1781_codec_driver = {
+	.probe			= adau1781_probe,
+	.remove			= adau17x1_suspend,
+	.suspend		= adau17x1_suspend,
+	.resume			= adau17x1_resume,
+	.set_bias_level		= adau1781_set_bias_level,
 
-	.controls = adau1781_controls,
-	.num_controls = ARRAY_SIZE(adau1781_controls),
-	.dapm_widgets = adau1781_dapm_widgets,
-	.num_dapm_widgets = ARRAY_SIZE(adau1781_dapm_widgets),
-	.dapm_routes = adau1781_dapm_routes,
-	.num_dapm_routes = ARRAY_SIZE(adau1781_dapm_routes),
+	.controls		= adau1781_controls,
+	.num_controls		= ARRAY_SIZE(adau1781_controls),
+	.dapm_widgets		= adau1781_dapm_widgets,
+	.num_dapm_widgets	= ARRAY_SIZE(adau1781_dapm_widgets),
+	.dapm_routes		= adau1781_dapm_routes,
+	.num_dapm_routes	= ARRAY_SIZE(adau1781_dapm_routes),
 };
 
 #define ADAU1781_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE | \
@@ -464,9 +478,12 @@ static struct snd_soc_dai_driver adau1781_dai_driver = {
 	.ops = &adau17x1_dai_ops,
 };
 
-const struct regmap_config adau1781_regmap_config = {
+#if IS_ENABLED(CONFIG_SPI_MASTER)
+
+static const struct regmap_config adau1781_spi_regmap_config = {
 	.val_bits		= 8,
-	.reg_bits		= 16,
+	.reg_bits		= 24,
+	.read_flag_mask		= 0x01,
 	.max_register		= 0x40f8,
 	.reg_defaults		= adau1781_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(adau1781_reg_defaults),
@@ -475,33 +492,171 @@ const struct regmap_config adau1781_regmap_config = {
 	.precious_reg		= adau17x1_precious_register,
 	.cache_type		= REGCACHE_RBTREE,
 };
-EXPORT_SYMBOL_GPL(adau1781_regmap_config);
 
-int adau1781_probe(struct device *dev, struct regmap *regmap,
-	enum adau17x1_type type, void (*switch_mode)(struct device *dev))
+static int adau1781_spi_probe(struct spi_device *spi)
 {
-	const char *firmware_name;
+	struct regmap *regmap;
+	enum adau17x1_type type = spi_get_device_id(spi)->driver_data;
 	int ret;
 
-	switch (type) {
-	case ADAU1381:
-		firmware_name = ADAU1381_FIRMWARE;
-		break;
-	case ADAU1781:
-		firmware_name = ADAU1781_FIRMWARE;
-		break;
-	default:
-		return -EINVAL;
-	}
+	regmap = regmap_init_spi(spi, &adau1781_spi_regmap_config);
 
-	ret = adau17x1_probe(dev, regmap, type, switch_mode, firmware_name);
+	ret = adau17x1_bus_probe(&spi->dev, regmap, type, SND_SOC_SPI);
 	if (ret)
 		return ret;
 
-	return snd_soc_register_codec(dev, &adau1781_codec_driver,
+	ret = snd_soc_register_codec(&spi->dev, &adau1781_codec_driver,
 		&adau1781_dai_driver, 1);
+
+	if (ret)
+		goto err_remove;
+
+	return 0;
+
+err_remove:
+	adau17x1_bus_remove(&spi->dev);
+	return ret;
 }
-EXPORT_SYMBOL_GPL(adau1781_probe);
+
+static int adau1781_spi_remove(struct spi_device *spi)
+{
+	snd_soc_unregister_codec(&spi->dev);
+	adau17x1_bus_remove(&spi->dev);
+	return 0;
+}
+
+static const struct spi_device_id adau1781_spi_id[] = {
+	{ "adau1781", ADAU1781 },
+	{ "adau1781", ADAU1781 },
+	{ }
+};
+MODULE_DEVICE_TABLE(spi, adau1781_spi_id);
+
+static struct spi_driver adau1781_spi_driver = {
+	.driver = {
+		.name	= "adau1781",
+		.owner	= THIS_MODULE,
+	},
+	.probe		= adau1781_spi_probe,
+	.remove		= adau1781_spi_remove,
+	.id_table	= adau1781_spi_id,
+};
+
+static int adau1781_spi_register_driver(void)
+{
+	return spi_register_driver(&adau1781_spi_driver);
+}
+
+static void adau1781_spi_unregister_driver(void)
+{
+	spi_unregister_driver(&adau1781_spi_driver);
+}
+
+#else
+static int adau1781_spi_register_driver(void) {	return 0; }
+static void adau1781_spi_unregister_driver(void) {}
+#endif
+
+#if IS_ENABLED(CONFIG_I2C)
+
+static const struct regmap_config adau1781_i2c_regmap_config = {
+	.val_bits		= 8,
+	.reg_bits		= 16,
+	.max_register		= 0x40f8,
+	.reg_defaults		= adau1781_reg_defaults,
+	.num_reg_defaults	= ARRAY_SIZE(adau1781_reg_defaults),
+	.readable_reg		= adau1781_readable_register,
+	.volatile_reg		= adau17x1_volatile_register,
+	.cache_type		= REGCACHE_RBTREE,
+};
+
+static int adau1781_i2c_probe(struct i2c_client *client,
+	const struct i2c_device_id *id)
+{
+	struct regmap *regmap;
+	enum adau17x1_type type = id->driver_data;
+	int ret;
+
+	regmap = regmap_init_i2c(client, &adau1781_i2c_regmap_config);
+
+	ret = adau17x1_bus_probe(&client->dev, regmap, type, SND_SOC_I2C);
+	if (ret)
+		return ret;
+
+	ret = snd_soc_register_codec(&client->dev, &adau1781_codec_driver,
+		&adau1781_dai_driver, 1);
+
+	if (ret)
+		goto err_remove;
+
+	return 0;
+
+err_remove:
+	adau17x1_bus_remove(&client->dev);
+	return ret;
+}
+
+static int adau1781_i2c_remove(struct i2c_client *client)
+{
+	snd_soc_unregister_codec(&client->dev);
+	adau17x1_bus_remove(&client->dev);
+	return 0;
+}
+
+static const struct i2c_device_id adau1781_i2c_id[] = {
+	{ "adau1381", ADAU1381 },
+	{ "adau1781", ADAU1781 },
+	{ }
+};
+MODULE_DEVICE_TABLE(i2c, adau1781_i2c_id);
+
+static struct i2c_driver adau1781_i2c_driver = {
+	.driver = {
+		.name = "adau1781",
+		.owner = THIS_MODULE,
+	},
+	.probe = adau1781_i2c_probe,
+	.remove = adau1781_i2c_remove,
+	.id_table = adau1781_i2c_id,
+};
+
+static int adau1781_i2c_register_driver(void)
+{
+	return i2c_add_driver(&adau1781_i2c_driver);
+}
+
+static void adau1781_i2c_unregister_driver(void)
+{
+	i2c_del_driver(&adau1781_i2c_driver);
+}
+
+#else
+static int adau1781_i2c_register_driver(void) {	return 0; }
+static void adau1781_i2c_unregister_driver(void) {}
+#endif
+
+static int __init adau1781_init(void)
+{
+	int ret = 0;
+
+	ret = adau1781_spi_register_driver();
+	if (ret)
+		return ret;
+
+	ret = adau1781_i2c_register_driver();
+	if (ret)
+		adau1781_spi_unregister_driver();
+
+	return ret;
+}
+module_init(adau1781_init);
+
+static void __exit adau1781_exit(void)
+{
+	adau1781_i2c_unregister_driver();
+	adau1781_spi_unregister_driver();
+}
+module_exit(adau1781_exit);
 
 MODULE_DESCRIPTION("ASoC ADAU1381/ADAU1781 driver");
 MODULE_AUTHOR("Lars-Peter Clausen <lars@metafoo.de>");

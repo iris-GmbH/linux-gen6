@@ -9,6 +9,7 @@
 
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
@@ -17,6 +18,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/of_gpio.h>
 
 #include <sound/core.h>
 #include <sound/initval.h>
@@ -113,7 +115,7 @@ struct adau1977 {
 	bool right_j;
 	unsigned int sysclk;
 	enum adau1977_sysclk_src sysclk_src;
-	struct gpio_desc *reset_gpio;
+	int reset_gpio;
 	enum adau1977_type type;
 
 	struct regulator *avdd_reg;
@@ -225,7 +227,15 @@ static const struct snd_kcontrol_new adau1977_snd_controls[] = {
 static int adau1977_reset(struct adau1977 *adau1977)
 {
 	int ret;
-
+#if 0
+	/* Hardware power-on reset */
+	if (adau1977->reset_gpio) {
+		gpio_set_value(adau1977->reset_gpio, 0);
+		msleep(38);    /* Td time */
+		gpio_set_value(adau1977->reset_gpio, 1);
+		udelay(200);
+	}
+#endif
 	/*
 	 * The reset bit is obviously volatile, but we need to be able to cache
 	 * the other bits in the register, so we can't just mark the whole
@@ -387,10 +397,10 @@ static int adau1977_power_disable(struct adau1977 *adau1977)
 		return ret;
 
 	regcache_mark_dirty(adau1977->regmap);
-
+#if 0
 	if (adau1977->reset_gpio)
-		gpiod_set_value_cansleep(adau1977->reset_gpio, 0);
-
+		gpio_set_value_cansleep(adau1977->reset_gpio, 0);
+#endif
 	regcache_cache_only(adau1977->regmap, true);
 
 	regulator_disable(adau1977->avdd_reg);
@@ -419,10 +429,10 @@ static int adau1977_power_enable(struct adau1977 *adau1977)
 		if (ret)
 			goto err_disable_avdd;
 	}
-
+#if 0
 	if (adau1977->reset_gpio)
-		gpiod_set_value_cansleep(adau1977->reset_gpio, 1);
-
+		gpio_set_value_cansleep(adau1977->reset_gpio, 1);
+#endif
 	regcache_cache_only(adau1977->regmap, false);
 
 	if (adau1977->switch_mode)
@@ -938,21 +948,36 @@ int adau1977_probe(struct device *dev, struct regmap *regmap,
 		adau1977->dvdd_reg = NULL;
 	}
 
-	adau1977->reset_gpio = devm_gpiod_get(dev, "reset");
-	if (IS_ERR(adau1977->reset_gpio)) {
-		ret = PTR_ERR(adau1977->reset_gpio);
-		if (ret != -ENOENT && ret != -ENOSYS)
-			return PTR_ERR(adau1977->reset_gpio);
-		adau1977->reset_gpio = NULL;
+	if (dev->of_node) {
+		adau1977->reset_gpio =
+				of_get_named_gpio(dev->of_node, "reset-gpio", 0);
+		if (!gpio_is_valid(adau1977->reset_gpio)) {
+			dev_err(dev, "invalid reset-gpio: %d\n", adau1977->reset_gpio);
+			return -EINVAL;
+		}
 	}
 
 	dev_set_drvdata(dev, adau1977);
 
 	if (adau1977->reset_gpio) {
-		ret = gpiod_direction_output(adau1977->reset_gpio, 0);
-		if (ret)
+		ret = devm_gpio_request_one(dev, adau1977->reset_gpio,
+						GPIOF_OUT_INIT_HIGH, "adau1977");
+		/* Return -EBUSY will not be failed to avoid hardware
+		 * pin conflict for sc589-ezkit */
+		if (ret == -EBUSY)
+			dev_warn(dev, "busy to request reset-gpio: %d \n",
+						adau1977->reset_gpio);
+		else if (ret) {
+			dev_err(dev, "can't request reset-gpio: %d, err: %d\n",
+						adau1977->reset_gpio, ret);
 			return ret;
-		ndelay(100);
+		}
+		/* Hardware power-on reset */
+		udelay(200);    /* Tc time */
+		gpio_set_value(adau1977->reset_gpio, 0);
+		msleep(38);     /* Td time */
+		gpio_set_value(adau1977->reset_gpio, 1);
+		udelay(200);
 	}
 
 	ret = adau1977_power_enable(adau1977);

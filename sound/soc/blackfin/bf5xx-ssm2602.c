@@ -78,6 +78,24 @@ static struct snd_soc_dai_link bf5xx_ssm2602_dai[] = {
 		.codec_dai_name = "ssm2602-hifi",
 		.platform_name = "bfin-i2s-pcm-audio",
 		.codec_name = "ssm2602.0-001b",
+		.init = bf5xx_ssm2602_dai_init
+	},
+	{
+		.name = "ssm2602",
+		.stream_name = "SSM2602",
+		.cpu_dai_name = "bfin-i2s.2",
+		.codec_dai_name = "ssm2602-hifi",
+		.platform_name = "bfin-i2s-pcm-audio",
+		.codec_name = "ssm2602.0-001b",
+		.init = bf5xx_ssm2602_dai_init
+	},
+	{
+		.name = "ssm2602",
+		.stream_name = "SSM2602",
+		.cpu_dai_name = "bfin-i2s.3",
+		.codec_dai_name = "ssm2602-hifi",
+		.platform_name = "bfin-i2s-pcm-audio",
+		.codec_name = "ssm2602.0-001b",
 		.init = bf5xx_ssm2602_dai_init,
 		.dai_fmt = BF5XX_SSM2602_DAIFMT,
 	},
