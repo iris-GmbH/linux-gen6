@@ -23,14 +23,23 @@
 #include <linux/delay.h>
 #include <linux/crypto.h>
 #include <linux/cryptohash.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_address.h>
 #include <crypto/scatterwalk.h>
 #include <crypto/algapi.h>
 #include <crypto/hash.h>
 #include <crypto/internal/hash.h>
 #include <asm/unaligned.h>
 
+#ifdef CONFIG_ARCH_HEADER_IN_MACH
+#include <mach/portmux.h>
+#include <mach/dma.h>
+#else
 #include <asm/dma.h>
 #include <asm/portmux.h>
+#endif
+
 #include <asm/io.h>
 
 #include "bfin_crc.h"
@@ -582,6 +591,16 @@ static int bfin_crypto_crc_suspend(struct platform_device *pdev, pm_message_t st
 
 #define bfin_crypto_crc_resume NULL
 
+#ifdef CONFIG_OF
+static const struct of_device_id bfin_crypto_of_match[] = {
+	{
+		.compatible = "adi,hmac-crc",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, bfin_crypto_of_match);
+#endif
+
 /**
  *	bfin_crypto_crc_probe - Initialize module
  *
@@ -591,6 +610,8 @@ static int bfin_crypto_crc_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct resource *res;
 	struct bfin_crypto_crc *crc;
+	const struct of_device_id *match;
+	struct device_node *node = pdev->dev.of_node;
 	unsigned int timeout = 100000;
 	int ret;
 
@@ -632,12 +653,20 @@ static int bfin_crypto_crc_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_DMA, 0);
-	if (res == NULL) {
-		dev_err(&pdev->dev, "No CRC DMA channel specified\n");
-		return -ENOENT;
+	match = of_match_device(of_match_ptr(bfin_crypto_of_match), &pdev->dev);
+	if (match) {
+		if (of_property_read_u32(node, "dma_channel", &crc->dma_ch))
+			return -ENOENT;
+		of_property_read_u32(node, "crypto_crc_poly", &crc->poly);
+	} else {
+		res = platform_get_resource(pdev, IORESOURCE_DMA, 0);
+		if (res == NULL) {
+			dev_err(&pdev->dev, "No CRC DMA channel specified\n");
+			return -ENOENT;
+		}
+		crc->dma_ch = res->start;
+		crc->poly = (u32)pdev->dev.platform_data;
 	}
-	crc->dma_ch = res->start;
 
 	ret = request_dma(crc->dma_ch, dev_name(dev));
 	if (ret) {
@@ -659,7 +688,6 @@ static int bfin_crypto_crc_probe(struct platform_device *pdev)
 			* ((CRC_MAX_DMA_DESC + 1) << 1);
 
 	writel(0, &crc->regs->control);
-	crc->poly = (u32)pdev->dev.platform_data;
 	writel(crc->poly, &crc->regs->poly);
 
 	while (!(readl(&crc->regs->status) & LUTDONE) && (--timeout) > 0)
@@ -678,7 +706,7 @@ static int bfin_crypto_crc_probe(struct platform_device *pdev)
 		ret = crypto_register_ahash(&algs);
 		if (ret) {
 			dev_err(&pdev->dev,
-				"Can't register crypto ahash device\n");
+				"Cann't register crypto ahash device\n");
 			goto out_error_dma;
 		}
 	}
@@ -724,6 +752,7 @@ static struct platform_driver bfin_crypto_crc_driver = {
 	.resume    = bfin_crypto_crc_resume,
 	.driver    = {
 		.name  = DRIVER_NAME,
+		.of_match_table = of_match_ptr(bfin_crypto_of_match),
 	},
 };
 
