@@ -713,7 +713,7 @@ static int fw_map_pages_buf(struct firmware_buf *buf)
 		return 0;
 
 	vunmap(buf->data);
-	buf->data = vmap(buf->pages, buf->nr_pages, 0, PAGE_KERNEL_RO);
+	buf->data = vcoalesce(buf->pages, buf->nr_pages, 0, PAGE_KERNEL_RO);
 	if (!buf->data)
 		return -ENOMEM;
 	return 0;
