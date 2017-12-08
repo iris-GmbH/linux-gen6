@@ -351,6 +351,7 @@ static void *bfin_spi_next_transfer(struct bfin_spi_master_data *drv_data)
 static void bfin_spi_giveback(struct bfin_spi_master_data *drv_data)
 {
 	struct bfin_spi_slave_data *chip = drv_data->cur_chip;
+	struct spi_transfer *last_transfer;
 	unsigned long flags;
 	struct spi_message *msg;
 
@@ -361,6 +362,9 @@ static void bfin_spi_giveback(struct bfin_spi_master_data *drv_data)
 	drv_data->cur_chip = NULL;
 	queue_work(drv_data->workqueue, &drv_data->pump_messages);
 	spin_unlock_irqrestore(&drv_data->lock, flags);
+
+	last_transfer = list_entry(msg->transfers.prev,
+				   struct spi_transfer, transfer_list);
 
 	msg->state = NULL;
 
@@ -1027,6 +1031,10 @@ static int bfin_spi_setup(struct spi_device *spi)
 	}
 
 	/* translate common spi framework into our register */
+	if (spi->mode & ~(SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST)) {
+		dev_err(&spi->dev, "unsupported spi modes detected\n");
+		goto error;
+	}
 	if (spi->mode & SPI_CPOL)
 		chip->ctl_reg |= BIT_CTL_CPOL;
 	if (spi->mode & SPI_CPHA)

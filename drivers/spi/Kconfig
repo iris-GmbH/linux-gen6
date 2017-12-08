@@ -75,6 +75,20 @@ config SPI_ATMEL
 	  This selects a driver for the Atmel SPI Controller, present on
 	  many AT32 (AVR32) and AT91 (ARM) chips.
 
+config SPI_BCM53XX
+	tristate "Broadcom BCM53xx SPI controller"
+	depends on ARCH_BCM_5301X
+	depends on BCMA_POSSIBLE
+	select BCMA
+	help
+          Enable support for the SPI controller on Broadcom BCM53xx ARM SoCs.
+
+config SPI_BCM63XX
+	tristate "Broadcom BCM63xx SPI controller"
+	depends on BCM63XX
+	help
+          Enable support for the SPI controller on the Broadcom BCM63xx SoCs.
+
 config SPI_BCM2835
 	tristate "BCM2835 SPI controller"
 	depends on ARCH_BCM2835 || COMPILE_TEST
@@ -94,10 +108,9 @@ config SPI_BFIN5XX
 
 config SPI_ADI_V3
 	tristate "SPI controller v3 for ADI"
-	depends on BF60x
 	help
 	  This is the SPI controller v3 master driver
-	  found on Blackfin 60x processor.
+	  found on sc58x processor.
 
 config SPI_BFIN_SPORT
 	tristate "SPI bus via Blackfin SPORT"
@@ -112,20 +125,6 @@ config SPI_AU1550
 	help
 	  If you say yes to this option, support will be included for the
 	  PSC SPI controller found on Au1550, Au1200 and Au1300 series.
-
-config SPI_BCM53XX
-	tristate "Broadcom BCM53xx SPI controller"
-	depends on ARCH_BCM_5301X
-	depends on BCMA_POSSIBLE
-	select BCMA
-	help
-          Enable support for the SPI controller on Broadcom BCM53xx ARM SoCs.
-
-config SPI_BCM63XX
-	tristate "Broadcom BCM63xx SPI controller"
-	depends on BCM63XX
-	help
-          Enable support for the SPI controller on the Broadcom BCM63xx SoCs.
 
 config SPI_BCM63XX_HSSPI
 	tristate "Broadcom BCM63XX HS SPI controller driver"

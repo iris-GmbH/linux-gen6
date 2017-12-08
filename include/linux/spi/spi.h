@@ -51,6 +51,7 @@ extern struct bus_type spi_bus_type;
  *	The spi_transfer.bits_per_word can override this for each transfer.
  * @irq: Negative, or the number passed to request_irq() to receive
  *	interrupts from this device.
+ * @irq_flags: The flags passed to request_irq()
  * @controller_state: Controller's runtime state
  * @controller_data: Board-specific definitions for controller, such as
  *	FIFO initialization parameters; from board_info.controller_data
@@ -93,6 +94,7 @@ struct spi_device {
 #define	SPI_RX_DUAL	0x400			/* receive with 2 wires */
 #define	SPI_RX_QUAD	0x800			/* receive with 4 wires */
 	int			irq;
+	unsigned long		irq_flags;
 	void			*controller_state;
 	void			*controller_data;
 	char			modalias[SPI_NAME_SIZE];
