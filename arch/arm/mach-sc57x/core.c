@@ -27,7 +27,7 @@
 
 #include <asm/irq.h>
 #include <asm/hardware/arm_timer.h>
-#include <asm/hardware/icst.h>
+//#include <asm/hardware/icst.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/mach-types.h>
 
@@ -520,13 +520,46 @@ static int gptmr_set_next_event(unsigned long cycles,
 	return 0;
 }
 
-static void gptmr_set_mode(enum clock_event_mode mode,
+static int gptmr_set_state_periodic(struct clock_event_device *evt)
+{
+	int id = timer_event->id;
+	disable_gptimers(1 << id);
+	set_gptimer_config(timer_event, TIMER_OUT_DIS
+			| TIMER_MODE_PWM_CONT | TIMER_PULSE_HI |
+			TIMER_IRQ_PER);
+
+	set_gptimer_period(timer_event, get_sclk() / HZ);
+	set_gptimer_pwidth(timer_event, get_sclk() / HZ - 1);
+	enable_gptimers(1 << id);
+	return 0;
+}
+
+static int gptmr_set_state_shutdown(struct clock_event_device *evt)
+{
+	int id = timer_event->id;
+	disable_gptimers(1 << id);
+	return 0;
+}
+
+static int gptmr_set_state_oneshot(struct clock_event_device *evt)
+{
+	int id = timer_event->id;
+	while(1);
+	disable_gptimers(1 << id);
+	set_gptimer_config(timer_event, TIMER_OUT_DIS | TIMER_MODE_PWM
+			| TIMER_PULSE_HI | TIMER_IRQ_WID_DLY);
+	set_gptimer_period(timer_event, 0);
+	return 0;
+}
+
+
+static void gptmr_set_mode(enum clock_event_state state,
 		struct clock_event_device *evt)
 {
 	int id = timer_event->id;
 
-	switch (mode) {
-	case CLOCK_EVT_MODE_PERIODIC:
+	switch (state) {
+	case CLOCK_EVT_STATE_PERIODIC:
 		disable_gptimers(1 << id);
 		set_gptimer_config(timer_event, TIMER_OUT_DIS
 				| TIMER_MODE_PWM_CONT | TIMER_PULSE_HI |
@@ -537,18 +570,18 @@ static void gptmr_set_mode(enum clock_event_mode mode,
 		enable_gptimers(1 << id);
 		break;
 
-	case CLOCK_EVT_MODE_ONESHOT:
+	case CLOCK_EVT_STATE_ONESHOT:
 		while(1);
 		disable_gptimers(1 << id);
 		set_gptimer_config(timer_event, TIMER_OUT_DIS | TIMER_MODE_PWM
 				| TIMER_PULSE_HI | TIMER_IRQ_WID_DLY);
 		set_gptimer_period(timer_event, 0);
 		break;
-	case CLOCK_EVT_MODE_UNUSED:
-	case CLOCK_EVT_MODE_SHUTDOWN:
+	case CLOCK_EVT_STATE_DETACHED:
+	case CLOCK_EVT_STATE_SHUTDOWN:
 		disable_gptimers(1 << id);
 		break;
-	case CLOCK_EVT_MODE_RESUME:
+	case CLOCK_EVT_STATE_ONESHOT_STOPPED:
 		break;
 	}
 }
@@ -579,7 +612,7 @@ irqreturn_t gptmr_interrupt(int irq, void *dev_id)
 
 static struct irqaction gptmr_irq = {
 	.name           = "SC57x GPTimer0",
-	.flags          = IRQF_DISABLED | IRQF_TIMER | IRQF_IRQPOLL,
+	.flags          = IRQF_TIMER | IRQF_IRQPOLL,
 	.handler        = gptmr_interrupt,
 };
 
@@ -589,7 +622,10 @@ static struct clock_event_device clockevent_gptmr = {
 	.shift          = 32,
 	.features       = CLOCK_EVT_FEAT_PERIODIC,
 	.set_next_event = gptmr_set_next_event,
-	.set_mode       = gptmr_set_mode,
+	.set_state_shutdown = gptmr_set_state_shutdown,
+	.set_state_periodic = gptmr_set_state_periodic,
+	.set_state_oneshot = gptmr_set_state_oneshot,
+	//.set_mode       = gptmr_set_mode,
 };
 
 

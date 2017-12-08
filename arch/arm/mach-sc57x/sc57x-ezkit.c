@@ -15,8 +15,8 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <mach/sc57x.h>
-#include <sound/sc5xx-dai.h>
-#include <sound/sc5xx-sru.h>
+//#include <sound/sc5xx-dai.h>
+//#include <sound/sc5xx-sru.h>
 
 #include "core.h"
 
