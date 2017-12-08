@@ -5,9 +5,10 @@
 
 # (M)HDRC = (Multipoint) Highspeed Dual-Role Controller
 config USB_MUSB_HDRC
-	tristate 'Inventra Highspeed Dual Role Controller (TI, ADI, AW, ...)'
-	depends on (USB || USB_GADGET)
-	depends on HAS_IOMEM
+	tristate 'Inventra Highspeed Dual Role Controller (TI, ADI, ...)'
+	depends on USB && USB_GADGET
+	depends on (ARM || (BF54x && !BF544) || (BF52x && !BF522 && !BF523) || (BF60x))
+	select USB_OTG_UTILS
 	help
 	  Say Y here if your system has a dual role high speed USB
 	  controller based on the Mentor Graphics silicon IP.  Then
@@ -123,6 +124,12 @@ config USB_MUSB_JZ4740
 	depends on USB_MUSB_GADGET
 	depends on USB_OTG_BLACKLIST_HUB
 
+config USB_MUSB_ADI
+	tristate "ADI"
+	depends on ARCH_SC58X = y || ARCH_SC57X = y
+	help
+	  Enable usb on ADI platforms.
+
 config USB_MUSB_AM335X_CHILD
 	tristate
 
@@ -149,7 +156,7 @@ config USB_UX500_DMA
 
 config USB_INVENTRA_DMA
 	bool 'Inventra'
-	depends on USB_MUSB_OMAP2PLUS || USB_MUSB_BLACKFIN
+	depends on USB_MUSB_OMAP2PLUS || USB_MUSB_BLACKFIN || USB_MUSB_ADI
 	help
 	  Enable DMA transfers using Mentor's engine.
 

@@ -31,7 +31,7 @@
  *
  */
 
-#ifndef CONFIG_BLACKFIN
+#if !defined(CONFIG_BLACKFIN) || defined(CONFIG_BF60x)
 
 #define MUSB_HSDMA_BASE		0x200
 #define MUSB_HSDMA_INTR		(MUSB_HSDMA_BASE + 0)
