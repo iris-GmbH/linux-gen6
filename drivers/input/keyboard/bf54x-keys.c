@@ -181,10 +181,14 @@ static int bfin_kpad_probe(struct platform_device *pdev)
 	struct bf54x_kpad *bf54x_kpad;
 	struct bfin_kpad_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	struct input_dev *input;
-	int i, error;
+	int i, error, max_pins;
+	static char *pin_state[] = {"4bit", "8bit"};
+	struct pinctrl * pctrl;
+	struct pinctrl_state *pstate;
 
-	if (!pdata->rows || !pdata->cols || !pdata->keymap) {
-		dev_err(&pdev->dev, "no rows, cols or keymap from pdata\n");
+	if (pdata->rows <= 0 || pdata->rows > 8 ||
+		pdata->cols <= 0 || pdata->cols > 8 || !pdata->keymap) {
+		dev_err(&pdev->dev, "no valid rows, cols or keymap from pdata\n");
 		return -EINVAL;
 	}
 
@@ -228,24 +232,18 @@ static int bfin_kpad_probe(struct platform_device *pdev)
 		bf54x_kpad->keyup_test_jiffies =
 			msecs_to_jiffies(pdata->keyup_test_interval);
 
-	if (peripheral_request_list((u16 *)&per_rows[MAX_RC - pdata->rows],
-				    DRV_NAME)) {
-		dev_err(&pdev->dev, "requesting peripherals failed\n");
-		error = -EFAULT;
+	max_pins = max(pdata->rows, pdata->cols);
+	pctrl = devm_pinctrl_get(&pdev->dev);
+	pstate = pinctrl_lookup_state(pctrl, pin_state[(max_pins + 3) / 4 - 1]);
+	if (pinctrl_select_state(pctrl, pstate)) {
+		error = -EINVAL;
 		goto out0;
-	}
-
-	if (peripheral_request_list((u16 *)&per_cols[MAX_RC - pdata->cols],
-				    DRV_NAME)) {
-		dev_err(&pdev->dev, "requesting peripherals failed\n");
-		error = -EFAULT;
-		goto out1;
 	}
 
 	bf54x_kpad->irq = platform_get_irq(pdev, 0);
 	if (bf54x_kpad->irq < 0) {
 		error = -ENODEV;
-		goto out2;
+		goto out0;
 	}
 
 	error = request_irq(bf54x_kpad->irq, bfin_kpad_isr,
@@ -253,7 +251,7 @@ static int bfin_kpad_probe(struct platform_device *pdev)
 	if (error) {
 		dev_err(&pdev->dev, "unable to claim irq %d\n",
 			bf54x_kpad->irq);
-		goto out2;
+		goto out0;
 	}
 
 	input = input_allocate_device();
@@ -318,10 +316,6 @@ out4:
 	input_free_device(input);
 out3:
 	free_irq(bf54x_kpad->irq, pdev);
-out2:
-	peripheral_free_list((u16 *)&per_cols[MAX_RC - pdata->cols]);
-out1:
-	peripheral_free_list((u16 *)&per_rows[MAX_RC - pdata->rows]);
 out0:
 	kfree(bf54x_kpad->keycode);
 out:

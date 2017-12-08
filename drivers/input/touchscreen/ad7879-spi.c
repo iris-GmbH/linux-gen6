@@ -10,6 +10,8 @@
 #include <linux/pm.h>
 #include <linux/spi/spi.h>
 #include <linux/module.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
 
 #include "ad7879.h"
 
@@ -110,10 +112,85 @@ static const struct ad7879_bus_ops ad7879_spi_bus_ops = {
 	.write		= ad7879_spi_write,
 };
 
+#ifdef CONFIG_OF
+#include <linux/gpio.h>
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_AD7879)
+#include <linux/spi/ad7879.h>
+static const struct ad7879_platform_data ad7879_ts_info = {
+	.model                  = 7879, /* Model = AD7879 */
+	.x_plate_ohms           = 620,  /* 620 Ohm from the touch datasheet */
+	.pressure_max           = 10000,
+	.pressure_min           = 0,
+	.first_conversion_delay = 3,
+	.acquisition_time       = 1,    /* 4us acquisition time per sample */
+	.median                 = 2,    /* do 8 measurements */
+	.averaging              = 1,
+	.pen_down_acc_interval  = 255,  /* 9.4 ms */
+	.gpio_export            = 1,    /* Export GPIO to gpiolib */
+	.gpio_base              = 102,
+};
+#endif
+
+static int get_int_prop(struct device_node *dn, const char *s)
+{
+	int ret;
+	u32 val;
+
+	ret = of_property_read_u32(dn, s, &val);
+	if (ret)
+		return 0;
+	return val;
+}
+
+static const struct of_device_id ad7879_of_match[] = {
+	{ .compatible = "adi,ad7879",
+			.data = (void *) &ad7879_ts_info, },
+	{  },
+};
+MODULE_DEVICE_TABLE(of, ad7879_of_match);
+
+static int ad7879_parse_dt(struct spi_device *spi)
+{
+	const struct of_device_id *match;
+	struct ad7879_platform_data *pdata;
+	int irq;
+
+	match = of_match_device(ad7879_of_match, &spi->dev);
+	if (!match) {
+		dev_err(&spi->dev, "failed to matching of_match node\n");
+		return -ENODEV;
+	}
+
+	irq = get_int_prop(spi->dev.of_node, "gpio");
+	spi->irq = gpio_to_irq(irq);
+	pdata = (struct ad7879_platform_data *)match->data;
+	if (!pdata) {
+		dev_err(&spi->dev, "failed to get platform data\n");
+		return -EINVAL;
+	}
+
+	pdata->gpio_base = get_int_prop(spi->dev.of_node, "gpio-base");
+	spi->dev.platform_data = pdata;
+
+	return 0;
+}
+#else
+static int ad7879_parse_dt(struct spi_device *spi)
+{
+	return 0;
+}
+#endif
+
 static int ad7879_spi_probe(struct spi_device *spi)
 {
 	struct ad7879 *ts;
 	int err;
+
+	err = ad7879_parse_dt(spi);
+	if (err) {
+		dev_err(&spi->dev, "failed to parse device tree\n");
+		return err;
+	}
 
 	/* don't exceed max specified SPI CLK frequency */
 	if (spi->max_speed_hz > MAX_SPI_FREQ_HZ) {
@@ -151,6 +228,7 @@ static struct spi_driver ad7879_spi_driver = {
 		.name	= "ad7879",
 		.owner	= THIS_MODULE,
 		.pm	= &ad7879_pm_ops,
+		.of_match_table = of_match_ptr(ad7879_of_match),
 	},
 	.probe		= ad7879_spi_probe,
 	.remove		= ad7879_spi_remove,

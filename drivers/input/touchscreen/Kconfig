@@ -90,6 +90,33 @@ config TOUCHSCREEN_AD7879_SPI
 	  To compile this driver as a module, choose M here: the
 	  module will be called ad7879-spi.
 
+config TOUCHSCREEN_AD7160
+	tristate "AD7160 based touchscreens"
+	depends on I2C
+	help
+	  Say Y here if you have a touchscreen interface using the
+	  AD7160 controller, and your board-specific initialization
+	  code includes that.
+
+	  If unsure, say N (but it's safe to say "Y").
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ad7160.
+
+config TOUCHSCREEN_AD7160_RAW
+	bool "AD7160 based touchscreens raw data interface"
+	depends on TOUCHSCREEN_AD7160
+	help
+	  Say Y here if you have a touchscreen interface using the AD7160
+	  and you want the raw data character interface
+
+config TOUCHSCREEN_AD7160_FW
+	bool "AD7160 based touchscreens firmware loading support"
+	depends on TOUCHSCREEN_AD7160
+	help
+	  Say Y here if you have a touchscreen interface using the AD7160
+	  and you want to be able to replace the firmware on your device
+
 config TOUCHSCREEN_AR1021_I2C
 	tristate "Microchip AR1021 i2c touchscreen"
 	depends on I2C && OF

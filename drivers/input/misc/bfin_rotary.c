@@ -9,13 +9,20 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_address.h>
 #include <linux/pm.h>
 #include <linux/platform_device.h>
 #include <linux/input.h>
 #include <linux/slab.h>
 #include <linux/platform_data/bfin_rotary.h>
 
+#ifdef CONFIG_ARCH_HEADER_IN_MACH
+#include <mach/portmux.h>
+#else
 #include <asm/portmux.h>
+#endif
 
 #define CNT_CONFIG_OFF		0	/* CNT Config Offset */
 #define CNT_IMASK_OFF		4	/* CNT Interrupt Mask Offset */
@@ -67,7 +74,8 @@ static void report_rotary_event(struct bfin_rot *rotary, int delta)
 
 static irqreturn_t bfin_rotary_isr(int irq, void *dev_id)
 {
-	struct bfin_rot *rotary = dev_id;
+	struct platform_device *pdev = dev_id;
+	struct bfin_rot *rotary = platform_get_drvdata(pdev);
 	int delta;
 
 	switch (readw(rotary->base + CNT_STATUS_OFF)) {
@@ -95,6 +103,14 @@ static irqreturn_t bfin_rotary_isr(int irq, void *dev_id)
 
 	return IRQ_HANDLED;
 }
+
+#ifdef CONFIG_OF
+static const struct of_device_id bfin_rotary_of_match[] = {
+	{ .compatible = "adi,rotary", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, bfin_rotary_of_match);
+#endif
 
 static int bfin_rotary_open(struct input_dev *input)
 {
@@ -127,17 +143,65 @@ static void bfin_rotary_close(struct input_dev *input)
 
 static void bfin_rotary_free_action(void *data)
 {
-	peripheral_free_list(data);
+	unsigned short *pin_list = (unsigned short *)data;
+	peripheral_free_list(pin_list);
 }
 
 static int bfin_rotary_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	const struct bfin_rotary_platform_data *pdata = dev_get_platdata(dev);
+	struct bfin_rotary_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	struct bfin_rot *rotary;
 	struct resource *res;
+	struct device_node *node = pdev->dev.of_node;
 	struct input_dev *input;
 	int error;
+
+	rotary = devm_kzalloc(dev, sizeof(struct bfin_rot), GFP_KERNEL);
+	if (!rotary) {
+		dev_err(dev, "fail to malloc bfin_rot\n");
+		return -ENOMEM;
+	}
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	rotary->base = devm_ioremap_resource(dev, res);
+	if (IS_ERR(rotary->base))
+		return PTR_ERR(rotary->base);
+
+	if (node) {
+		u16 val;
+
+		pdata = devm_kzalloc(dev,
+				sizeof(struct bfin_rotary_platform_data),
+				GFP_KERNEL);
+		if (!pdata) {
+			dev_err(dev, "fail to malloc platform data\n");
+			return -ENOMEM;
+		}
+
+		of_property_read_u32(node, "rotary_up_key",
+			&pdata->rotary_up_key);
+		of_property_read_u32(node, "rotary_down_key",
+			&pdata->rotary_down_key);
+		of_property_read_u32(node, "rotary_rel_code",
+			&pdata->rotary_rel_code);
+		if (of_property_read_u32(node, "rotary_button_key",
+			&pdata->rotary_button_key))
+			return -ENOENT;
+		of_property_read_u16(node, "debounce", &pdata->debounce);
+		of_property_read_u16(node, "debounce_en", &val);
+		pdata->mode |= (val & 1) << 1;
+		of_property_read_u16(node, "cnt_mode", &val);
+		pdata->mode |= (val & 7) << CNTMODE_SHIFT;
+		of_property_read_u16(node, "boundary_mode", &val);
+		pdata->mode |= (val & 3) << BNDMODE_SHIFT;
+		of_property_read_u16(node, "invert_czm", &val);
+		pdata->mode |= (val & 1) << 6;
+		of_property_read_u16(node, "invert_cud", &val);
+		pdata->mode |= (val & 1) << 5;
+		of_property_read_u16(node, "invert_cdg", &val);
+		pdata->mode |= (val & 1) << 4;
+	}
 
 	/* Basic validation */
 	if ((pdata->rotary_up_key && !pdata->rotary_down_key) ||
@@ -145,33 +209,13 @@ static int bfin_rotary_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	if (pdata->pin_list) {
-		error = peripheral_request_list(pdata->pin_list,
-						dev_name(&pdev->dev));
-		if (error) {
-			dev_err(dev, "requesting peripherals failed: %d\n",
-				error);
-			return error;
-		}
-
-		error = devm_add_action(dev, bfin_rotary_free_action,
-					pdata->pin_list);
-		if (error) {
-			dev_err(dev, "setting cleanup action failed: %d\n",
-				error);
-			peripheral_free_list(pdata->pin_list);
-			return error;
-		}
+	error = peripheral_request_list(pdata->pin_list, dev_name(&pdev->dev));
+	if (error) {
+		dev_err(dev, "requesting peripherals failed\n");
+		return error;
 	}
 
-	rotary = devm_kzalloc(dev, sizeof(struct bfin_rot), GFP_KERNEL);
-	if (!rotary)
-		return -ENOMEM;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	rotary->base = devm_ioremap_resource(dev, res);
-	if (IS_ERR(rotary->base))
-		return PTR_ERR(rotary->base);
+	devm_add_action(dev, bfin_rotary_free_action, pdata->pin_list);
 
 	input = devm_input_allocate_device(dev);
 	if (!input)
@@ -225,7 +269,7 @@ static int bfin_rotary_probe(struct platform_device *pdev)
 	}
 
 	error = devm_request_irq(dev, rotary->irq, bfin_rotary_isr,
-				 0, dev_name(dev), rotary);
+				 0, dev_name(dev), pdev);
 	if (error) {
 		dev_err(dev, "unable to claim irq %d; error %d\n",
 			rotary->irq, error);
@@ -239,11 +283,22 @@ static int bfin_rotary_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, rotary);
-	device_init_wakeup(&pdev->dev, 1);
+	device_init_wakeup(&pdev->dev, pdata->pm_wakeup);
 
 	return 0;
 }
 
+static int bfin_rotary_remove(struct platform_device *pdev)
+{
+	struct bfin_rot *rotary = platform_get_drvdata(pdev);
+
+	writew(0, rotary->base + CNT_CONFIG_OFF);
+	writew(0, rotary->base + CNT_IMASK_OFF);
+
+	return 0;
+}
+
+#ifdef CONFIG_PM
 static int __maybe_unused bfin_rotary_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
@@ -259,7 +314,7 @@ static int __maybe_unused bfin_rotary_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused bfin_rotary_resume(struct device *dev)
+static int bfin_rotary_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct bfin_rot *rotary = platform_get_drvdata(pdev);
@@ -277,14 +332,21 @@ static int __maybe_unused bfin_rotary_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(bfin_rotary_pm_ops,
-			 bfin_rotary_suspend, bfin_rotary_resume);
+static const struct dev_pm_ops bfin_rotary_pm_ops = {
+	.suspend	= bfin_rotary_suspend,
+	.resume		= bfin_rotary_resume,
+};
+#endif
 
 static struct platform_driver bfin_rotary_device_driver = {
 	.probe		= bfin_rotary_probe,
 	.driver		= {
 		.name	= "bfin-rotary",
+		.owner	= THIS_MODULE,
+		.of_match_table = of_match_ptr(bfin_rotary_of_match),
+#ifdef CONFIG_PM
 		.pm	= &bfin_rotary_pm_ops,
+#endif
 	},
 };
 module_platform_driver(bfin_rotary_device_driver);

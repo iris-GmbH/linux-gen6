@@ -598,10 +598,10 @@ config INPUT_DM355EVM
 	  module will be called dm355evm_keys.
 
 config INPUT_BFIN_ROTARY
-	tristate "Blackfin Rotary support"
-	depends on BF54x || BF52x
+	tristate "ADI Rotary support"
+	depends on BF54x || BF52x || BF60x || ARCH_SC58X || ARCH_SC57X
 	help
-	  Say Y here if you want to use the Blackfin Rotary.
+	  Say Y here if you want to use the ADI GP counter based rotary.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called bfin-rotary.
@@ -709,6 +709,17 @@ config INPUT_XEN_KBDDEV_FRONTEND
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called xen-kbdfront.
+
+config INPUT_ADUX1001_VIBRA
+	tristate "ADUX1001 Smart Electromagnetic Actuator Haptic Driver"
+	depends on I2C && HAVE_PWM
+	select INPUT_FF_MEMLESS
+	help
+	  This option enables support for the Analog Devices ADUX1001
+	  Smart Electromagnetic Actuator Haptic Driver.
+
+	  To compile this driver as a module, choose M here. The module will
+	  be called adux1001-vibra.
 
 config INPUT_SIRFSOC_ONKEY
 	bool "CSR SiRFSoC power on/off/suspend key support"
