@@ -363,6 +363,44 @@ config ARM_SINGLE_ARMV7M
 	select SPARSE_IRQ
 	select USE_OF
 
+config ARCH_SC58X
+	bool "ADI Ltd. sc58x family"
+	select ARM_GIC
+	select CPU_V7
+	select VFP
+	select NEON
+	select MIGHT_HAVE_CACHE_L2X0
+	select HAVE_CLK
+	select CLKDEV_LOOKUP
+	select GENERIC_CLOCKEVENTS
+	select IRQ_DOMAIN
+	select HAVE_MACH_CLKDEV
+	select NEED_MACH_GPIO_H
+	select SPARSE_IRQ
+	select ARCH_REQUIRE_GPIOLIB
+	select PINCTRL
+	help
+	  This enables support for ADI Ltd sc58x board.
+
+config ARCH_SC57X
+	bool "ADI Ltd. sc57x family"
+	select ARM_GIC
+	select CPU_V7
+	select VFP
+	select NEON
+	select MIGHT_HAVE_CACHE_L2X0
+	select HAVE_CLK
+	select CLKDEV_LOOKUP
+	select GENERIC_CLOCKEVENTS
+	select IRQ_DOMAIN
+	select HAVE_MACH_CLKDEV
+	select NEED_MACH_GPIO_H
+	select SPARSE_IRQ
+	select ARCH_REQUIRE_GPIOLIB
+	select PINCTRL
+	help
+	  This enables support for ADI Ltd sc57x board.
+
 config ARCH_EBSA110
 	bool "EBSA-110"
 	select ARCH_USES_GETTIMEOFFSET
