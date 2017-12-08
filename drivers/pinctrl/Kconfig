@@ -33,6 +33,24 @@ config DEBUG_PINCTRL
 
 config PINCTRL_ADI2
 	bool "ADI pin controller driver"
+	depends on BLACKFIN || ARCH_SC58X || ARCH_SC57X
+	select PINMUX
+	select IRQ_DOMAIN
+	help
+	  This is the pin controller and gpio driver for ADI BF54x, BF60x and
+	  future processors. This option is selected automatically when specific
+	  machine and arch are selected to build.
+
+config PINCTRL_BF54x
+	def_bool y if BF54x
+	select PINCTRL_ADI2
+
+config PINCTRL_BF60x
+	def_bool y if BF60x
+	select PINCTRL_ADI2
+
+config PINCTRL_ADI2
+	bool "ADI pin controller driver"
 	depends on BLACKFIN
 	select PINMUX
 	select IRQ_DOMAIN
@@ -69,6 +87,14 @@ config PINCTRL_BF54x
 
 config PINCTRL_BF60x
 	def_bool y if BF60x
+	select PINCTRL_ADI2
+
+config PINCTRL_SC58x
+	def_bool y if ARCH_SC58X
+	select PINCTRL_ADI2
+
+config PINCTRL_SC57x
+	def_bool y if ARCH_SC57X
 	select PINCTRL_ADI2
 
 config PINCTRL_AT91

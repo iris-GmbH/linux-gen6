@@ -37,7 +37,6 @@
 #include "pinmux.h"
 #include "pinconf.h"
 
-
 static bool pinctrl_dummy_state;
 
 /* Mutex taken to protect pinctrl_list */
@@ -1092,6 +1091,7 @@ struct pinctrl *pinctrl_get(struct device *dev)
 	p = find_pinctrl(dev);
 	if (p) {
 		dev_dbg(dev, "obtain a copy of previously claimed pinctrl\n");
+
 		kref_get(&p->users);
 		return p;
 	}
