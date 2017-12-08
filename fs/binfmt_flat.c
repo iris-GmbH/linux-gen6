@@ -408,8 +408,10 @@ static void old_reloc(unsigned long rl)
 
 /****************************************************************************/
 
-static int load_flat_file(struct linux_binprm *bprm,
-		struct lib_info *libinfo, int id, unsigned long *extra_stack)
+static int load_flat_file(struct linux_binprm * bprm,
+			  struct lib_info *libinfo, int id,
+			  unsigned long *extra_stack,
+			  unsigned long *stack_base)
 {
 	struct flat_hdr *hdr;
 	unsigned long textpos, datapos, realdatastart;
@@ -430,14 +432,34 @@ static int load_flat_file(struct linux_binprm *bprm,
 	data_len  = ntohl(hdr->data_end) - ntohl(hdr->data_start);
 	bss_len   = ntohl(hdr->bss_end) - ntohl(hdr->data_end);
 	stack_len = ntohl(hdr->stack_size);
-	if (extra_stack) {
-		stack_len += *extra_stack;
-		*extra_stack = stack_len;
-	}
 	relocs    = ntohl(hdr->reloc_count);
 	flags     = ntohl(hdr->flags);
 	rev       = ntohl(hdr->rev);
 	full_data = data_len + relocs * sizeof(unsigned long);
+
+	if (flags & FLAT_FLAG_L1STK) {
+#ifdef CONFIG_SMP
+		flags &= ~FLAT_FLAG_L1STK;
+		printk(KERN_NOTICE "BINFMT_FLAT: L1 stack is not supported in SMP kernel.\n");
+#else
+		if (stack_base == 0) {
+			printk("BINFMT_FLAT: requesting L1 stack for shared library\n");
+			ret = -ENOEXEC;
+			goto err;
+		}
+		stack_len = alloc_l1stack(stack_len, stack_base);
+		if (stack_len == 0) {
+			printk("BINFMT_FLAT: stack size with arguments exceeds scratchpad memory\n");
+			ret = -ENOMEM;
+			goto err;
+		}
+#endif
+	}
+
+	if (extra_stack) {
+		stack_len += *extra_stack;
+		*extra_stack = stack_len;
+	}
 
 	if (strncmp(hdr->magic, "bFLT", 4)) {
 		/*
@@ -595,7 +617,11 @@ static int load_flat_file(struct linux_binprm *bprm,
 
 		len = text_len + data_len + extra + MAX_SHARED_LIBS * sizeof(u32);
 		len = PAGE_ALIGN(len);
+#ifdef CONFIG_OPROFILE
+		textpos = vm_mmap(bprm->file, 0, len,
+#else
 		textpos = vm_mmap(NULL, 0, len,
+#endif
 			PROT_READ | PROT_EXEC | PROT_WRITE, MAP_PRIVATE, 0);
 
 		if (!textpos || IS_ERR_VALUE(textpos)) {
@@ -711,6 +737,7 @@ static int load_flat_file(struct linux_binprm *bprm,
 		current->mm->brk = (current->mm->start_brk + 3) & ~3;
 #ifndef CONFIG_MMU
 		current->mm->context.end_brk = memp + memp_size - stack_len;
+		current->mm->context.stack_start = current->mm->context.end_brk;
 #endif
 	}
 
@@ -886,7 +913,7 @@ static int load_flat_shared_library(int id, struct lib_info *libs)
 	res = prepare_binprm(&bprm);
 
 	if (!res)
-		res = load_flat_file(&bprm, libs, id, NULL);
+		res = load_flat_file(&bprm, libs, id, NULL, NULL);
 
 	abort_creds(bprm.cred);
 
@@ -909,8 +936,11 @@ static int load_flat_binary(struct linux_binprm *bprm)
 {
 	struct lib_info libinfo;
 	struct pt_regs *regs = current_pt_regs();
+	unsigned long p = bprm->p;
 	unsigned long stack_len = 0;
 	unsigned long start_addr;
+	unsigned long l1stack_base, ramstack_top;
+	unsigned long *sp;
 	int res;
 	int i, j;
 
@@ -929,48 +959,34 @@ static int load_flat_binary(struct linux_binprm *bprm)
 	stack_len += (bprm->argc + 1) * sizeof(char *);   /* the argv array */
 	stack_len += (bprm->envc + 1) * sizeof(char *);   /* the envp array */
 	stack_len = ALIGN(stack_len, FLAT_STACK_ALIGN);
-
-	res = load_flat_file(bprm, &libinfo, 0, &stack_len);
+	l1stack_base = 0;
+	res = load_flat_file(bprm, &libinfo, 0, &stack_len &l1stack_base));
 	if (res < 0)
 		return res;
 
 	/* Update data segment pointers for all libraries */
-	for (i = 0; i < MAX_SHARED_LIBS; i++) {
-		if (!libinfo.lib_list[i].loaded)
-			continue;
-		for (j = 0; j < MAX_SHARED_LIBS; j++) {
-			unsigned long val = libinfo.lib_list[j].loaded ?
-				libinfo.lib_list[j].start_data : UNLOADED_LIB;
-			unsigned long __user *p = (unsigned long __user *)
-				libinfo.lib_list[i].start_data;
-			p -= j + 1;
-			if (put_user(val, p))
-				return -EFAULT;
-		}
-	}
+	for (i=0; i<MAX_SHARED_LIBS; i++)
+		if (libinfo.lib_list[i].loaded)
+			for (j=0; j<MAX_SHARED_LIBS; j++)
+				(-(j+1))[(unsigned long *)(libinfo.lib_list[i].start_data)] =
+					(libinfo.lib_list[j].loaded)?
+						libinfo.lib_list[j].start_data:UNLOADED_LIB;
 
 	install_exec_creds(bprm);
 
 	set_binfmt(&flat_format);
 
-#ifdef CONFIG_MMU
-	res = setup_arg_pages(bprm, STACK_TOP, EXSTACK_DEFAULT);
-	if (!res)
-		res = create_flat_tables(bprm, bprm->p);
-#else
-	/* Stash our initial stack pointer into the mm structure */
-	current->mm->start_stack =
-		((current->mm->context.end_brk + stack_len + 3) & ~3) - 4;
-	pr_debug("sp=%lx\n", current->mm->start_stack);
+	p = ((current->mm->context.end_brk + stack_len + 3) & ~3) - 4;
+	ramstack_top = p;
+	DBG_FLT("p=%x\n", (int)p);
 
-	/* copy the arg pages onto the stack */
-	res = transfer_args_to_stack(bprm, &current->mm->start_stack);
-	if (!res)
-		res = create_flat_tables(bprm, current->mm->start_stack);
-#endif
-	if (res)
-		return res;
+	/* copy the arg pages onto the stack, this could be more efficient :-) */
+	for (i = TOP_OF_ARGS - 1; i >= bprm->p; i--)
+		* (char *) --p =
+			((char *) page_address(bprm->page[i/PAGE_SIZE]))[i % PAGE_SIZE];
 
+	sp = (unsigned long *) create_flat_tables(p, bprm);
+	
 	/* Fake some return addresses to ensure the call chain will
 	 * initialise library in order for us.  We are required to call
 	 * lib 1 first, then 2, ... and finally the main program (id 0).
@@ -981,22 +997,31 @@ static int load_flat_binary(struct linux_binprm *bprm)
 	for (i = MAX_SHARED_LIBS-1; i > 0; i--) {
 		if (libinfo.lib_list[i].loaded) {
 			/* Push previos first to call address */
-			unsigned long __user *sp;
-			current->mm->start_stack -= sizeof(unsigned long);
-			sp = (unsigned long __user *)current->mm->start_stack;
-			__put_user(start_addr, sp);
+			--sp;	put_user(start_addr, sp);
 			start_addr = libinfo.lib_list[i].entry;
 		}
 	}
 #endif
+	
+	/* Stash our initial stack pointer into the mm structure */
+	current->mm->start_stack = (unsigned long )sp;
 
 #ifdef FLAT_PLAT_INIT
 	FLAT_PLAT_INIT(regs);
 #endif
+	if (l1stack_base) {
+		/* Find L1 stack pointer corresponding to the current bottom
+		   of the stack in normal RAM.  */
+		l1stack_base += l1_stack_len - (((unsigned long)p & ~3) - (unsigned long)sp);
+		if (!activate_l1stack(current->mm, ((unsigned long)p & ~3) - l1_stack_len))
+			l1stack_base = 0;
+	}
 
-	pr_debug("start_thread(regs=0x%p, entry=0x%lx, start_stack=0x%lx)\n",
-		 regs, start_addr, current->mm->start_stack);
-	start_thread(regs, start_addr, current->mm->start_stack);
+	pr_debug("start_thread(regs=0x%p, entry=0x%lx, start_stack=0x%lx, l1stk=0x%x, len 0x%x)\n",
+		 regs, start_addr, current->mm->start_stack, l1stack_base, stack_len);
+	start_thread(regs, start_addr,
+		     l1stack_base ? l1stack_base : current->mm->start_stack);
+
 
 	return 0;
 }
