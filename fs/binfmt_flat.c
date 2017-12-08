@@ -41,6 +41,7 @@
 #include <asm/unaligned.h>
 #include <asm/cacheflush.h>
 #include <asm/page.h>
+#include <asm/mmu_context.h>
 
 /****************************************************************************/
 
@@ -424,7 +425,9 @@ static void old_reloc(unsigned long rl)
 /****************************************************************************/
 
 static int load_flat_file(struct linux_binprm * bprm,
-		struct lib_info *libinfo, int id, unsigned long *extra_stack)
+			  struct lib_info *libinfo, int id,
+			  unsigned long *extra_stack,
+			  unsigned long *stack_base)
 {
 	struct flat_hdr * hdr;
 	unsigned long textpos = 0, datapos = 0, result;
@@ -447,14 +450,35 @@ static int load_flat_file(struct linux_binprm * bprm,
 	data_len  = ntohl(hdr->data_end) - ntohl(hdr->data_start);
 	bss_len   = ntohl(hdr->bss_end) - ntohl(hdr->data_end);
 	stack_len = ntohl(hdr->stack_size);
-	if (extra_stack) {
-		stack_len += *extra_stack;
-		*extra_stack = stack_len;
-	}
+
 	relocs    = ntohl(hdr->reloc_count);
 	flags     = ntohl(hdr->flags);
 	rev       = ntohl(hdr->rev);
 	full_data = data_len + relocs * sizeof(unsigned long);
+
+	if (flags & FLAT_FLAG_L1STK) {
+#ifdef CONFIG_SMP
+		flags &= ~FLAT_FLAG_L1STK;
+		printk(KERN_NOTICE "BINFMT_FLAT: L1 stack is not supported in SMP kernel.\n");
+#else
+		if (stack_base == 0) {
+			printk("BINFMT_FLAT: requesting L1 stack for shared library\n");
+			ret = -ENOEXEC;
+			goto err;
+		}
+		stack_len = alloc_l1stack(stack_len, stack_base);
+		if (stack_len == 0) {
+			printk("BINFMT_FLAT: stack size with arguments exceeds scratchpad memory\n");
+			ret = -ENOMEM;
+			goto err;
+		}
+#endif
+	}
+
+	if (extra_stack) {
+		stack_len += *extra_stack;
+		*extra_stack = stack_len;
+	}
 
 	if (strncmp(hdr->magic, "bFLT", 4)) {
 		/*
@@ -603,7 +627,11 @@ static int load_flat_file(struct linux_binprm * bprm,
 
 		len = text_len + data_len + extra + MAX_SHARED_LIBS * sizeof(unsigned long);
 		len = PAGE_ALIGN(len);
+#ifdef CONFIG_OPROFILE
+		textpos = vm_mmap(bprm->file, 0, len,
+#else
 		textpos = vm_mmap(0, 0, len,
+#endif
 			PROT_READ | PROT_EXEC | PROT_WRITE, MAP_PRIVATE, 0);
 
 		if (!textpos || IS_ERR_VALUE(textpos)) {
@@ -682,6 +710,7 @@ static int load_flat_file(struct linux_binprm * bprm,
 		current->mm->start_brk = datapos + data_len + bss_len;
 		current->mm->brk = (current->mm->start_brk + 3) & ~3;
 		current->mm->context.end_brk = memp + memp_size - stack_len;
+		current->mm->context.stack_start = current->mm->context.end_brk;
 	}
 
 	if (flags & FLAT_FLAG_KTRACE)
@@ -838,7 +867,7 @@ static int load_flat_shared_library(int id, struct lib_info *libs)
 	res = prepare_binprm(&bprm);
 
 	if (!IS_ERR_VALUE(res))
-		res = load_flat_file(&bprm, libs, id, NULL);
+		res = load_flat_file(&bprm, libs, id, NULL, NULL);
 
 	abort_creds(bprm.cred);
 
@@ -864,6 +893,7 @@ static int load_flat_binary(struct linux_binprm * bprm)
 	unsigned long p = bprm->p;
 	unsigned long stack_len;
 	unsigned long start_addr;
+	unsigned long l1stack_base, ramstack_top;
 	unsigned long *sp;
 	int res;
 	int i, j;
@@ -882,7 +912,8 @@ static int load_flat_binary(struct linux_binprm * bprm)
 	stack_len += (bprm->envc + 1) * sizeof(char *); /* the envp array */
 	stack_len += FLAT_STACK_ALIGN - 1;  /* reserve for upcoming alignment */
 	
-	res = load_flat_file(bprm, &libinfo, 0, &stack_len);
+	l1stack_base = 0;
+	res = load_flat_file(bprm, &libinfo, 0, &stack_len, &l1stack_base);
 	if (IS_ERR_VALUE(res))
 		return res;
 	
@@ -899,6 +930,7 @@ static int load_flat_binary(struct linux_binprm * bprm)
 	set_binfmt(&flat_format);
 
 	p = ((current->mm->context.end_brk + stack_len + 3) & ~3) - 4;
+	ramstack_top = p;
 	DBG_FLT("p=%x\n", (int)p);
 
 	/* copy the arg pages onto the stack, this could be more efficient :-) */
@@ -930,10 +962,20 @@ static int load_flat_binary(struct linux_binprm * bprm)
 #ifdef FLAT_PLAT_INIT
 	FLAT_PLAT_INIT(regs);
 #endif
-	DBG_FLT("start_thread(regs=0x%x, entry=0x%x, start_stack=0x%x)\n",
-		(int)regs, (int)start_addr, (int)current->mm->start_stack);
-	
-	start_thread(regs, start_addr, current->mm->start_stack);
+	if (l1stack_base) {
+		/* Find L1 stack pointer corresponding to the current bottom
+		   of the stack in normal RAM.  */
+		l1stack_base += l1_stack_len - (((unsigned long)p & ~3) - (unsigned long)sp);
+		if (!activate_l1stack(current->mm, ((unsigned long)p & ~3) - l1_stack_len))
+			l1stack_base = 0;
+	}
+
+	DBG_FLT("start_thread(regs=0x%x, entry=0x%x, start_stack=0x%x, l1stk=0x%x, len 0x%x)\n",
+		(int)regs, (int)start_addr, (int)current->mm->start_stack, l1stack_base,
+		stack_len);
+
+	start_thread(regs, start_addr,
+		     l1stack_base ? l1stack_base : current->mm->start_stack);
 
 	return 0;
 }

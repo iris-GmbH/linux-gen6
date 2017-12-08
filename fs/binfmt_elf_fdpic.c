@@ -169,7 +169,7 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 	struct elf_fdpic_params exec_params, interp_params;
 	struct pt_regs *regs = current_pt_regs();
 	struct elf_phdr *phdr;
-	unsigned long stack_size, entryaddr;
+	unsigned long stack_size, entryaddr, requested_stack_size;
 #ifdef ELF_FDPIC_PLAT_INIT
 	unsigned long dynaddr;
 #endif
@@ -379,6 +379,7 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 	 * - the stack starts at the top and works down
 	 */
 	stack_size = (stack_size + PAGE_SIZE - 1) & PAGE_MASK;
+	requested_stack_size = stack_size;
 	if (stack_size < PAGE_SIZE * 2)
 		stack_size = PAGE_SIZE * 2;
 
@@ -402,6 +403,8 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 	current->mm->context.end_brk = current->mm->start_brk;
 	current->mm->context.end_brk +=
 		(stack_size > PAGE_SIZE) ? (stack_size - PAGE_SIZE) : 0;
+	current->mm->context.stack_start =
+		current->mm->start_brk + stack_size - requested_stack_size;
 	current->mm->start_stack = current->mm->start_brk + stack_size;
 #endif
 
@@ -1018,7 +1021,7 @@ static int elf_fdpic_map_file_by_direct_mmap(struct elf_fdpic_params *params,
 	phdr = params->phdrs;
 	for (loop = 0; loop < params->hdr.e_phnum; loop++, phdr++) {
 		unsigned long maddr, disp, excess, excess1;
-		int prot = 0, flags;
+		int prot = 0, flags, ret;
 
 		if (phdr->p_type != PT_LOAD)
 			continue;
@@ -1091,6 +1094,13 @@ static int elf_fdpic_map_file_by_direct_mmap(struct elf_fdpic_params *params,
 		if ((params->flags & ELF_FDPIC_FLAG_ARRANGEMENT) ==
 		    ELF_FDPIC_FLAG_CONTIGUOUS)
 			load_addr += PAGE_ALIGN(phdr->p_memsz + disp);
+
+#ifndef ELF_FDPIC_PLAT_PROCESS_PHDR
+# define ELF_FDPIC_PLAT_PROCESS_PHDR(mm, params, phdr, maddr, disp) 0
+#endif
+		ret = ELF_FDPIC_PLAT_PROCESS_PHDR(mm, params, phdr, &maddr, &disp);
+		if (ret)
+			return ret;
 
 		seg->addr = maddr + disp;
 		seg->p_vaddr = phdr->p_vaddr;
