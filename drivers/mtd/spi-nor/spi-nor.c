@@ -660,8 +660,8 @@ static const struct spi_device_id spi_nor_ids[] = {
 	{ "w25q64", INFO(0xef4017, 0, 64 * 1024, 128, SECT_4K) },
 	{ "w25q80", INFO(0xef5014, 0, 64 * 1024,  16, SECT_4K) },
 	{ "w25q80bl", INFO(0xef4014, 0, 64 * 1024,  16, SECT_4K) },
-	{ "w25q128", INFO(0xef4018, 0, 64 * 1024, 256, SECT_4K) },
-	{ "w25q256", INFO(0xef4019, 0, 64 * 1024, 512, SECT_4K) },
+	{ "w25q128", INFO(0xef4018, 0, 64 * 1024, 256, SECT_4K | SPI_NOR_QUAD_READ) },
+	{ "w25q256", INFO(0xef4019, 0, 64 * 1024, 512, SECT_4K | SPI_NOR_QUAD_READ) },
 
 	/* Catalyst / On Semiconductor -- non-JEDEC */
 	{ "cat25c11", CAT25_INFO(  16, 8, 16, 1, SPI_NOR_NO_ERASE | SPI_NOR_NO_FR) },
@@ -934,6 +934,13 @@ static int micron_quad_enable(struct spi_nor *nor)
 static int set_quad_mode(struct spi_nor *nor, struct flash_info *info)
 {
 	int status;
+
+	/* skip setting the quad mode reg if the ignore-enable-quad-mode
+	 * of property is defined for this spi nor device
+	 */
+	if (nor->dev->of_node && of_find_property(nor->dev->of_node,
+		"ignore-enable-quad-mode", NULL))
+		return 0;
 
 	switch (JEDEC_MFR(info)) {
 	case CFI_MFR_MACRONIX:
