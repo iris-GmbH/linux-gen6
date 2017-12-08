@@ -343,6 +343,14 @@ static int adv7343_s_std_output(struct v4l2_subdev *sd, v4l2_std_id std)
 	return err;
 }
 
+static int adv7343_g_std_output(struct v4l2_subdev *sd, v4l2_std_id *std)
+{
+	struct adv7343_state *state = to_state(sd);
+
+	*std = state->std;
+	return 0;
+}
+
 static int adv7343_s_routing(struct v4l2_subdev *sd,
 		u32 input, u32 output, u32 config)
 {
@@ -359,9 +367,43 @@ static int adv7343_s_routing(struct v4l2_subdev *sd,
 	return err;
 }
 
+static int adv7343_enum_mbus_fmt(struct v4l2_subdev *sd, unsigned index,
+				u32 *code)
+{
+	if (index > 0)
+		return -EINVAL;
+
+	*code = MEDIA_BUS_FMT_UYVY8_2X8;
+	return 0;
+}
+
+static int adv7343_g_mbus_fmt(struct v4l2_subdev *sd,
+				struct v4l2_mbus_framefmt *fmt)
+{
+	struct adv7343_state *state = to_state(sd);
+
+	fmt->code = MEDIA_BUS_FMT_UYVY8_2X8;
+	fmt->colorspace = V4L2_COLORSPACE_SMPTE170M;
+	if (state->std & V4L2_STD_525_60) {
+		fmt->field = V4L2_FIELD_SEQ_TB;
+		fmt->width = 720;
+		fmt->height = 487;
+	} else {
+		fmt->field = V4L2_FIELD_SEQ_BT;
+		fmt->width = 720;
+		fmt->height = 576;
+	}
+	return 0;
+}
+
 static const struct v4l2_subdev_video_ops adv7343_video_ops = {
 	.s_std_output	= adv7343_s_std_output,
+	.g_std_output   = adv7343_g_std_output,
 	.s_routing	= adv7343_s_routing,
+	.enum_mbus_fmt  = adv7343_enum_mbus_fmt,
+	.g_mbus_fmt     = adv7343_g_mbus_fmt,
+	.try_mbus_fmt   = adv7343_g_mbus_fmt,
+	.s_mbus_fmt     = adv7343_g_mbus_fmt,
 };
 
 static const struct v4l2_subdev_ops adv7343_ops = {

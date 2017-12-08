@@ -1,7 +1,7 @@
 /*
  * adv7842 - Analog Devices ADV7842 video decoder driver
  *
- * Copyright 2013 Cisco Systems, Inc. and/or its affiliates. All rights reserved.
+ * Copyright 2011 Tandberg Telecom AS.  All rights reserved.
  *
  * This program is free software; you may redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,15 +40,16 @@ enum adv7842_op_ch_sel {
 	ADV7842_OP_CH_SEL_RBG = 5,
 };
 
-/* Mode of operation */
-enum adv7842_mode {
-	ADV7842_MODE_SDP,
-	ADV7842_MODE_COMP,
-	ADV7842_MODE_RGB,
-	ADV7842_MODE_HDMI
+/* Primary mode (IO register 0x01, [3:0]) */
+enum adv7842_prim_mode {
+	ADV7842_PRIM_MODE_SDP = 0,
+	ADV7842_PRIM_MODE_COMP = 1,
+	ADV7842_PRIM_MODE_RGB = 2,
+	ADV7842_PRIM_MODE_HDMI_COMP = 5,
+	ADV7842_PRIM_MODE_HDMI_GR = 6,
 };
 
-/* Video standard select (IO register 0x00, [5:0]) */
+/* Video standard select (IO register 0x00, [5:0] */
 enum adv7842_vid_std_select {
 	/* SDP */
 	ADV7842_SDP_VID_STD_CVBS_SD_4x1 = 0x01,
@@ -99,86 +100,15 @@ enum adv7842_op_format_sel {
 	ADV7842_OP_FORMAT_SEL_SDR_ITU656_24_MODE2 = 0x8a,
 };
 
-enum adv7842_select_input {
-	ADV7842_SELECT_HDMI_PORT_A,
-	ADV7842_SELECT_HDMI_PORT_B,
-	ADV7842_SELECT_VGA_RGB,
-	ADV7842_SELECT_VGA_COMP,
-	ADV7842_SELECT_SDP_CVBS,
-	ADV7842_SELECT_SDP_YC,
-};
-
-enum adv7842_drive_strength {
-	ADV7842_DR_STR_LOW = 0,
-	ADV7842_DR_STR_MEDIUM_LOW = 1,
-	ADV7842_DR_STR_MEDIUM_HIGH = 2,
-	ADV7842_DR_STR_HIGH = 3,
-};
-
-struct adv7842_sdp_csc_coeff {
-	bool manual;
-	uint16_t scaling;
-	uint16_t A1;
-	uint16_t A2;
-	uint16_t A3;
-	uint16_t A4;
-	uint16_t B1;
-	uint16_t B2;
-	uint16_t B3;
-	uint16_t B4;
-	uint16_t C1;
-	uint16_t C2;
-	uint16_t C3;
-	uint16_t C4;
-};
-
-struct adv7842_sdp_io_sync_adjustment {
-	bool adjust;
-	uint16_t hs_beg;
-	uint16_t hs_width;
-	uint16_t de_beg;
-	uint16_t de_end;
-	uint8_t vs_beg_o;
-	uint8_t vs_beg_e;
-	uint8_t vs_end_o;
-	uint8_t vs_end_e;
-	uint8_t de_v_beg_o;
-	uint8_t de_v_beg_e;
-	uint8_t de_v_end_o;
-	uint8_t de_v_end_e;
-};
-
-/* Platform dependent definition */
-struct adv7842_platform_data {
-	/* chip reset during probe */
-	unsigned chip_reset:1;
-
-	/* DIS_PWRDNB: 1 if the PWRDNB pin is unused and unconnected */
-	unsigned disable_pwrdnb:1;
-
-	/* DIS_CABLE_DET_RST: 1 if the 5V pins are unused and unconnected */
-	unsigned disable_cable_det_rst:1;
-
-	/* Analog input muxing mode */
-	enum adv7842_ain_sel ain_sel;
-
+/* output format, may change with input */
+struct adv7842_output_format {
 	/* Bus rotation and reordering */
 	enum adv7842_op_ch_sel op_ch_sel;
-
-	/* Default mode */
-	enum adv7842_mode mode;
-
-	/* Default input */
-	unsigned input;
-
-	/* Video standard */
-	enum adv7842_vid_std_select vid_std_select;
 
 	/* Select output format */
 	enum adv7842_op_format_sel op_format_sel;
 
 	/* IO register 0x02 */
-	unsigned alt_gamma:1;
 	unsigned op_656_range:1;
 	unsigned rgb_out:1;
 	unsigned alt_data_sat:1;
@@ -192,41 +122,41 @@ struct adv7842_platform_data {
 	/* IO register 0x30 */
 	unsigned output_bus_lsb_to_msb:1;
 
-	/* IO register 0x14 */
-	enum adv7842_drive_strength dr_str_data;
-	enum adv7842_drive_strength dr_str_clk;
-	enum adv7842_drive_strength dr_str_sync;
+	/* SDP register 0x12 */
+	unsigned i2p_convert:1;
+};
 
-	/*
-	 * IO register 0x19: Adjustment to the LLC DLL phase in
-	 * increments of 1/32 of a clock period.
-	 */
-	unsigned llc_dll_phase:5;
+/* Platform dependent definition */
+struct adv7842_platform_data {
+	/* output format for corresponding inputs */
+	struct adv7842_output_format *opf;
+	int num_opf;
 
-	/* External RAM for 3-D comb or frame synchronizer */
-	unsigned sd_ram_size; /* ram size in MB */
-	unsigned sd_ram_ddr:1; /* ddr or sdr sdram */
+	/* connector - HDMI or DVI? */
+	unsigned connector_hdmi:1;
 
-	/* HDMI free run, CP-reg 0xBA */
-	unsigned hdmi_free_run_enable:1;
-	/* 0 = Mode 0: run when there is no TMDS clock
-	   1 = Mode 1: run when there is no TMDS clock or the
-	       video resolution does not match programmed one. */
-	unsigned hdmi_free_run_mode:1;
+	/* DIS_PWRDNB: 1 if the PWRDNB pin is unused and unconnected */
+	unsigned disable_pwrdnb:1;
 
-	/* SDP free run, CP-reg 0xDD */
-	unsigned sdp_free_run_auto:1;
-	unsigned sdp_free_run_man_col_en:1;
-	unsigned sdp_free_run_cbar_en:1;
-	unsigned sdp_free_run_force:1;
+	/* DIS_CABLE_DET_RST: 1 if the 5V pins are unused and unconnected */
+	unsigned disable_cable_det_rst:1;
 
-	/* HPA manual (0) or auto (1), affects HDMI register 0x69 */
-	unsigned hpa_auto:1;
+	/* Analog input muxing mode */
+	enum adv7842_ain_sel ain_sel;
 
-	struct adv7842_sdp_csc_coeff sdp_csc_coeff;
+	unsigned alt_gamma:1;
 
-	struct adv7842_sdp_io_sync_adjustment sdp_io_sync_625;
-	struct adv7842_sdp_io_sync_adjustment sdp_io_sync_525;
+	/* Primary mode */
+	enum adv7842_prim_mode prim_mode;
+
+	/* Video standard */
+	enum adv7842_vid_std_select vid_std_select;
+
+	/* Input Color Space */
+	enum adv7842_inp_color_space inp_color_space;
+
+	/* Free run */
+	unsigned hdmi_free_run_mode;
 
 	/* i2c addresses */
 	u8 i2c_sdp_io;
@@ -240,21 +170,19 @@ struct adv7842_platform_data {
 	u8 i2c_infoframe;
 	u8 i2c_cec;
 	u8 i2c_avlink;
+	/* I/O expander on ADI adv7842 ez-extender board */
+	u8 i2c_ex;
 };
 
-#define V4L2_CID_ADV_RX_ANALOG_SAMPLING_PHASE	(V4L2_CID_DV_CLASS_BASE + 0x1000)
-#define V4L2_CID_ADV_RX_FREE_RUN_COLOR_MANUAL	(V4L2_CID_DV_CLASS_BASE + 0x1001)
-#define V4L2_CID_ADV_RX_FREE_RUN_COLOR		(V4L2_CID_DV_CLASS_BASE + 0x1002)
-
 /* notify events */
-#define ADV7842_FMT_CHANGE	1
+#define ADV7842_HOTPLUG		1
+#define ADV7842_FMT_CHANGE	2
+#define ADV7842_CEC_TX		3
+#define ADV7842_CEC_RX		4
 
-/* custom ioctl, used to test the external RAM that's used by the
- * deinterlacer. */
-#define ADV7842_CMD_RAM_TEST _IO('V', BASE_VIDIOC_PRIVATE)
-
-#define ADV7842_EDID_PORT_A   0
-#define ADV7842_EDID_PORT_B   1
-#define ADV7842_EDID_PORT_VGA 2
+struct adv7842_cec_arg {
+	void *arg;
+	u32 f_flags;
+};
 
 #endif
