@@ -482,7 +482,12 @@ dtb-$(CONFIG_ARCH_SHMOBILE_MULTI) += \
 	r8a7790-lager.dtb \
 	r8a7791-henninger.dtb \
 	r8a7791-koelsch.dtb \
-	r8a7794-alt.dtb
+	r8a7790-lager.dtb \
+	r8a7779-marzen.dtb \
+	r8a7794-alt.dtb \
+dtb-$(CONFIG_ARCH_SC58X) += sc589-ezkit.dtb \
+	sc584-ezkit.dtb \
+dtb-$(CONFIG_ARCH_SC57X) += sc573-ezkit.dtb \
 dtb-$(CONFIG_ARCH_SOCFPGA) += \
 	socfpga_arria5_socdk.dtb \
 	socfpga_arria10_socdk.dtb \
