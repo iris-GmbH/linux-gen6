@@ -2018,6 +2018,16 @@ void dev_net_set(struct net_device *dev, struct net *net)
 	write_pnet(&dev->nd_net, net);
 }
 
+static inline bool netdev_uses_stpid_tags(struct net_device *dev)
+{
+#ifdef CONFIG_NET_DSA_TAG_STPID
+	if (dev->dsa_ptr != NULL)
+		return dsa_uses_stpid_tags(dev->dsa_ptr);
+#endif
+
+	return 0;
+}
+
 /**
  *	netdev_priv - access network device private data
  *	@dev: network device
