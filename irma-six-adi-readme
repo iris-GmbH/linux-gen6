@@ -1,0 +1,8 @@
+these adi-extensions (folders) are not included/updated from adi-source-patches:
+
+- arch/blackfin
+- Documentation/
+- sound/
+- drivers/video
+- drivers/input
+- drivers/media/platform/blackfin
