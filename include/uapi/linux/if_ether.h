@@ -145,6 +145,8 @@
 					 * aggregation protocol
 					 */
 
+#define ETH_P_STPID    0x001D          /* STPID switch tagging         */
+
 /*
  *	This is an Ethernet frame header.
  */
