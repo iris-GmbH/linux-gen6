@@ -47,6 +47,8 @@ obj-$(CONFIG_VIDEO_STI_HDMI_CEC) 	+= sti/cec/
 
 obj-$(CONFIG_VIDEO_STI_DELTA)		+= sti/delta/
 
+obj-y					+= iris-gen6/
+
 obj-y 					+= stm32/
 
 obj-y                                   += blackfin/

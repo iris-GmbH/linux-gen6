@@ -520,9 +520,9 @@ static int mt9v022_s_power(struct v4l2_subdev *sd, int on)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct soc_camera_subdev_desc *ssdd = soc_camera_i2c_to_desc(client);
-	struct mt9v022 *mt9v022 = to_mt9v022(client);
-
-	return soc_camera_set_power(&client->dev, ssdd, mt9v022->clk, on);
+	//struct mt9v022 *mt9v022 = to_mt9v022(client);
+	//return soc_camera_set_power(&client->dev, ssdd, mt9v022->clk, on);
+	return soc_camera_set_power(&client->dev, ssdd, 0, on);
 }
 
 static int mt9v022_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
@@ -965,13 +965,13 @@ static int mt9v022_probe(struct i2c_client *client,
 	mt9v022->clk = v4l2_clk_get(&client->dev, "mclk");
 	if (IS_ERR(mt9v022->clk)) {
 		ret = PTR_ERR(mt9v022->clk);
-		goto eclkget;
+		//goto eclkget;
 	}
 
 	ret = mt9v022_video_probe(client);
 	if (ret) {
 		v4l2_clk_put(mt9v022->clk);
-eclkget:
+//eclkget:
 		v4l2_ctrl_handler_free(&mt9v022->hdl);
 	}
 

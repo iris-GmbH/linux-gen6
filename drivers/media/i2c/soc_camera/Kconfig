@@ -1,5 +1,11 @@
 comment "soc_camera sensor drivers"
 
+config SOC_CAMERA_EPC660
+	tristate "epc660 support"
+	depends on SOC_CAMERA && I2C
+	help
+	  This driver supports EPC660 cameras from Espros
+
 config SOC_CAMERA_IMX074
 	tristate "imx074 support"
 	depends on SOC_CAMERA && I2C
