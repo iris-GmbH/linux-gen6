@@ -34,12 +34,14 @@
 #define WDSIZE_256		0x00000500	/* Transfer Word Size = 32 */
 
 #define DMA2D			0x04000000	/* DMA Mode (2D/1D*) */
+#define DMATOVEN		0x01000000	/* DMA Trigger Overrun Error Enable */
 #define RESTART			0x00000004	/* DMA Buffer Clear SYNC */
 
 #define DI_EN_X			0x00100000	/* Data Interrupt Enable in X count */
 #define DI_EN_Y			0x00200000	/* Data Interrupt Enable in Y count */
 #define DI_EN_P			0x00300000	/* Data Interrupt Enable in Peripheral */
 #define DI_EN			DI_EN_X		/* Data Interrupt Enable */
+#define DI_MASK			0x00300000	/* Data Interrupt Enable */
 
 #define NDSIZE_0		0x00000000	/* Next Descriptor Size = 1 */
 #define NDSIZE_1		0x00010000	/* Next Descriptor Size = 2 */
@@ -68,6 +70,8 @@
 #define DMAFLOW_STOP		0x000000000	/* Stop Mode */
 #define DMAFLOW_AUTO		0x000001000	/* Autobuffer Mode */
 
+#define DESCIDCPY		0x02000000	/* Descriptor ID Copy Control */
+
 /* DMA_IRQ_STATUS Masks */
 #define DMA_DONE		0x1	/* DMA Completion Interrupt Status */
 #define DMA_ERR			0x2	/* DMA Error Interrupt Status */
@@ -78,6 +82,8 @@ struct dma_desc_array {
 	unsigned long cfg;
 	unsigned long x_count;
 	long x_modify;
+	unsigned long y_count;
+	long y_modify;
 } __packed;
 
 struct dmasg {
@@ -257,6 +263,10 @@ gen_dma_config(char direction, char flow_mode,
 		mem_width, syncmode, mem_width);
 }
 
+static inline unsigned long get_dma_start_addr(unsigned int channel)
+{
+	return readl(&dma_ch[channel].regs->start_addr);
+}
 static inline unsigned long get_dma_curr_irqstat(unsigned int channel)
 {
 	return readl(&dma_ch[channel].regs->irq_status);
@@ -269,6 +279,22 @@ static inline unsigned long get_dma_curr_ycount(unsigned int channel)
 {
 	return readl(&dma_ch[channel].regs->curr_y_count);
 }
+static inline unsigned long get_dma_x_count(unsigned int channel)
+{
+	return readl(&dma_ch[channel].regs->x_count);
+}
+static inline unsigned long get_dma_y_count(unsigned int channel)
+{
+	return readl(&dma_ch[channel].regs->y_count);
+}
+static inline long get_dma_x_modify(unsigned int channel)
+{
+	return readl(&dma_ch[channel].regs->x_modify);
+}
+static inline long get_dma_y_modify(unsigned int channel)
+{
+	return readl(&dma_ch[channel].regs->y_modify);
+}
 static inline void *get_dma_next_desc_ptr(unsigned int channel)
 {
 	return (void *)readl(&dma_ch[channel].regs->next_desc_ptr);
@@ -276,6 +302,10 @@ static inline void *get_dma_next_desc_ptr(unsigned int channel)
 static inline void *get_dma_curr_desc_ptr(unsigned int channel)
 {
 	return (void *)readl(&dma_ch[channel].regs->curr_desc_ptr);
+}
+static inline void *get_dma_prev_desc_ptr(unsigned int channel)
+{
+	return (void *)readl(&dma_ch[channel].regs->prev_desc_ptr);
 }
 static inline unsigned long get_dma_config(unsigned int channel)
 {

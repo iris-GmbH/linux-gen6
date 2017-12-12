@@ -1,0 +1,18 @@
+config IRIS_CUSTOM_DRIVERS
+	bool "Driver for device discovery for Iris irma-six platform"
+	default n
+	help
+	  Custom drivers for devices produced by Iris GmbH.
+
+
+menu "Iris Custom Drivers"
+	depends on IRIS_CUSTOM_DRIVERS
+
+config IRIS_IRMA_SIX_HARDWARE_DISCOVERY
+	bool "Driver for hardware discovery for Iris irma-six platform"
+	default n
+	depends on ARCH_SC57X && OF && VIDEO_IRIS_GEN6_EPC660_CAPTURE
+	help
+	  A driver that can do additional device initialization and device population on irma-six devices.
+
+endmenu

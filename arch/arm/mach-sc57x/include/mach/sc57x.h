@@ -156,6 +156,8 @@
 #define REG_RCU0_SISTAT                 0x3108C020         /* RCU0 System Interface Status Register */
 #define REG_RCU0_BCODE                  0x3108C028         /* RCU0 Boot Code Register */
 #define REG_RCU0_MSG_SET                0x3108C070         /* RCU0 Message Set Bits Register */
+#define REG_RCU0_SVECT1                 0x3108C030         /* RCU0 Software Vector Register 1 */
+#define REG_RCU0_SVECT2                 0x3108C034         /* RCU0 Software Vector Register 2 */
 
 /* =========================
         SPU0
@@ -167,6 +169,9 @@
    ========================= */
 #define REG_PADS0_PCFG0                 0x31004404         /* PADS0 Peripheral Configuration0 Register */
 
+#define PADS_PCFG_EMACNORESET		0x4	   	   /* EMAC reset: 0 = asserted */
+#define PADS_PCFG_EMACRMII		0x10		   /* Set EMAC to RMII mode */
+
 /* =========================
         LP0
    ========================= */
@@ -176,3 +181,9 @@
         LP1
    ========================= */
 #define LP1_CTL                     0x30FFE100 /* LP1 Control Register */
+
+/* =========================
+        EPPI
+   ========================= */
+#define EPPI0_CTL                   0x3102D020 /* EPPI0 Control Register */
+

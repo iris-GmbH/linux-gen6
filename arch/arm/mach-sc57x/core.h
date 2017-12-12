@@ -17,6 +17,7 @@ extern void __init sc57x_init_early(void);
 extern void __init sc57x_init_irq(void);
 extern void __init sc57x_map_io(void);
 extern void sc57x_timer_init(void);
+extern struct sc57x_gptimer *sc57x_timer_of_init(struct device_node *node);
 extern void sc57x_restart(enum reboot_mode, const char *);
 extern void sc57x_clock_init(void);
 #endif

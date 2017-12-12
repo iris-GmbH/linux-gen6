@@ -26,7 +26,7 @@
 		timer5 = &gptimer5;
 		timer6 = &gptimer6;
 		timer7 = &gptimer7;
-		spi0   = &spi_0;
+		/*spi0   = &spi_0;*/
 		spi1   = &spi_1;
 		spi2   = &spi_2;
 		ethernet0 = &emac0;
@@ -104,6 +104,7 @@
 			clock-khz = <100>;
 		};
 
+/*		
 		spi_0: spi@0x3102E000 {
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -115,6 +116,7 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&spi0_default>;
 		};
+*/
 		spi_1:spi@0x3102F000 {
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -153,7 +155,7 @@
 			dma_channel = <18>;
 			crypto_crc_poly = <0x5c5c5c5c>;
 		};
-
+/*
 		can0: can@0x31000200 {
 			compatible = "adi,can";
 			reg = <0x31000200 0x5FF>;
@@ -182,7 +184,7 @@
 				     <0 88 0>,
 				     <0 89 0>;
 		};
-
+*/
 		gptimer0: gptimer@0x31018060 {
 			compatible = "adi,sc57x-timer-core";
 			reg = <0x31018060 0x20>;
@@ -259,7 +261,7 @@
 			snps,pbl = <2>;
 			snps,force_sf_dma_mode;
 			snps,perfect-filter-entries = <32>;
-			phy-mode = "rgmii";
+			phy-mode = "rmii";
 			clock-names = "stmmaceth";
 			pinctrl-names = "default";
 			pinctrl-0 = <&eth0_default>;
@@ -286,7 +288,7 @@
 
 			eth {
 				eth0_default: eth0@0 {
-					adi,group = "eth0grp";
+					adi,group = "eth0rmiigrp";
 					adi,function = "eth0";
 				};
 			};
@@ -315,12 +317,20 @@
 					adi,group = "ppi0_8bgrp";
 					adi,function = "ppi0";
 				};
-				ppi0_16b: ppi0@1 {
+				ppi0_10b: ppi0@1 {
+					adi,group = "ppi0_10bgrp";
+					adi,function = "ppi0";
+				};
+				ppi0_12b: ppi0@2 {
+					adi,group = "ppi0_12bgrp";
+					adi,function = "ppi0";
+				};
+				ppi0_16b: ppi0@3 {
 					adi,group = "ppi0_16bgrp";
 					adi,function = "ppi0";
 				};
 			};
-
+/*
 			can {
 				can0_default: can0@0 {
 					adi,group = "can0grp";
@@ -331,6 +341,7 @@
 					adi,function = "can1";
 				};
 			};
+*/
 		};
 
 		pint0: pint@0x31005000 {
