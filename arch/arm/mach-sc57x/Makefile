@@ -7,3 +7,5 @@ obj-$(CONFIG_ARCH_SC57X)		+= sc57x-ezkit.o core_control.o
 obj-$(CONFIG_ARCH_SRAM_ALLOC)		+= sram.o sram_mmap.o
 obj-$(CONFIG_SC57X_PCI)                 += pcie.o
 obj-$(CONFIG_ICC:m=y) += icc.o
+
+obj-$(CONFIG_IRIS_CUSTOM_DRIVERS) += iris/
