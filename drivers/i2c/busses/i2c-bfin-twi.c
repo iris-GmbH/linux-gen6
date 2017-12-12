@@ -21,10 +21,19 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
+#include "bfin_twi.h"
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_address.h>
 
 #include <asm/irq.h>
+#ifdef CONFIG_ARCH_HEADER_IN_MACH
+#include <mach/portmux.h>
+#include <mach/bfin_twi.h>
+#else
 #include <asm/portmux.h>
 #include <asm/bfin_twi.h>
+#endif
 
 /* SMBus mode*/
 #define TWI_I2C_MODE_STANDARD		1
@@ -321,7 +330,7 @@ static int bfin_twi_do_master_xfer(struct i2c_adapter *adap,
 	write_MASTER_CTL(iface, read_MASTER_CTL(iface) | MEN |
 		(iface->msg_num > 1 ? RSTART : 0) |
 		((iface->read_write == I2C_SMBUS_READ) ? MDIR : 0) |
-		((CONFIG_I2C_BLACKFIN_TWI_CLK_KHZ > 100) ? FAST : 0));
+		((iface->twi_clk > 100) ? FAST : 0));
 
 	while (!iface->result) {
 		if (!wait_for_completion_timeout(&iface->complete,
@@ -468,7 +477,7 @@ int bfin_twi_do_smbus_xfer(struct i2c_adapter *adap, u16 addr,
 		}
 		/* Master enable */
 		write_MASTER_CTL(iface, read_MASTER_CTL(iface) | MEN |
-			((CONFIG_I2C_BLACKFIN_TWI_CLK_KHZ>100) ? FAST : 0));
+			((iface->twi_clk > 100) ? FAST : 0));
 		break;
 	case TWI_I2C_MODE_COMBINED:
 		write_XMT_DATA8(iface, iface->command);
@@ -480,7 +489,7 @@ int bfin_twi_do_smbus_xfer(struct i2c_adapter *adap, u16 addr,
 			write_MASTER_CTL(iface, 0x1 << 6);
 		/* Master enable */
 		write_MASTER_CTL(iface, read_MASTER_CTL(iface) | MEN | RSTART |
-			((CONFIG_I2C_BLACKFIN_TWI_CLK_KHZ>100) ? FAST : 0));
+			((iface->twi_clk > 100) ? FAST : 0));
 		break;
 	default:
 		write_MASTER_CTL(iface, 0);
@@ -523,7 +532,7 @@ int bfin_twi_do_smbus_xfer(struct i2c_adapter *adap, u16 addr,
 		/* Master enable */
 		write_MASTER_CTL(iface, read_MASTER_CTL(iface) | MEN |
 			((iface->read_write == I2C_SMBUS_READ) ? MDIR : 0) |
-			((CONFIG_I2C_BLACKFIN_TWI_CLK_KHZ > 100) ? FAST : 0));
+			((iface->twi_clk > 100) ? FAST : 0));
 		break;
 	}
 
@@ -611,11 +620,23 @@ static SIMPLE_DEV_PM_OPS(i2c_bfin_twi_pm,
 #define I2C_BFIN_TWI_PM_OPS	NULL
 #endif
 
+#ifdef CONFIG_OF
+static const struct of_device_id bfin_twi_of_match[] = {
+	{
+		.compatible = "adi,twi",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, bfin_twi_of_match);
+#endif
+
 static int i2c_bfin_twi_probe(struct platform_device *pdev)
 {
 	struct bfin_twi_iface *iface;
 	struct i2c_adapter *p_adap;
 	struct resource *res;
+	const struct of_device_id *match;
+	struct device_node *node = pdev->dev.of_node;
 	int rc;
 	unsigned int clkhilow;
 
@@ -628,12 +649,25 @@ static int i2c_bfin_twi_probe(struct platform_device *pdev)
 
 	spin_lock_init(&(iface->lock));
 
+	match = of_match_device(of_match_ptr(bfin_twi_of_match), &pdev->dev);
+	if (match) {
+		if (of_property_read_u32(node, "clock-khz",
+			&iface->twi_clk))
+			iface->twi_clk = 50;
+	} else
+		iface->twi_clk = CONFIG_I2C_BLACKFIN_TWI_CLK_KHZ;
+
 	/* Find and map our resources */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (res == NULL) {
+		dev_err(&pdev->dev, "Cannot get IORESOURCE_MEM\n");
+		return -ENOENT;
+	}
+
 	iface->regs_base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(iface->regs_base)) {
+	if (IS_ERR((void *)iface->regs_base)) {
 		dev_err(&pdev->dev, "Cannot map IO\n");
-		return PTR_ERR(iface->regs_base);
+		return PTR_ERR((void *)iface->regs_base);
 	}
 
 	iface->irq = platform_get_irq(pdev, 0);
@@ -649,12 +683,12 @@ static int i2c_bfin_twi_probe(struct platform_device *pdev)
 	p_adap->algo_data = iface;
 	p_adap->class = I2C_CLASS_DEPRECATED;
 	p_adap->dev.parent = &pdev->dev;
+	p_adap->dev.of_node = node;
 	p_adap->timeout = 5 * HZ;
 	p_adap->retries = 3;
 
-	rc = peripheral_request_list(
-			dev_get_platdata(&pdev->dev),
-			"i2c-bfin-twi");
+	rc = peripheral_request_list((unsigned short *)pdev->dev.platform_data,
+					"i2c-bfin-twi");
 	if (rc) {
 		dev_err(&pdev->dev, "Can't setup pin mux!\n");
 		return -EBUSY;
@@ -675,7 +709,7 @@ static int i2c_bfin_twi_probe(struct platform_device *pdev)
 	 * We will not end up with a CLKDIV=0 because no one will specify
 	 * 20kHz SCL or less in Kconfig now. (5 * 1000 / 20 = 250)
 	 */
-	clkhilow = ((10 * 1000 / CONFIG_I2C_BLACKFIN_TWI_CLK_KHZ) + 1) / 2;
+	clkhilow = ((10 * 1000 / iface->twi_clk) + 1) / 2;
 
 	/* Set Twi interface clock as specified */
 	write_CLKDIV(iface, (clkhilow << 8) | clkhilow);
@@ -684,18 +718,20 @@ static int i2c_bfin_twi_probe(struct platform_device *pdev)
 	write_CONTROL(iface, read_CONTROL(iface) | TWI_ENA);
 
 	rc = i2c_add_numbered_adapter(p_adap);
-	if (rc < 0)
+	if (rc < 0) {
+		dev_err(&pdev->dev, "Can't add i2c adapter!\n");
 		goto out_error;
+	}
 
 	platform_set_drvdata(pdev, iface);
 
-	dev_info(&pdev->dev, "Blackfin BF5xx on-chip I2C TWI Controller, "
+	dev_info(&pdev->dev, "Blackfin on-chip I2C TWI Contoller, "
 		"regs_base@%p\n", iface->regs_base);
 
 	return 0;
 
 out_error:
-	peripheral_free_list(dev_get_platdata(&pdev->dev));
+	peripheral_free_list((unsigned short *)pdev->dev.platform_data);
 	return rc;
 }
 
@@ -704,7 +740,8 @@ static int i2c_bfin_twi_remove(struct platform_device *pdev)
 	struct bfin_twi_iface *iface = platform_get_drvdata(pdev);
 
 	i2c_del_adapter(&(iface->adap));
-	peripheral_free_list(dev_get_platdata(&pdev->dev));
+	free_irq(iface->irq, iface);
+	peripheral_free_list((unsigned short *)pdev->dev.platform_data);
 
 	return 0;
 }
@@ -715,6 +752,7 @@ static struct platform_driver i2c_bfin_twi_driver = {
 	.driver		= {
 		.name	= "i2c-bfin-twi",
 		.pm	= I2C_BFIN_TWI_PM_OPS,
+		.of_match_table = of_match_ptr(bfin_twi_of_match),
 	},
 };
 
@@ -732,6 +770,6 @@ subsys_initcall(i2c_bfin_twi_init);
 module_exit(i2c_bfin_twi_exit);
 
 MODULE_AUTHOR("Bryan Wu, Sonic Zhang");
-MODULE_DESCRIPTION("Blackfin BF5xx on-chip I2C TWI Controller Driver");
+MODULE_DESCRIPTION("Blackfin on-chip I2C TWI Contoller Driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:i2c-bfin-twi");

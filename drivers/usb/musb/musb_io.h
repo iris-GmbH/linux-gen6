@@ -49,6 +49,7 @@
  * @write_fifo:	platform specific function to write fifo
  * @busctl_offset: platform specific function to get busctl offset
  */
+
 struct musb_io {
 	u32	quirks;
 	u32	(*ep_offset)(u8 epnum, u16 offset);

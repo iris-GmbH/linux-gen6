@@ -344,7 +344,12 @@ static int if_sdio_card_to_host(struct if_sdio_card *card)
 	 * controllers, but we can at least try.
 	 */
 	chunk = sdio_align_size(card->func, size);
-
+	
+	/* For SD/SDIO host which only supports transferring block with size of power-of-2 */
+#if defined(CONFIG_POWEROF2_BLOCKSIZE_ONLY)
+	chunk = (chunk + card->func->cur_blksize - 1) /
+			card->func->cur_blksize * card->func->cur_blksize;
+#endif
 	ret = sdio_readsb(card->func, card->buffer, card->ioport, chunk);
 	if (ret)
 		goto out;

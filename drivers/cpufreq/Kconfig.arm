@@ -268,6 +268,20 @@ config ARM_TI_CPUFREQ
 	  data provided. Required for cpufreq support on AM335x, AM437x,
 	  DRA7x, and AM57x platforms.
 
+config SC58X_CPUFREQ
+	bool "SC58X CPUFreq support"
+	depends on ARCH_SC58X
+	default y
+	help
+	  This adds the CPUFreq driver support for SC58X SOCs.
+
+config SC57X_CPUFREQ
+	bool "SC57X CPUFreq support"
+	depends on ARCH_SC57X
+	default y
+	help
+	  This adds the CPUFreq driver support for SC57X SOCs.
+
 config ARM_PXA2xx_CPUFREQ
 	tristate "Intel PXA2xx CPUfreq driver"
 	depends on PXA27x || PXA25x

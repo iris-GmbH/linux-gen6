@@ -132,9 +132,8 @@ static int bfin_sir_set_speed(struct bfin_sir_port *port, int speed)
 		/* Set DLAB in LCR to Access THR RBR IER */
 		UART_SET_DLAB(port);
 		SSYNC();
-
-		UART_PUT_DLL(port, quot & 0xFF);
-		UART_PUT_DLH(port, (quot >> 8) & 0xFF);
+		
+		UART_PUT_CLK(port, quot);
 		SSYNC();
 
 		/* Clear DLAB in LCR */

@@ -1708,6 +1708,8 @@ static int bfin_mac_remove(struct platform_device *pdev)
 
 	bfin_phc_release(lp);
 
+	phy_disconnect(lp->phydev);
+
 	lp->mii_bus->priv = NULL;
 
 	unregister_netdev(ndev);

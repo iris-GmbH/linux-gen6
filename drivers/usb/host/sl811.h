@@ -15,6 +15,22 @@
  *  - SL811S (or HS in slave mode) has four A+B sets, at 00, 10, 20, 30
  */
 
+#ifdef CONFIG_BLACKFIN
+#if defined(CONFIG_DUMMY_DELAY_BANK0)
+# define DUMMY_DELAY_ACCESS bfin_read8(ASYNC_BANK0_BASE);
+#elif defined(CONFIG_DUMMY_DELAY_BANK1)
+# define DUMMY_DELAY_ACCESS bfin_read8(ASYNC_BANK1_BASE);
+#elif defined(CONFIG_DUMMY_DELAY_BANK2)
+# define DUMMY_DELAY_ACCESS bfin_read8(ASYNC_BANK2_BASE);
+#elif defined(CONFIG_DUMMY_DELAY_BANK3)
+# define DUMMY_DELAY_ACCESS bfin_read8(ASYNC_BANK3_BASE);
+#elif defined(CONFIG_NO_DUMMY_DELAY)
+# define DUMMY_DELAY_ACCESS do {} while (0)
+#endif
+#else
+# define DUMMY_DELAY_ACCESS do {} while (0)
+#endif
+
 #define SL811_EP_A(base)	((base) + 0)
 #define SL811_EP_B(base)	((base) + 8)
 
@@ -195,16 +211,28 @@ struct sl811h_ep {
  * NOTE:  caller must hold sl811->lock.
  */
 
-static inline u8 sl811_read(struct sl811 *sl811, int reg)
+static inline void sl811_writeb(u8 val, void __iomem *addr)
 {
-	writeb(reg, sl811->addr_reg);
-	return readb(sl811->data_reg);
+	DUMMY_DELAY_ACCESS;
+	writeb(val, addr);
 }
 
 static inline void sl811_write(struct sl811 *sl811, int reg, u8 val)
 {
-	writeb(reg, sl811->addr_reg);
-	writeb(val, sl811->data_reg);
+	sl811_writeb(reg, sl811->addr_reg);
+	sl811_writeb(val, sl811->data_reg);
+}
+
+static inline u8 sl811_readb(void __iomem *addr)
+{
+	DUMMY_DELAY_ACCESS;
+	return readb(addr);
+}
+
+static inline u8 sl811_read(struct sl811 *sl811, int reg)
+{
+	sl811_writeb(reg, sl811->addr_reg);
+	return sl811_readb(sl811->data_reg);
 }
 
 static inline void
@@ -215,12 +243,12 @@ sl811_write_buf(struct sl811 *sl811, int addr, const void *buf, size_t count)
 
 	if (!count)
 		return;
-	writeb(addr, sl811->addr_reg);
+	sl811_writeb(addr, sl811->addr_reg);
 
 	data = buf;
 	data_reg = sl811->data_reg;
 	do {
-		writeb(*data++, data_reg);
+		sl811_writeb(*data++, data_reg);
 	} while (--count);
 }
 
@@ -232,12 +260,12 @@ sl811_read_buf(struct sl811 *sl811, int addr, void *buf, size_t count)
 
 	if (!count)
 		return;
-	writeb(addr, sl811->addr_reg);
+	sl811_writeb(addr, sl811->addr_reg);
 
 	data = buf;
 	data_reg = sl811->data_reg;
 	do {
-		*data++ = readb(data_reg);
+		*data++ = sl811_readb(data_reg);
 	} while (--count);
 }
 

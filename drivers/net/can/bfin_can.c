@@ -8,6 +8,7 @@
  * Licensed under the GPL-2 or later.
  */
 
+#include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/bitops.h>
@@ -17,10 +18,22 @@
 #include <linux/skbuff.h>
 #include <linux/platform_device.h>
 
+#include <linux/spi/spi.h>
+#include <linux/gpio.h>
+
 #include <linux/can/dev.h>
 #include <linux/can/error.h>
+#include "bfin_can.h"
 
+#ifdef CONFIG_ARCH_HEADER_IN_MACH
+#include <mach/portmux.h>
+#else
 #include <asm/portmux.h>
+#endif
+
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_address.h>
 
 #define DRV_NAME "bfin_can"
 #define BFIN_CAN_TIMEOUT 100
@@ -146,6 +159,7 @@ struct bfin_can_priv {
 	int tx_irq;
 	int err_irq;
 	unsigned short *pin_list;
+	struct spi_device *spi;
 };
 
 /*
@@ -153,7 +167,7 @@ struct bfin_can_priv {
  */
 static const struct can_bittiming_const bfin_can_bittiming_const = {
 	.name = DRV_NAME,
-	.tseg1_min = 1,
+	.tseg1_min = 2,
 	.tseg1_max = 16,
 	.tseg2_min = 1,
 	.tseg2_max = 8,
@@ -501,6 +515,8 @@ static int bfin_can_err(struct net_device *dev, u16 isrc, u16 status)
 			cf->data[2] |= CAN_ERR_PROT_FORM;
 		else if (status & SER)
 			cf->data[2] |= CAN_ERR_PROT_STUFF;
+		else
+			cf->data[2] |= CAN_ERR_PROT_UNSPEC;
 	}
 
 	priv->can.state = state;
@@ -632,22 +648,115 @@ static const struct net_device_ops bfin_can_netdev_ops = {
 	.ndo_change_mtu         = can_change_mtu,
 };
 
+#ifdef CONFIG_OF
+static const struct of_device_id adi_can_of_match[] = {
+	{
+		.compatible = "adi,can",
+	},
+	{},
+};
+
+MODULE_DEVICE_TABLE(of, adi_can_of_match);
+#endif
+
+static int phy_set_normal_mode(struct spi_device *spi)
+{
+	struct spi_message msg;
+	struct spi_transfer x;
+	int err;
+
+	u8 data[2];
+	u8 rcv[2];
+
+	data[0] = (0x1<<1);
+	data[1] = 0x7;
+
+	spi_message_init(&msg);
+	memset(&x, 0, sizeof(x));
+
+	spi->mode |= SPI_MODE_1;
+	spi->bits_per_word = 8;
+	err = spi_setup(spi);
+	x.tx_buf = data;
+	x.rx_buf = rcv;
+	x.len = 2;
+
+	spi_message_add_tail(&x, &msg);
+	err = spi_sync(spi, &msg);
+
+	return err;
+}
+
+static int dummy_probe(struct spi_device *spi)
+{
+	return 0;
+}
+
+static int dummy_remove(struct spi_device *spi)
+{
+	return 0;
+}
+
+static struct spi_driver dummy_driver = {
+	.driver.name = "dummy",
+	.probe       = dummy_probe,
+	.remove      = dummy_remove,
+};
+
+static int phy1145_startup(struct bfin_can_priv *priv, u16 spi_bus,
+			   u16 spi_cs, u32 spi_clk)
+{
+	int ret;
+	struct spi_master *master;
+	struct spi_board_info board = {
+		.modalias               = "dummy",
+		.max_speed_hz           = spi_clk,
+		.bus_num                = spi_bus,
+		.chip_select            = spi_cs,
+	};
+
+	master = spi_busnum_to_master(0);
+	if (!master)
+		return -EPROBE_DEFER;
+	priv->spi = spi_new_device(master, &board);
+	if (!priv->spi)
+		return -EINVAL;
+	ret = spi_register_driver(&dummy_driver);
+	if (ret < 0) {
+		spi_unregister_device(priv->spi);
+		return ret;
+	}
+
+	phy_set_normal_mode(priv->spi);
+
+	return 0;
+}
+
 static int bfin_can_probe(struct platform_device *pdev)
 {
 	int err;
+	struct device_node *np = pdev->dev.of_node;
 	struct net_device *dev;
 	struct bfin_can_priv *priv;
 	struct resource *res_mem, *rx_irq, *tx_irq, *err_irq;
 	unsigned short *pdata;
+	struct clk *clk_source;
 
-	pdata = dev_get_platdata(&pdev->dev);
-	if (!pdata) {
-		dev_err(&pdev->dev, "No platform data provided!\n");
-		err = -EINVAL;
-		goto exit;
-	}
+	if (!np)
+		return -ENODEV;
+
+	const struct of_device_id *match;
+
+	match = of_match_device(of_match_ptr(adi_can_of_match), &pdev->dev);
+
+	pdata = (unsigned short *)pdev->dev.platform_data;
 
 	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (res_mem == NULL) {
+		dev_err(&pdev->dev, "Cannot get IORESOURCE_MEM\n");
+		return -ENOENT;
+	}
+
 	rx_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	tx_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 1);
 	err_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 2);
@@ -659,7 +768,7 @@ static int bfin_can_probe(struct platform_device *pdev)
 	/* request peripheral pins */
 	err = peripheral_request_list(pdata, dev_name(&pdev->dev));
 	if (err)
-		goto exit;
+		goto exit_mem_release;
 
 	dev = alloc_bfin_candev();
 	if (!dev) {
@@ -670,16 +779,22 @@ static int bfin_can_probe(struct platform_device *pdev)
 	priv = netdev_priv(dev);
 
 	priv->membase = devm_ioremap_resource(&pdev->dev, res_mem);
-	if (IS_ERR(priv->membase)) {
-		err = PTR_ERR(priv->membase);
-		goto exit_peri_pin_free;
+	if (IS_ERR((void *)priv->membase)) {
+		dev_err(&pdev->dev, "Cannot map IO\n");
+		return PTR_ERR((void *)priv->membase);
 	}
 
 	priv->rx_irq = rx_irq->start;
 	priv->tx_irq = tx_irq->start;
 	priv->err_irq = err_irq->start;
 	priv->pin_list = pdata;
-	priv->can.clock.freq = get_sclk();
+
+	clk_source = devm_clk_get(&pdev->dev, "can");
+	if (IS_ERR(clk_source)) {
+		dev_err(dev, "can not get can clock\n");
+		return PTR_ERR(clk_source);
+	}
+	priv->can.clock.freq = clk_get_rate(clk_source);
 
 	platform_set_drvdata(pdev, dev);
 	SET_NETDEV_DEV(dev, &pdev->dev);
@@ -700,12 +815,50 @@ static int bfin_can_probe(struct platform_device *pdev)
 		"(&reg_base=%p, rx_irq=%d, tx_irq=%d, err_irq=%d, sclk=%d)\n",
 		DRV_NAME, priv->membase, priv->rx_irq,
 		priv->tx_irq, priv->err_irq, priv->can.clock.freq);
+
+	if (of_property_match_string(np, "phy-name", "tja1055") >= 0) {
+		struct gpio_desc *en_gpio, *stb_gpio;
+
+		en_gpio = devm_gpiod_get_index(&pdev->dev, "phy", 0);
+		if (IS_ERR(en_gpio)) {
+			err = PTR_ERR(en_gpio);
+			if (err != -ENOENT && err != -ENOSYS)
+				goto exit_candev_unreg;
+		}
+		gpiod_direction_output(en_gpio, 1);
+
+		stb_gpio = devm_gpiod_get_index(&pdev->dev, "phy", 1);
+		if (IS_ERR(stb_gpio)) {
+			err = PTR_ERR(stb_gpio);
+			if (err != -ENOENT && err != -ENOSYS)
+				goto exit_candev_unreg;
+		}
+		gpiod_direction_output(stb_gpio, 0);
+	}
+
+	if (of_property_match_string(np, "phy-name", "tja1145") >= 0) {
+		u16 spi_bus, spi_cs;
+		u32 spi_clk;
+		of_property_read_u16(np, "phy-spibus", &spi_bus);
+		of_property_read_u16(np, "phy-spics", &spi_cs);
+		of_property_read_u32(np, "phy-spiclk", &spi_clk);
+		err = phy1145_startup(priv, spi_bus, spi_cs, spi_clk);
+		if (err < 0) {
+			dev_err(&pdev->dev, "Can't start can phy\n");
+			goto exit_candev_unreg;
+		}
+	}
+
 	return 0;
 
+exit_candev_unreg:
+	unregister_candev(dev);
 exit_candev_free:
 	free_candev(dev);
 exit_peri_pin_free:
 	peripheral_free_list(pdata);
+exit_mem_release:
+	release_mem_region(res_mem->start, resource_size(res_mem));
 exit:
 	return err;
 }
@@ -714,10 +867,14 @@ static int bfin_can_remove(struct platform_device *pdev)
 {
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct bfin_can_priv *priv = netdev_priv(dev);
+	struct resource *res;
 
 	bfin_can_set_reset_mode(dev);
 
 	unregister_candev(dev);
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	release_mem_region(res->start, resource_size(res));
 
 	peripheral_free_list(priv->pin_list);
 
@@ -773,6 +930,7 @@ static struct platform_driver bfin_can_driver = {
 	.resume = bfin_can_resume,
 	.driver = {
 		.name = DRV_NAME,
+		.of_match_table = of_match_ptr(adi_can_of_match),
 	},
 };
 

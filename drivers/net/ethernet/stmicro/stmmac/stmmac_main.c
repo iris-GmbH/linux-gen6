@@ -3684,9 +3684,12 @@ static irqreturn_t stmmac_interrupt(int irq, void *dev_id)
  */
 static void stmmac_poll_controller(struct net_device *dev)
 {
-	disable_irq(dev->irq);
+	unsigned long flags;
+	//disable_irq(dev->irq);
+	local_irq_save(flags);
 	stmmac_interrupt(dev->irq, dev);
-	enable_irq(dev->irq);
+	//enable_irq(dev->irq);
+	local_irq_restore(flags);
 }
 #endif
 

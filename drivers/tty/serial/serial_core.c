@@ -2327,6 +2327,39 @@ uart_configure_port(struct uart_driver *drv, struct uart_state *state,
 	}
 }
 
+#if defined(CONFIG_KGDB_SERIAL_CONSOLE) || \
+	defined(CONFIG_KGDB_SERIAL_CONSOLE_MODULE)
+static int uart_kgdboc_port_startup(struct tty_driver *driver, int line)
+{
+	struct uart_driver *drv = driver->driver_state;
+	struct uart_state *state = drv->state + line;
+	struct uart_port *port;
+
+	if (!state || !state->uart_port)
+		return -1;
+
+	port = state->uart_port;
+	if (port->ops->kgdboc_port_startup)
+		return port->ops->kgdboc_port_startup(port);
+	else
+		return -1;
+}
+
+static void uart_kgdboc_port_shutdown(struct tty_driver *driver, int line)
+{
+	struct uart_driver *drv = driver->driver_state;
+	struct uart_state *state = drv->state + line;
+	struct uart_port *port;
+
+	if (!state || !state->uart_port)
+		return;
+
+	port = state->uart_port;
+	if (port->ops->kgdboc_port_shutdown)
+		port->ops->kgdboc_port_shutdown(port);
+}
+#endif
+
 #ifdef CONFIG_CONSOLE_POLL
 
 static int uart_poll_init(struct tty_driver *driver, int line, char *options)
@@ -2427,6 +2460,11 @@ static const struct tty_operations uart_ops = {
 	.tiocmget	= uart_tiocmget,
 	.tiocmset	= uart_tiocmset,
 	.get_icount	= uart_get_icount,
+#if defined(CONFIG_KGDB_SERIAL_CONSOLE) || \
+	defined(CONFIG_KGDB_SERIAL_CONSOLE_MODULE)
+	.kgdboc_port_startup	= uart_kgdboc_port_startup,
+	.kgdboc_port_shutdown	= uart_kgdboc_port_shutdown,
+#endif
 #ifdef CONFIG_CONSOLE_POLL
 	.poll_init	= uart_poll_init,
 	.poll_get_char	= uart_poll_get_char,

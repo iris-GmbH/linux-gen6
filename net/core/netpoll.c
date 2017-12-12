@@ -135,6 +135,10 @@ static void queue_process(struct work_struct *work)
 	}
 }
 
+#ifdef CONFIG_KGDB
+extern atomic_t kgdb_active;
+#endif
+
 /*
  * Check whether delayed processing was scheduled for our NIC. If so,
  * we attempt to grab the poll lock and use ->poll() to pump the card.
@@ -154,6 +158,9 @@ static void poll_one_napi(struct napi_struct *napi)
 	 * synchronized by this test which is only made while
 	 * holding the napi->poll_lock.
 	 */
+#ifdef CONFIG_KGDB
+	if (atomic_read(&kgdb_active) < 0)
+#endif
 	if (!test_bit(NAPI_STATE_SCHED, &napi->state))
 		return;
 

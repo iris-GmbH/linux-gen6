@@ -55,6 +55,9 @@ $(obj)/compressed/vmlinux: $(obj)/Image FORCE
 $(obj)/zImage:	$(obj)/compressed/vmlinux FORCE
 	$(call if_changed,objcopy)
 
+$(obj)/Image-dtb.%:	$(obj)/dts/%.dtb $(obj)/Image
+	cat $(obj)/Image $< > $@
+
 endif
 
 ifneq ($(LOADADDR),)
@@ -75,9 +78,15 @@ if [ $(words $(UIMAGE_LOADADDR)) -ne 1 ]; then \
 	false; \
 fi
 
-$(obj)/uImage:	$(obj)/zImage FORCE
+$(obj)/uImage:	$(obj)/Image FORCE
 	@$(check_for_multiple_loadaddr)
 	$(call if_changed,uimage)
+
+$(obj)/uImage-dtb.%: $(obj)/Image-dtb.% FORCE
+	echo $@
+	@$(check_for_multiple_loadaddr)
+	$(call if_changed,uimage)
+	@$(kecho) '  Image dtb $@ is ready'
 
 $(obj)/bootp/bootp: $(obj)/zImage initrd FORCE
 	$(Q)$(MAKE) $(build)=$(obj)/bootp $@
