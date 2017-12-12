@@ -107,6 +107,12 @@ static const struct pinctrl_pin_desc adi_pads[] = {
 	PINCTRL_PIN(93, "PF13"),
 	PINCTRL_PIN(94, "PF14"),
 	PINCTRL_PIN(95, "PF15"),
+	PINCTRL_PIN(96, "PG0"),
+	PINCTRL_PIN(97, "PG1"),
+	PINCTRL_PIN(98, "PG2"),
+	PINCTRL_PIN(99, "PG3"),
+	PINCTRL_PIN(100, "PG4"),
+	PINCTRL_PIN(101, "PG5"),
 };
 
 static const unsigned uart0_pins[] = {
@@ -119,21 +125,21 @@ static const unsigned uart0_hwflow_pins[] = {
 };
 
 static const unsigned uart1_pins[] = {
-	GPIO_PF10, GPIO_PF11,
+	GPIO_PB2, GPIO_PB3,
 };
 
 static const unsigned uart1_hwflow_pins[] = {
-	GPIO_PF10, GPIO_PF11,
-	GPIO_PE0, GPIO_PE14,
+	GPIO_PB2, GPIO_PB3,
+	GPIO_PE1, GPIO_PE2,
 };
 
 static const unsigned uart2_pins[] = {
-	GPIO_PC12, GPIO_PC13,
+	GPIO_PD12, GPIO_PD13,
 };
 
 static const unsigned uart2_hwflow_pins[] = {
-	GPIO_PC12, GPIO_PC13,
-	GPIO_PA10, GPIO_PA11,
+	GPIO_PD12, GPIO_PD13,
+	GPIO_PE10, GPIO_PE11,
 };
 
 static const unsigned eth0_pins[] = {
@@ -210,15 +216,28 @@ static const unsigned lp1_pins[] = {
 
 static const unsigned ppi0_8b_pins[] = {
 	GPIO_PC11, GPIO_PC14, GPIO_PC15, GPIO_PC6,
-	GPIO_PD10, GPIO_PD11, GPIO_PD12, GPIO_PD13, GPIO_PD14, GPIO_PD15,
-	GPIO_PC5, GPIO_PD9,
+	GPIO_PD10, GPIO_PD11, GPIO_PD12, GPIO_PD13,
+	GPIO_PD14, GPIO_PD15, GPIO_PC5, GPIO_PD9,
+};
+
+static const unsigned ppi0_10b_pins[] = {
+	GPIO_PC11, GPIO_PC14, GPIO_PC15, GPIO_PC6,
+	GPIO_PD10, GPIO_PD11, GPIO_PD12, GPIO_PD13,
+	GPIO_PD14, GPIO_PD15, GPIO_PC5, GPIO_PD9, GPIO_PC1, GPIO_PC2,
+};
+
+static const unsigned ppi0_12b_pins[] = {
+	GPIO_PC11, GPIO_PC14, GPIO_PC15, GPIO_PC6,
+	GPIO_PD10, GPIO_PD11, GPIO_PD12, GPIO_PD13,
+	GPIO_PD14, GPIO_PD15, GPIO_PC5, GPIO_PD9,
+	GPIO_PC3, GPIO_PC4, GPIO_PC1, GPIO_PC2,
 };
 
 static const unsigned ppi0_16b_pins[] = {
 	GPIO_PC11, GPIO_PC14, GPIO_PC15, GPIO_PC6,
-	GPIO_PD10, GPIO_PD11, GPIO_PD12, GPIO_PD13, GPIO_PD14, GPIO_PD15,
-	GPIO_PC5, GPIO_PD9, GPIO_PC1, GPIO_PC2, GPIO_PC3, GPIO_PC4,
-	GPIO_PE0, GPIO_PC7, GPIO_PC8, GPIO_PE1,
+	GPIO_PD10, GPIO_PD11, GPIO_PD12, GPIO_PD13,
+	GPIO_PD14, GPIO_PD15, GPIO_PC5, GPIO_PD9, GPIO_PC1, GPIO_PC2,
+	GPIO_PC3, GPIO_PC4, GPIO_PE0, GPIO_PC7, GPIO_PC8, GPIO_PE1,
 };
 
 static const unsigned mmc0_pins[] = {
@@ -226,8 +245,16 @@ static const unsigned mmc0_pins[] = {
 	GPIO_PF2, GPIO_PF3, GPIO_PF7, GPIO_PF4, GPIO_PC12,
 };
 
-static const unsigned rotary0_pins[] = {
-	GPIO_PD7, GPIO_PE13, GPIO_PD8,
+/*
+ * MMC0 pins for 4-bit width, fixed card
+ */
+static const unsigned mmc0_f4b_pins[] = {
+    GPIO_PF4,   // MSI0-CLK
+    GPIO_PF7,   // MSI0-CMD
+    GPIO_PE12,  // MSI0-D0
+    GPIO_PE13,  // MSI0-D1
+    GPIO_PE14,  // MSI0-D2
+    GPIO_PE15,  // MSI0-D3
 };
 
 static const unsigned short uart0_mux[] = {
@@ -319,6 +346,20 @@ static const unsigned short ppi0_8b_mux[] = {
 	0
 };
 
+static const unsigned short ppi0_10b_mux[] = {
+	P_PPI0_CLK, P_PPI0_FS1, P_PPI0_FS2, P_PPI0_FS3,
+	P_PPI0_D0, P_PPI0_D1, P_PPI0_D2, P_PPI0_D3, P_PPI0_D4, P_PPI0_D5,
+	P_PPI0_D6, P_PPI0_D7, P_PPI0_D8, P_PPI0_D9,
+	0
+};
+
+static const unsigned short ppi0_12b_mux[] = {
+	P_PPI0_CLK, P_PPI0_FS1, P_PPI0_FS2, P_PPI0_FS3,
+	P_PPI0_D0, P_PPI0_D1, P_PPI0_D2, P_PPI0_D3, P_PPI0_D4, P_PPI0_D5,
+	P_PPI0_D6, P_PPI0_D7, P_PPI0_D8, P_PPI0_D9, P_PPI0_D10, P_PPI0_D11,
+	0
+};
+
 static const unsigned short ppi0_16b_mux[] = {
 	P_PPI0_CLK, P_PPI0_FS1, P_PPI0_FS2, P_PPI0_FS3,
 	P_PPI0_D0, P_PPI0_D1, P_PPI0_D2, P_PPI0_D3, P_PPI0_D4, P_PPI0_D5,
@@ -357,9 +398,9 @@ static const unsigned short mmc0_mux[] = {
 	0
 };
 
-static const unsigned short rotary0_mux[] = {
-	P_CNT_CZM, P_CNT_CUD, P_CNT_CDG,
-	0
+static const unsigned short mmc0_f4b_mux[] = {
+    P_MSI0_D0, P_MSI0_D1, P_MSI0_D2, P_MSI0_D3, P_MSI0_CMD, P_MSI0_CLK,
+    0
 };
 
 static const struct adi_pin_group adi_pin_groups[] = {
@@ -382,9 +423,11 @@ static const struct adi_pin_group adi_pin_groups[] = {
 	ADI_PIN_GROUP("lp0grp", lp0_pins, lp0_mux),
 	ADI_PIN_GROUP("lp1grp", lp1_pins, lp1_mux),
 	ADI_PIN_GROUP("ppi0_8bgrp", ppi0_8b_pins, ppi0_8b_mux),
+	ADI_PIN_GROUP("ppi0_10bgrp", ppi0_10b_pins, ppi0_10b_mux),
+	ADI_PIN_GROUP("ppi0_12bgrp", ppi0_12b_pins, ppi0_12b_mux),
 	ADI_PIN_GROUP("ppi0_16bgrp", ppi0_16b_pins, ppi0_16b_mux),
 	ADI_PIN_GROUP("mmc0grp", mmc0_pins, mmc0_mux),
-	ADI_PIN_GROUP("rotary0grp", rotary0_pins, rotary0_mux),
+	ADI_PIN_GROUP("mmc0f4bgrp", mmc0_f4b_pins, mmc0_f4b_mux),
 };
 
 static const char * const uart0grp[] = { "uart0grp",
@@ -400,11 +443,13 @@ static const char * const spi2grp[] = { "spi2grp", "spi2quadgrp" };
 static const char * const can0grp[] = { "can0grp" };
 static const char * const can1grp[] = { "can1grp" };
 static const char * const smc0grp[] = { "smc0grp" };
-static const char * const ppi0grp[] = { "ppi0_8bgrp", "ppi0_16bgrp" };
 static const char * const lp0grp[] = { "lp0grp" };
 static const char * const lp1grp[] = { "lp1grp" };
-static const char * const mmc0grp[] = { "mmc0grp" };
-static const char * const rotary0grp[] = { "rotary0grp" };
+static const char * const ppi0grp[] = { "ppi0_8bgrp",
+					"ppi0_10bgrp",
+					"ppi0_12bgrp",
+					"ppi0_16bgrp",};
+static const char * const mmc0grp[] = { "mmc0grp", "mmc0f4bgrp" };
 
 static const struct adi_pmx_func adi_pmx_functions[] = {
 	ADI_PMX_FUNCTION("uart0", uart0grp),
@@ -421,7 +466,6 @@ static const struct adi_pmx_func adi_pmx_functions[] = {
 	ADI_PMX_FUNCTION("eth0", eth0grp),
 	ADI_PMX_FUNCTION("mmc0", mmc0grp),
 	ADI_PMX_FUNCTION("ppi0", ppi0grp),
-	ADI_PMX_FUNCTION("rotary0", rotary0grp),
 };
 
 static const struct adi_pinctrl_soc_data adi_sc57x_soc = {
