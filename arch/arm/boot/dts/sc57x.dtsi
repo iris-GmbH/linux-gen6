@@ -288,7 +288,7 @@
 
 			eth {
 				eth0_default: eth0@0 {
-					adi,group = "eth0grp";
+					adi,group = "eth0rmiigrp";
 					adi,function = "eth0";
 				};
 			};
