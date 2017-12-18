@@ -162,8 +162,8 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&can0_default>;
 			phy-name = "tja1055";
-			phy-gpios = <&gpa 1 0>,		/* en PA1 */
-				    <&gpa 2 0x1>;	/* stb PA2, GPIO_ACTIVE_LOW */
+			phy-gpios = <&gpa 1 0>,		// en PA1
+				    <&gpa 2 0x1>;	// stb PA2, GPIO_ACTIVE_LOW
 			interrupt-parent = <&gic>;
 			interrupts = <0 84 0>,
 				     <0 85 0>,
@@ -178,7 +178,7 @@
 			phy-name = "tja1145";
 			phy-spibus = /bits/ 16 <0>;
 			phy-spiclk = <1000000>;
-			phy-spics = /bits/ 16 <38>;	/* GPIO_PC6 */
+			phy-spics = /bits/ 16 <38>;	// GPIO_PC6
 			interrupt-parent = <&gic>;
 			interrupts = <0 87 0>,
 				     <0 88 0>,
@@ -288,7 +288,7 @@
 
 			eth {
 				eth0_default: eth0@0 {
-					adi,group = "eth0rmiigrp";
+					adi,group = "eth0grp";
 					adi,function = "eth0";
 				};
 			};

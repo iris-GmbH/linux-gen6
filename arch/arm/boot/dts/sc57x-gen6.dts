@@ -9,7 +9,7 @@
 
 /dts-v1/;
 
-#include "sc57x.dtsi"
+/include/ "sc57x.dtsi"
 
 / {
 	model = "ADI sc57x-gen6";

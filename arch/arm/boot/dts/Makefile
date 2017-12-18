@@ -781,8 +781,8 @@ dtb-$(CONFIG_ARCH_S5PV210) += \
 	s5pv210-smdkv210.dtb \
 	s5pv210-torbreck.dtb
 dtb-$(CONFIG_ARCH_SC58X) += sc589-ezkit.dtb \
-	sc584-ezkit.dtb \
-dtb-$(CONFIG_ARCH_SC57X) += sc573-ezkit.dtb \
+	sc584-ezkit.dtb 
+dtb-$(CONFIG_MACH_SC573_EZKIT) += sc573-ezkit.dtb 
 dtb-$(CONFIG_MACH_SC57X_GEN6) += sc57x-gen6.dtb
 dtb-$(CONFIG_ARCH_SOCFPGA) += \
 	socfpga_arria5_socdk.dtb \
