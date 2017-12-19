@@ -40,22 +40,20 @@
 #include <media/videobuf2-dma-contig.h>
 #include <media/soc_camera.h>
 #include <media/blackfin/ppi.h>
-#include <media/i2c/mt9v022.h>
 
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
 
 #ifdef CONFIG_ARCH_HEADER_IN_MACH
 #include <mach/dma.h>
-#include <mach/ppi.h>
 #else
 #include <asm/dma.h>
 #endif
 
 #include <mach/portmux-sc57x.h>
 
-#define CAPTURE_DRV_NAME        "aptina_mt9v022_capture"
-#define aptina_mt9v022_MIN_NUM_BUF      2
+#define CAPTURE_DRV_NAME        "aptina_mt9v022"
+#define MIN_NUM_BUF      	2
 
 struct aptina_mt9v022_format {
 	char *desc;
@@ -73,7 +71,7 @@ struct aptina_mt9v022_dma_desc_list_item {
 }__packed;
 
 struct aptina_mt9v022_buffer {
-	struct vb2_buffer vb;
+	struct vb2_v4l2_buffer vb;
 	// points to memory that is allocated to be reacheable by the dma and holds an array of dma descriptors
 	struct aptina_mt9v022_dma_desc_list_item *dma_desc;
 	// the dma reacheable address of the dma_desc
@@ -156,19 +154,13 @@ struct aptina_mt9v022_device {
 	struct mutex mutex;
 };
 
-struct aptina_mt9v022_fh {
-	struct v4l2_fh fh;
-	/* indicates whether this file handle is doing IO */
-	bool io_allowed;
-};
-
 static const struct aptina_mt9v022_format aptina_mt9v022_formats[] = {
 	{
-		.desc = "10bit Grey Scale",
-		.pixelformat = V4L2_PIX_FMT_Y10,
-		.mbus_code = MEDIA_BUS_FMT_Y10_1X10,
-		.bpp = 16,
-		.dlen = 10, // number of wires
+		.desc 	    	   = "10bit Grey Scale",
+		.pixelformat	   = V4L2_PIX_FMT_Y10,
+		.mbus_code  	   = MEDIA_BUS_FMT_Y10_1X10,
+		.bpp	    	   = 16,
+		.dlen	     	   = 10, // number of wires
 		.pixel_depth_bytes = 2,
 	},
 
@@ -176,57 +168,68 @@ static const struct aptina_mt9v022_format aptina_mt9v022_formats[] = {
 #define MAX_FMTS ARRAY_SIZE(aptina_mt9v022_formats)
 
 static struct v4l2_input aptina_mt9v022_inputs[] = {
-		{
-		.index = 0,
-		.name =
-		"aptina_mt9v022",
-		.type = V4L2_INPUT_TYPE_CAMERA,
-		.std =
-		V4L2_STD_UNKNOWN, },
+	{
+		.index	= 0,
+		.name	= CAPTURE_DRV_NAME,
+		.type	= V4L2_INPUT_TYPE_CAMERA,
+		.std	= V4L2_STD_UNKNOWN,
+	},
 };
 
 static struct aptina_mt9v022_route aptina_mt9v022_routes[] = {
-		{
-			.input = 0,
-			.output = 0, },
+	{
+		.input  = 0,
+		.output = 0,
+	},
 };
 
 static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id);
-static int aptina_mt9v022_start_transfering( struct aptina_mt9v022_device *aptina_mt9v022_dev, dma_addr_t descrAddr);
-static void aptina_mt9v022_stop_transfering( struct aptina_mt9v022_device *aptina_mt9v022_dev);
+static int aptina_mt9v022_start_transfering(
+				struct aptina_mt9v022_device *aptina_mt9v022_dev,
+				dma_addr_t descrAddr);
+static void aptina_mt9v022_stop_transfering(
+				struct aptina_mt9v022_device *aptina_mt9v022_dev);
 
-static struct aptina_mt9v022_buffer *to_aptina_mt9v022_vb(struct vb2_buffer *vb) {
+static struct aptina_mt9v022_buffer *to_aptina_mt9v022_vb(struct vb2_v4l2_buffer *vb)
+{
 	return container_of(vb, struct aptina_mt9v022_buffer, vb);
 }
-#if 0
+
+/* The queue is busy if there is a owner and you are not that owner. */
+static inline bool vb2_queue_is_busy(struct video_device *vdev, struct file *file)
+{
+	return vdev->queue->owner && vdev->queue->owner != file->private_data;
+}
+
 static int aptina_mt9v022_init_sensor_formats(
-		struct aptina_mt9v022_device *aptina_mt9v022_dev) {
-//	u32 code;
+				struct aptina_mt9v022_device *aptina_mt9v022_dev)
+{
+
+	struct v4l2_subdev_mbus_code_enum code = {
+		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+	};
 	struct aptina_mt9v022_format *sf;
 	unsigned int num_formats = 0;
-//	int i;
-	int j;
-#if 0
-	while (!v4l2_subdev_call(aptina_mt9v022_dev->sd, video, enum_mbus_fmt,
-			num_formats, &code)) {
-		printk("format: %d %x\n", num_formats, code);
+	int i, j;
+
+	while (!v4l2_subdev_call(aptina_mt9v022_dev->sd, pad,
+				enum_mbus_code, NULL, &code)) {
 		num_formats++;
-	}
-#endif
-	for (j = 0; j < MAX_FMTS; j++) {
-		printk("known_format: %d %x\n", j, aptina_mt9v022_formats[j].mbus_code);
+		code.index++;
 	}
 	if (!num_formats)
 		return -ENXIO;
 
-	sf = kzalloc(num_formats * sizeof(*sf), GFP_KERNEL);
+	sf = kcalloc(num_formats, sizeof(*sf), GFP_KERNEL);
 	if (!sf)
 		return -ENOMEM;
-#if 0
+
 	for (i = 0; i < num_formats; i++) {
-		v4l2_subdev_call(aptina_mt9v022_dev->sd, video, enum_mbus_fmt, i, &code);
+		code.index = i;
+		v4l2_subdev_call(aptina_mt9v022_dev->sd, pad,
+				enum_mbus_code, NULL, &code);
 		for (j = 0; j < MAX_FMTS; j++)
-			if (code == aptina_mt9v022_formats[j].mbus_code)
+			if (code.code == aptina_mt9v022_formats[j].mbus_code)
 				break;
 		if (j == MAX_FMTS) {
 			/* we don't allow this sensor working with our bridge */
@@ -235,92 +238,33 @@ static int aptina_mt9v022_init_sensor_formats(
 		}
 		sf[i] = aptina_mt9v022_formats[j];
 	}
-#endif
+
 	aptina_mt9v022_dev->sensor_formats = sf;
 	aptina_mt9v022_dev->num_sensor_formats = num_formats;
 	return 0;
 }
-#endif
 
-static void aptina_mt9v022_free_sensor_formats( struct aptina_mt9v022_device *aptina_mt9v022_dev) {
+static void aptina_mt9v022_free_sensor_formats(
+				struct aptina_mt9v022_device *aptina_mt9v022_dev)
+{
 	aptina_mt9v022_dev->num_sensor_formats = 0;
 	kfree(aptina_mt9v022_dev->sensor_formats);
 	aptina_mt9v022_dev->sensor_formats = NULL;
 }
 
-static int aptina_mt9v022_open(struct file *file) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-	struct video_device *vfd = aptina_mt9v022_dev->video_dev;
-	struct aptina_mt9v022_fh *aptina_mt9v022_fh;
-
-	if (!aptina_mt9v022_dev->sd) {
-		v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "No sub device registered\n");
-		return -ENODEV;
-	}
-
-	aptina_mt9v022_fh = kzalloc(sizeof(*aptina_mt9v022_fh), GFP_KERNEL);
-	if (!aptina_mt9v022_fh) {
-		v4l2_err(&aptina_mt9v022_dev->v4l2_dev,
-				"unable to allocate memory for file handle object\n");
-		return -ENOMEM;
-	}
-
-	v4l2_fh_init(&aptina_mt9v022_fh->fh, vfd);
-
-	/* store pointer to v4l2_fh in private_data member of file */
-	file->private_data = &aptina_mt9v022_fh->fh;
-	v4l2_fh_add(&aptina_mt9v022_fh->fh);
-	aptina_mt9v022_fh->io_allowed = false;
-	return 0;
-}
-
-static int aptina_mt9v022_release(struct file *file) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-	struct v4l2_fh *fh = file->private_data;
-	struct aptina_mt9v022_fh *aptina_mt9v022_fh = container_of(fh, struct aptina_mt9v022_fh, fh);
-
-	/* if this instance is doing IO */
-	if (aptina_mt9v022_fh->io_allowed)
-		vb2_queue_release(&aptina_mt9v022_dev->buffer_queue);
-
-	file->private_data = NULL;
-	v4l2_fh_del(&aptina_mt9v022_fh->fh);
-	v4l2_fh_exit(&aptina_mt9v022_fh->fh);
-	kfree(aptina_mt9v022_fh);
-	return 0;
-}
-
-static int aptina_mt9v022_mmap(struct file *file, struct vm_area_struct *vma) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-	int ret;
-
-	if (mutex_lock_interruptible(&aptina_mt9v022_dev->mutex))
-		return -ERESTARTSYS;
-	ret = vb2_mmap(&aptina_mt9v022_dev->buffer_queue, vma);
-	mutex_unlock(&aptina_mt9v022_dev->mutex);
-	return ret;
-}
-
-#ifndef CONFIG_MMU
-static unsigned long aptina_mt9v022_get_unmapped_area(struct file *file,
-	unsigned long addr, unsigned long len, unsigned long pgoff,
-		unsigned long flags) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-
-	return vb2_get_unmapped_area(&aptina_mt9v022_dev->buffer_queue, addr, len,
-			pgoff, flags);
-}
-#endif
-
-static int aptina_mt9v022_queue_setup(	struct vb2_queue *vq,
-					unsigned int *nbuffers,
-					unsigned int *nplanes,
-					unsigned int sizes[],
-					struct device *alloc_devs[]){
+static int aptina_mt9v022_queue_setup(struct vb2_queue *vq,
+				unsigned int *nbuffers,
+				unsigned int *nplanes,
+				unsigned int sizes[],
+				struct device *alloc_devs[])
+{
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(vq);
 
-	if (*nbuffers < aptina_mt9v022_MIN_NUM_BUF)
-		*nbuffers = aptina_mt9v022_MIN_NUM_BUF;
+	if (vq->num_buffers + *nbuffers < MIN_NUM_BUF)
+		*nbuffers = MIN_NUM_BUF;
+
+	if (*nplanes)
+		return sizes[0] < aptina_mt9v022_dev->fmt.sizeimage ? -EINVAL : 0;
 
 	*nplanes = 1;
 	sizes[0] = aptina_mt9v022_dev->fmt.sizeimage;
@@ -328,10 +272,12 @@ static int aptina_mt9v022_queue_setup(	struct vb2_queue *vq,
 	return 0;
 }
 
-static int aptina_mt9v022_buffer_init(struct vb2_buffer *vb) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(
-		vb->vb2_queue);
-	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vb);
+static int aptina_mt9v022_buffer_init(struct vb2_buffer *vb)
+{
+	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
+	struct aptina_mt9v022_device *aptina_mt9v022_dev =
+						 vb2_get_drv_priv(vb->vb2_queue);
+	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vbuf);
 	dma_addr_t start_addr;
 
 	INIT_LIST_HEAD(&buf->list);
@@ -353,46 +299,50 @@ static int aptina_mt9v022_buffer_init(struct vb2_buffer *vb) {
 	return 0;
 }
 
-static int aptina_mt9v022_buffer_prepare(struct vb2_buffer *vb) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(
-			vb->vb2_queue);
-	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vb);
-	unsigned long size;
-	size = aptina_mt9v022_dev->fmt.sizeimage;
+static int aptina_mt9v022_buffer_prepare(struct vb2_buffer *vb)
+{
+	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(vb->vb2_queue);
+	unsigned long size = aptina_mt9v022_dev->fmt.sizeimage;
+
 	if (vb2_plane_size(vb, 0) < size) {
-		printk("buffer too small (%lu < %lu)\n", vb2_plane_size(vb, 0), size);
 		v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "buffer too small (%lu < %lu)\n",
 				vb2_plane_size(vb, 0), size);
 		return -EINVAL;
 	}
-	vb2_set_plane_payload(&buf->vb, 0, size);
+	vb2_set_plane_payload(vb, 0, size);
+
+	vbuf->field = aptina_mt9v022_dev->fmt.field;
+
 	return 0;
 }
 
-static void aptina_mt9v022_buffer_queue(struct vb2_buffer *vb) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(
-			vb->vb2_queue);
-	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vb);
+static void aptina_mt9v022_buffer_queue(struct vb2_buffer *vb)
+{
+	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(vb->vb2_queue);
+	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vbuf);
 	unsigned long flags;
+
 	buf->dma_desc->next_desc_addr = buf->desc_dma_addr;
 	spin_lock_irqsave(&aptina_mt9v022_dev->lock, flags);
-
 	// setup the dma descriptor
 	if (!list_empty(&aptina_mt9v022_dev->dma_queue)) {
 		struct aptina_mt9v022_buffer* lastBuffer;
-		lastBuffer = list_last_entry(&aptina_mt9v022_dev->dma_queue, struct aptina_mt9v022_buffer, list);
+		lastBuffer = list_last_entry(&aptina_mt9v022_dev->dma_queue,
+							struct aptina_mt9v022_buffer, list);
 		lastBuffer->dma_desc->next_desc_addr = buf->desc_dma_addr;
 	}
-
 	list_add_tail(&buf->list, &aptina_mt9v022_dev->dma_queue);
-
 	spin_unlock_irqrestore(&aptina_mt9v022_dev->lock, flags);
 }
 
-static void aptina_mt9v022_buffer_cleanup(struct vb2_buffer *vb) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(
-			vb->vb2_queue);
-	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vb);
+static void aptina_mt9v022_buffer_cleanup(struct vb2_buffer *vb)
+{
+	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
+	struct aptina_mt9v022_device *aptina_mt9v022_dev =
+						vb2_get_drv_priv(vb->vb2_queue);
+	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vbuf);
 	unsigned long flags;
 
 	spin_lock_irqsave(&aptina_mt9v022_dev->lock, flags);
@@ -401,8 +351,8 @@ static void aptina_mt9v022_buffer_cleanup(struct vb2_buffer *vb) {
 	dma_pool_free(aptina_mt9v022_dev->dma_pool, buf->dma_desc, buf->desc_dma_addr);
 }
 
-static int aptina_mt9v022_start_streaming(struct vb2_queue *vq,
-	unsigned int count) {
+static int aptina_mt9v022_start_streaming(struct vb2_queue *vq, unsigned int count)
+{
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(vq);
 	struct ppi_if *ppi = aptina_mt9v022_dev->ppi;
 	struct ppi_params params;
@@ -415,58 +365,35 @@ static int aptina_mt9v022_start_streaming(struct vb2_queue *vq,
 		return ret;
 	}
 
-	//aptina_mt9v022_dev->dlen = 16;
-
 	/* set ppi params */
-	params.width 		= aptina_mt9v022_dev->fmt.width;
-	params.height 		= aptina_mt9v022_dev->fmt.height;
-	params.bpp 			= aptina_mt9v022_dev->bpp;
-	params.dlen 		= aptina_mt9v022_dev->dlen;
-	params.ppi_control  = (	 EPPI_CTL_PACKEN  |
-							EPPI_CTL_DLEN10  |
-							EPPI_CTL_NON656 |
-							EPPI_CTL_SYNC2   |
-							EPPI_CTL_POLC3   |
-							EPPI_CTL_DMAFINEN );
+	params.width	   = aptina_mt9v022_dev->fmt.width;
+	params.height	   = aptina_mt9v022_dev->fmt.height;
+	params.bpp	   = aptina_mt9v022_dev->bpp;
+	params.dlen 	   = aptina_mt9v022_dev->dlen;
+	params.ppi_control = (EPPI_CTL_PACKEN  |
+			      EPPI_CTL_DLEN10  |
+			      EPPI_CTL_NON656  |
+			      EPPI_CTL_SYNC2   |
+			      EPPI_CTL_POLC3   |
+			      EPPI_CTL_DMAFINEN );
+	params.int_mask	   = 0x3c00;
+	params.hdelay	   = 0;
+	params.vdelay	   = 0;
+	params.line	   = params.width;
+	params.frame	   = params.height;
 
-	params.int_mask 	= 0x3c00;
-	params.hdelay 		= 0;
-	params.vdelay 		= 0;
-	params.line 		= params.width;//+ aptina_mt9v022_dev->cfg.blank_pixels;
-	params.frame 		= params.height;
-
-/*
-	printk( "params.width=%u\n"
-			"params.height=%u\n"
-			"params.bpp=%d\n"
-			"params.dlen=%d\n"
-			"params.ppi_control=%u\n"
-			"params.int=%u\n"
-			"params.hdelay=%u\n"
-			"params.vdelay=%u\n"
-			"params.line=%u\n"
-			"params.frame=%u\n",
-			params.width,
-			params.height,
-			params.bpp,
-			params.dlen,
-			params.ppi_control,
-			params.int_mask,
-			params.hdelay,
-			params.vdelay,
-			params.line,
-			params.frame);
-*/
 	ret = ppi->ops->set_params(ppi, &params);
 
 	if (ret < 0) {
-		v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "Error in setting ppi params\n");
+		v4l2_err(&aptina_mt9v022_dev->v4l2_dev,
+				"Error in setting ppi params\n");
 		return ret;
 	}
 	return 0;
 }
 
-static void aptina_mt9v022_stop_streaming(struct vb2_queue *vq) {
+static void aptina_mt9v022_stop_streaming(struct vb2_queue *vq)
+{
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(vq);
 	int ret;
 	unsigned long flags;
@@ -476,84 +403,36 @@ static void aptina_mt9v022_stop_streaming(struct vb2_queue *vq) {
 
 	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_stream, 0);
 	if (ret && (ret != -ENOIOCTLCMD))
-		v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "stream off failed in subdev\n");
+		v4l2_err(&aptina_mt9v022_dev->v4l2_dev,
+				"stream off failed in subdev\n");
 
 	/* release all active buffers */
 	while (!list_empty(&aptina_mt9v022_dev->dma_queue)) {
-		struct aptina_mt9v022_buffer
-		* buf = list_entry(aptina_mt9v022_dev->dma_queue.next,
-				struct aptina_mt9v022_buffer, list);
+		struct aptina_mt9v022_buffer *buf = 
+					list_entry(aptina_mt9v022_dev->dma_queue.next,
+					struct aptina_mt9v022_buffer, list);
 		list_del_init(&buf->list);
-		vb2_buffer_done(&buf->vb, VB2_BUF_STATE_ERROR);
+		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
 	}
 	spin_unlock_irqrestore(&aptina_mt9v022_dev->lock, flags);
 }
 
-static struct vb2_ops aptina_mt9v022_video_qops = {
-		.queue_setup	= aptina_mt9v022_queue_setup,
-		.buf_init	= aptina_mt9v022_buffer_init,
-		.buf_prepare	= aptina_mt9v022_buffer_prepare,
-		.buf_cleanup	= aptina_mt9v022_buffer_cleanup,
-		.buf_queue	= aptina_mt9v022_buffer_queue,
-		.wait_prepare	= vb2_ops_wait_prepare,
-		.wait_finish	= vb2_ops_wait_finish,
-		.start_streaming = aptina_mt9v022_start_streaming,
-		.stop_streaming = aptina_mt9v022_stop_streaming, };
-
-static int aptina_mt9v022_reqbufs(struct file *file, void *priv,
- struct v4l2_requestbuffers *req_buf) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-	struct v4l2_fh *fh = file->private_data;
-	struct aptina_mt9v022_fh
-	*aptina_mt9v022_fh = container_of(fh, struct aptina_mt9v022_fh, fh);
-
-	if (vb2_is_busy(vq))
-		return -EBUSY;
-
-	aptina_mt9v022_fh->io_allowed = true;
-
-	return vb2_reqbufs(vq, req_buf);
-}
-
-static int aptina_mt9v022_querybuf(struct file *file, void *priv,
- struct v4l2_buffer *buf) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-
-	return vb2_querybuf(vq, buf);
-}
-
-static int aptina_mt9v022_qbuf(struct file *file, void *priv,
- struct v4l2_buffer *buf) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-	struct v4l2_fh *fh = file->private_data;
-	struct aptina_mt9v022_fh
-	*aptina_mt9v022_fh = container_of(fh, struct aptina_mt9v022_fh, fh);
-
-	if (!aptina_mt9v022_fh->io_allowed)
-		return -EBUSY;
-
-	return vb2_qbuf(vq, buf);
-}
-
-static int aptina_mt9v022_dqbuf(struct file *file, void *priv,
- struct v4l2_buffer *buf) {
-	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-	struct v4l2_fh *fh = file->private_data;
-	struct aptina_mt9v022_fh
-	*aptina_mt9v022_fh = container_of(fh, struct aptina_mt9v022_fh, fh);
-
-	if (!aptina_mt9v022_fh->io_allowed)
-		return -EBUSY;
-
-	return vb2_dqbuf(vq, buf, file->f_flags & O_NONBLOCK);
-}
+static struct vb2_ops aptina_mt9v022_video_qops =
+{
+	.queue_setup	= aptina_mt9v022_queue_setup,
+	.buf_init	= aptina_mt9v022_buffer_init,
+	.buf_prepare	= aptina_mt9v022_buffer_prepare,
+	.buf_cleanup	= aptina_mt9v022_buffer_cleanup,
+	.buf_queue	= aptina_mt9v022_buffer_queue,
+	.wait_prepare	= vb2_ops_wait_prepare,
+	.wait_finish	= vb2_ops_wait_finish,
+	.start_streaming = aptina_mt9v022_start_streaming,
+	.stop_streaming = aptina_mt9v022_stop_streaming,
+};
 
 #if 0
-static void printDMAState(struct aptina_mt9v022_device *aptina_mt9v022_dev) {
+static void printDMAState(struct aptina_mt9v022_device *aptina_mt9v022_dev)
+{
 	printk("dma config:"
 			"\n\t next_desc_ptr %p"
 			"\n\t start_addr %lx"
@@ -569,7 +448,7 @@ static void printDMAState(struct aptina_mt9v022_device *aptina_mt9v022_dev) {
 			"\n\t curr_x_count %ld"
 			"\n\t curr_y_count %ld\n",
 
-	get_dma_next_desc_ptr(aptina_mt9v022_dev->dma_channel),
+			get_dma_next_desc_ptr(aptina_mt9v022_dev->dma_channel),
 			get_dma_start_addr(aptina_mt9v022_dev->dma_channel),
 			get_dma_config(aptina_mt9v022_dev->dma_channel),
 			get_dma_x_count(aptina_mt9v022_dev->dma_channel),
@@ -585,10 +464,10 @@ static void printDMAState(struct aptina_mt9v022_device *aptina_mt9v022_dev) {
 }
 #endif
 
-static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id) {
+static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
+{
 	struct ppi_if *ppi = dev_id;
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = ppi->priv;
-	//struct timeval timevalue;
 	int dmaStatus;
 	dma_addr_t lastDmaDescriptor;
 	struct list_head* iterator;
@@ -597,14 +476,11 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id) {
 
 	dmaStatus = get_dma_curr_irqstat(aptina_mt9v022_dev->dma_channel);
 	clear_dma_irqstat(aptina_mt9v022_dev->dma_channel);
-//	printk("aptina_mt9v022_isr %08x\n", dmaStatus);
 
 	if (dmaStatus & DMA_DONE) {
 		// if there are at least two buffers in the queue we can deque one
 		if (&aptina_mt9v022_dev->dma_queue
 				== aptina_mt9v022_dev->dma_queue.next->next) {
-//				printk("buffer underrun in aptina_mt9v022 capture\n");
-	//			aptina_mt9v022_stop_transfering(aptina_mt9v022_dev);
 		} else {
 			/* publish all buffers that are done */
 			int completedCnt = 0;
@@ -618,14 +494,11 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id) {
 					break;
 				}
 			}
-	//			printk("lastDmaDescriptor: 0x%08x\n", lastDmaDescriptor);
 			if (0 == completedCnt) {
-//				printk("cannot find any completed buffers!\n");
-	//				aptina_mt9v022_stop_transfering(aptina_mt9v022_dev);
+
 			} else {
 				struct aptina_mt9v022_buffer* buf;
 				struct vb2_buffer *vb;
-//				printk("found %d completed buffers\n", completedCnt);
 				while (completedCnt--) {
 					if (&aptina_mt9v022_dev->dma_queue
 							== aptina_mt9v022_dev->dma_queue.next->next) {
@@ -633,8 +506,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id) {
 					}
 					buf = list_entry(aptina_mt9v022_dev->dma_queue.next,
 							struct aptina_mt9v022_buffer, list);
-					vb = &buf->vb;
-					//do_gettimeofday(&timevalue);
+					vb = &buf->vb.vb2_buf;
 					vb->timestamp = ktime_get_ns(); // this has been changed from type struct timeval to -> u64 type
 					if (ppi->err) {
 						vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
@@ -654,10 +526,10 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id) {
 	return IRQ_HANDLED;
 }
 
-static int aptina_mt9v022_start_transfering(
-	struct aptina_mt9v022_device *aptina_mt9v022_dev, dma_addr_t descrAddr) {
+static int aptina_mt9v022_start_transfering(struct aptina_mt9v022_device
+						*aptina_mt9v022_dev, dma_addr_t descrAddr)
+{
 	int ret;
-	printk("start DMA\n");
 
 	ret = request_dma(aptina_mt9v022_dev->dma_channel, "aptina_mt9v022_dma");
 	if (ret) {
@@ -683,7 +555,9 @@ static int aptina_mt9v022_start_transfering(
 	return ret;
 }
 
-static void aptina_mt9v022_stop_transfering(struct aptina_mt9v022_device *aptina_mt9v022_dev) {
+static void aptina_mt9v022_stop_transfering(struct aptina_mt9v022_device 
+						*aptina_mt9v022_dev)
+{
 	/* disable ppi */
 	aptina_mt9v022_dev->ppi->ops->stop(aptina_mt9v022_dev->ppi);
 
@@ -693,19 +567,18 @@ static void aptina_mt9v022_stop_transfering(struct aptina_mt9v022_device *aptina
 	clear_dma_irqstat(aptina_mt9v022_dev->dma_channel);
 
 	free_dma(aptina_mt9v022_dev->dma_channel);
-	printk("stopped DMA\n");
 }
 
 static int aptina_mt9v022_streamon(struct file *file, void *priv,
-		enum v4l2_buf_type buf_type) {
+				enum v4l2_buf_type buf_type)
+{
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-	struct aptina_mt9v022_fh *fh = file->private_data;
 	unsigned long flags;
 	int ret;
 	struct aptina_mt9v022_buffer* buf;
 
-	if (!fh->io_allowed)
+	if (vb2_queue_is_busy(aptina_mt9v022_dev->video_dev, file))
 		return -EBUSY;
 
 	/* call streamon to start streaming in videobuf */
@@ -729,150 +602,150 @@ static int aptina_mt9v022_streamon(struct file *file, void *priv,
 	spin_unlock_irqrestore(&aptina_mt9v022_dev->lock, flags);
 
 	return 0;
-	err: vb2_streamoff(vq, buf_type);
+err:	
+	vb2_streamoff(vq, buf_type);
 	return ret;
 }
 
-static int aptina_mt9v022_streamoff(struct file *file, void *priv,
-	enum v4l2_buf_type buf_type) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-struct aptina_mt9v022_fh *fh = file->private_data;
+static int aptina_mt9v022_querystd(struct file *file, void *priv, v4l2_std_id *std)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 
-if (!fh->io_allowed)
-	return -EBUSY;
-
-return vb2_streamoff(vq, buf_type);
+	return v4l2_subdev_call(aptina_mt9v022_dev->sd, video, querystd, std);
 }
 
-static int aptina_mt9v022_querystd(struct file *file, void *priv,
-	v4l2_std_id *std) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+static int aptina_mt9v022_g_std(struct file *file, void *priv, v4l2_std_id *std)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 
-return v4l2_subdev_call(aptina_mt9v022_dev->sd, video, querystd, std);
+	*std = aptina_mt9v022_dev->std;
+	return 0;
 }
 
-static int aptina_mt9v022_g_std(struct file *file, void *priv, v4l2_std_id *std) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+static int aptina_mt9v022_s_std(struct file *file, void *priv, v4l2_std_id std)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+	int ret;
 
-*std = aptina_mt9v022_dev->std;
-return 0;
-}
+	if (vb2_is_busy(&aptina_mt9v022_dev->buffer_queue))
+		return -EBUSY;
 
-static int aptina_mt9v022_s_std(struct file *file, void *priv, v4l2_std_id std) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-int ret;
+	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_std, std);
+	if (ret < 0)
+		return ret;
 
-if (vb2_is_busy(&aptina_mt9v022_dev->buffer_queue))
-	return -EBUSY;
-
-ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_std, std);
-if (ret < 0)
-	return ret;
-
-aptina_mt9v022_dev->std = std;
-return 0;
+	aptina_mt9v022_dev->std = std;
+	return 0;
 }
 
 static int aptina_mt9v022_enum_dv_timings(struct file *file, void *priv,
-	struct v4l2_enum_dv_timings *timings) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-timings->pad = 0;
+					  struct v4l2_enum_dv_timings *timings)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+	timings->pad = 0;
 
-return v4l2_subdev_call(aptina_mt9v022_dev->sd, pad, enum_dv_timings, timings);
+	return v4l2_subdev_call(aptina_mt9v022_dev->sd, pad, enum_dv_timings, timings);
 }
 
 static int aptina_mt9v022_query_dv_timings(struct file *file, void *priv,
-	struct v4l2_dv_timings *timings) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+					   struct v4l2_dv_timings *timings)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 
-return v4l2_subdev_call(aptina_mt9v022_dev->sd, video, query_dv_timings,
-		timings);
+	return v4l2_subdev_call(aptina_mt9v022_dev->sd, video, query_dv_timings,timings);
 }
 
 static int aptina_mt9v022_g_dv_timings(struct file *file, void *priv,
-	struct v4l2_dv_timings *timings) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+				       struct v4l2_dv_timings *timings)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 
-*timings = aptina_mt9v022_dev->dv_timings;
-return 0;
+	*timings = aptina_mt9v022_dev->dv_timings;
+	return 0;
 }
 
 static int aptina_mt9v022_s_dv_timings(struct file *file, void *priv,
-	struct v4l2_dv_timings *timings) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
+				       struct v4l2_dv_timings *timings)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
 
-int ret;
-if (vb2_is_busy(vq))
-	return -EBUSY;
+	int ret;
+	if (vb2_is_busy(vq))
+		return -EBUSY;
 
-ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_dv_timings, timings);
-if (ret < 0)
-	return ret;
+	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_dv_timings, timings);
+	if (ret < 0)
+		return ret;
 
-aptina_mt9v022_dev->dv_timings = *timings;
-return 0;
+	aptina_mt9v022_dev->dv_timings = *timings;
+	return 0;
 }
 
 static int aptina_mt9v022_enum_input(struct file *file, void *priv,
-	struct v4l2_input *input) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-struct aptina_mt9v022_capture_config *config = &aptina_mt9v022_dev->cfg;
+				     struct v4l2_input *input)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+	struct aptina_mt9v022_capture_config *config = &aptina_mt9v022_dev->cfg;
 
-int ret;
-u32 status;
+	int ret;
+	u32 status;
 
-if (input->index >= config->num_inputs)
-	return -EINVAL;
+	if (input->index >= config->num_inputs)
+		return -EINVAL;
 
-*input = config->inputs[input->index];
-/* get input status */
-ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, g_input_status, &status);
-if (!ret)
-	input->status = status;
-return 0;
+	*input = config->inputs[input->index];
+	/* get input status */
+	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, g_input_status, &status);
+	if (!ret)
+		input->status = status;
+	return 0;
 }
 
-static int aptina_mt9v022_g_input(struct file *file, void *priv,
-	unsigned int *index) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+static int aptina_mt9v022_g_input(struct file *file, void *priv, unsigned int *index)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 
-*index = aptina_mt9v022_dev->cur_input;
-return 0;
+	*index = aptina_mt9v022_dev->cur_input;
+	return 0;
 }
 
 static int aptina_mt9v022_s_input(struct file *file, void *priv,
-	unsigned int index) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-struct aptina_mt9v022_capture_config *config = &aptina_mt9v022_dev->cfg;
-struct aptina_mt9v022_route *route;
-int ret;
+				  unsigned int index)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
+	struct aptina_mt9v022_capture_config *config = &aptina_mt9v022_dev->cfg;
+	struct aptina_mt9v022_route *route;
+	int ret;
 
-if (vb2_is_busy(vq))
-	return -EBUSY;
+	if (vb2_is_busy(vq))
+		return -EBUSY;
 
-if (index >= config->num_inputs)
-	return -EINVAL;
+	if (index >= config->num_inputs)
+		return -EINVAL;
 
-route = &config->routes[index];
-ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_routing, route->input,
-		route->output, 0);
-if ((ret < 0) && (ret != -ENOIOCTLCMD)) {
-	v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "Failed to set input\n");
-	return ret;
-}
-aptina_mt9v022_dev->cur_input = index;
-return 0;
+	route = &config->routes[index];
+	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_routing, route->input,
+			route->output, 0);
+	if ((ret < 0) && (ret != -ENOIOCTLCMD)) {
+		v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "Failed to set input\n");
+		return ret;
+	}
+	aptina_mt9v022_dev->cur_input = index;
+	return 0;
 }
 
 static int aptina_mt9v022_try_format(struct aptina_mt9v022_device *bcap,
-		struct v4l2_pix_format *pixfmt, struct aptina_mt9v022_format *aptina_mt9v022_fmt) {
+				     struct v4l2_pix_format *pixfmt,
+				     struct aptina_mt9v022_format *aptina_mt9v022_fmt)
+{
 	struct aptina_mt9v022_format *sf = bcap->sensor_formats;
 	struct aptina_mt9v022_format *fmt = NULL;
-	struct v4l2_mbus_framefmt mbus_fmt;
-	//struct v4l2_mbus_config *cfg;
+	struct v4l2_subdev_pad_config pad_cfg;
+	struct v4l2_subdev_format format = {
+		.which = V4L2_SUBDEV_FORMAT_TRY,
+	};
 	int ret, i;
 
 	for (i = 0; i < bcap->num_sensor_formats; i++) {
@@ -883,17 +756,16 @@ static int aptina_mt9v022_try_format(struct aptina_mt9v022_device *bcap,
 	if (i == bcap->num_sensor_formats)
 		fmt = &sf[0];
 
-	v4l2_fill_mbus_format(&mbus_fmt, pixfmt, fmt->mbus_code);
-#if 0
-	ret = v4l2_subdev_call(bcap->sd, video, try_mbus_fmt, &mbus_fmt);
+	v4l2_fill_mbus_format(&format.format, pixfmt, fmt->mbus_code);
+	ret = v4l2_subdev_call(bcap->sd, pad, set_fmt, &pad_cfg,
+				&format);
 	if (ret < 0)
 		return ret;
-#endif	
-	v4l2_fill_pix_format(pixfmt, &mbus_fmt);
+	v4l2_fill_pix_format(pixfmt, &format.format);
 	if (aptina_mt9v022_fmt) {
 		for (i = 0; i < bcap->num_sensor_formats; i++) {
 			fmt = &sf[i];
-			if (mbus_fmt.code == fmt->mbus_code)
+			if (format.format.code == fmt->mbus_code)
 				break;
 		}
 		*aptina_mt9v022_fmt = *fmt;
@@ -905,22 +777,23 @@ static int aptina_mt9v022_try_format(struct aptina_mt9v022_device *bcap,
 }
 
 static int aptina_mt9v022_enum_fmt_vid_cap(struct file *file, void *priv,
-	struct v4l2_fmtdesc *fmt) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-struct aptina_mt9v022_format *sf = aptina_mt9v022_dev->sensor_formats;
+					   struct v4l2_fmtdesc *fmt)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+	struct aptina_mt9v022_format *sf = aptina_mt9v022_dev->sensor_formats;
 
-if (fmt->index >= aptina_mt9v022_dev->num_sensor_formats)
-	return -EINVAL;
+	if (fmt->index >= aptina_mt9v022_dev->num_sensor_formats)
+		return -EINVAL;
 
-fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-strlcpy(fmt->description, sf[fmt->index].desc, sizeof(fmt->description));
-fmt->pixelformat = sf[fmt->index].pixelformat;
-return 0;
+	fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	strlcpy(fmt->description, sf[fmt->index].desc, sizeof(fmt->description));
+	fmt->pixelformat = sf[fmt->index].pixelformat;
+	return 0;
 }
 
-static int aptina_mt9v022_try_fmt_vid_cap(	struct file *file,
-						void *priv,
-						struct v4l2_format *fmt) {
+static int aptina_mt9v022_try_fmt_vid_cap(struct file *file, void *priv,
+					struct v4l2_format *fmt)
+{
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 	struct v4l2_pix_format *pixfmt = &fmt->fmt.pix;
 
@@ -928,19 +801,22 @@ static int aptina_mt9v022_try_fmt_vid_cap(	struct file *file,
 }
 
 static int aptina_mt9v022_g_fmt_vid_cap(struct file *file, void *priv,
-	struct v4l2_format *fmt) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+					struct v4l2_format *fmt)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 
-fmt->fmt.pix = aptina_mt9v022_dev->fmt;
-return 0;
+	fmt->fmt.pix = aptina_mt9v022_dev->fmt;
+	return 0;
 }
 
 static int aptina_mt9v022_s_fmt_vid_cap(struct file *file, void *priv,
-		struct v4l2_format *fmt) {
+					struct v4l2_format *fmt)
+{
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-	struct v4l2_mbus_framefmt mbus_fmt;
-	//struct v4l2_mbus_config *cfg;
+	struct v4l2_subdev_format format = {
+		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+	};
 	struct aptina_mt9v022_format aptina_mt9v022_fmt;
 	struct v4l2_pix_format *pixfmt = &fmt->fmt.pix;
 	int dmaPoolMemorySize;
@@ -951,20 +827,14 @@ static int aptina_mt9v022_s_fmt_vid_cap(struct file *file, void *priv,
 
 	/* see if format works */
 	ret = aptina_mt9v022_try_format(aptina_mt9v022_dev, pixfmt,
-			&aptina_mt9v022_fmt);
+					&aptina_mt9v022_fmt);
 	if (ret < 0)
 		return ret;
 
-	v4l2_fill_mbus_format(&mbus_fmt, pixfmt, aptina_mt9v022_fmt.mbus_code);
-#if 0	
-	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_mbus_fmt, &mbus_fmt);
+	v4l2_fill_mbus_format(&format.format, pixfmt, aptina_mt9v022_fmt.mbus_code);
+	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, pad, set_fmt, NULL, &format);
 	if (ret < 0)
 		return ret;
-#else
-	//ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_mbus_config, cfg);
-	//if (ret < 0)
-	//	return ret;
-#endif
 	aptina_mt9v022_dev->fmt = *pixfmt;
 	aptina_mt9v022_dev->bpp = aptina_mt9v022_fmt.bpp;
 	aptina_mt9v022_dev->dlen = aptina_mt9v022_fmt.dlen;
@@ -973,14 +843,14 @@ static int aptina_mt9v022_s_fmt_vid_cap(struct file *file, void *priv,
 	memset(&aptina_mt9v022_dev->dma_cfg_template, 0,
 			sizeof(aptina_mt9v022_dev->dma_cfg_template));
 	aptina_mt9v022_dev->dma_cfg_template.cfg =	RESTART |
-												DMA2D |
-												DMATOVEN |
-												WNR |
-												WDSIZE_32 |
-												PSIZE_32 |
-												NDSIZE_2 |
-												DMAFLOW_LIST |
-												DMAEN;
+							DMA2D |
+							DMATOVEN |
+							WNR |
+							WDSIZE_32 |
+							PSIZE_32 |
+							NDSIZE_2 |
+							DMAFLOW_LIST |
+							DMAEN;
 	aptina_mt9v022_dev->dma_cfg_template.x_count  = aptina_mt9v022_dev->fmt.width / 2;
 	aptina_mt9v022_dev->dma_cfg_template.y_count  = aptina_mt9v022_dev->fmt.height;
 	aptina_mt9v022_dev->dma_cfg_template.x_modify =	aptina_mt9v022_dev->pixel_depth_bytes * 2;
@@ -998,104 +868,108 @@ static int aptina_mt9v022_s_fmt_vid_cap(struct file *file, void *priv,
 }
 
 static int aptina_mt9v022_querycap(struct file *file, void *priv,
-	struct v4l2_capability *cap) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+				   struct v4l2_capability *cap)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 
-cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
-cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
-strlcpy(cap->driver, CAPTURE_DRV_NAME, sizeof(cap->driver));
-strlcpy(cap->bus_info, "Blackfin Platform", sizeof(cap->bus_info));
-strlcpy(cap->card, aptina_mt9v022_dev->cfg.card_name, sizeof(cap->card));
-return 0;
-}
-
-static int aptina_mt9v022_g_parm(struct file *file, void *fh,
-	struct v4l2_streamparm *a) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-
-if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-	return -EINVAL;
-return v4l2_subdev_call(aptina_mt9v022_dev->sd, video, g_parm, a);
-}
-
-static int aptina_mt9v022_s_parm(struct file *file, void *fh,
-	struct v4l2_streamparm *a) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-
-if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-	return -EINVAL;
-return v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_parm, a);
-}
-
-static int aptina_mt9v022_log_status(struct file *file, void *priv) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-/* status for sub devices */
-v4l2_device_call_all(&aptina_mt9v022_dev->v4l2_dev, 0, core, log_status);
-return 0;
-}
-
-static int aptina_mt9v022_expbuf(struct file *file, void *priv,
-	struct v4l2_exportbuffer *e) {
-struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-struct v4l2_fh *fh = file->private_data;
-struct aptina_mt9v022_fh
-*aptina_mt9v022_fh = container_of(fh, struct aptina_mt9v022_fh, fh);
-
-/* if this instance is doing IO */
-if (!aptina_mt9v022_fh->io_allowed)
-	return -EBUSY;
-
-return vb2_expbuf(vq, e);
-}
-
-static const struct v4l2_ioctl_ops aptina_mt9v022_ioctl_ops = {
-	.vidioc_querycap = aptina_mt9v022_querycap, .vidioc_g_fmt_vid_cap =
-			aptina_mt9v022_g_fmt_vid_cap, .vidioc_enum_fmt_vid_cap =
-			aptina_mt9v022_enum_fmt_vid_cap, .vidioc_s_fmt_vid_cap =
-			aptina_mt9v022_s_fmt_vid_cap, .vidioc_try_fmt_vid_cap =
-			aptina_mt9v022_try_fmt_vid_cap, .vidioc_enum_input =
-			aptina_mt9v022_enum_input, .vidioc_g_input = aptina_mt9v022_g_input,
-	.vidioc_s_input = aptina_mt9v022_s_input, .vidioc_querystd =
-			aptina_mt9v022_querystd, .vidioc_s_std = aptina_mt9v022_s_std,
-	.vidioc_g_std = aptina_mt9v022_g_std, .vidioc_s_dv_timings =
-			aptina_mt9v022_s_dv_timings, .vidioc_g_dv_timings =
-			aptina_mt9v022_g_dv_timings, .vidioc_query_dv_timings =
-			aptina_mt9v022_query_dv_timings, .vidioc_enum_dv_timings =
-			aptina_mt9v022_enum_dv_timings, .vidioc_reqbufs =
-			aptina_mt9v022_reqbufs, .vidioc_querybuf = aptina_mt9v022_querybuf,
-	.vidioc_qbuf = aptina_mt9v022_qbuf, .vidioc_dqbuf = aptina_mt9v022_dqbuf,
-	.vidioc_streamon = aptina_mt9v022_streamon, .vidioc_streamoff =
-			aptina_mt9v022_streamoff, .vidioc_g_parm = aptina_mt9v022_g_parm,
-	.vidioc_s_parm = aptina_mt9v022_s_parm, .vidioc_log_status =
-			aptina_mt9v022_log_status, .vidioc_expbuf = aptina_mt9v022_expbuf, };
-
-static struct v4l2_file_operations aptina_mt9v022_fops = { .owner = THIS_MODULE,
-	.open = aptina_mt9v022_open, .release = aptina_mt9v022_release,
-	.unlocked_ioctl = video_ioctl2, .mmap = aptina_mt9v022_mmap,
-#ifndef CONFIG_MMU
-	.get_unmapped_area = aptina_mt9v022_get_unmapped_area,
-#endif
-	};
-
-static int get_int_prop(struct device_node *dn, const char *s) {
-int ret;
-u32 val;
-
-ret = of_property_read_u32(dn, s, &val);
-if (ret)
+	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
+	strlcpy(cap->driver, CAPTURE_DRV_NAME, sizeof(cap->driver));
+	strlcpy(cap->bus_info, "Blackfin Platform", sizeof(cap->bus_info));
+	strlcpy(cap->card, aptina_mt9v022_dev->cfg.card_name, sizeof(cap->card));
 	return 0;
-return val;
 }
 
-static const struct of_device_id adi_cap_match[] = { { .compatible =
-	"iris,gen6-aptina_mt9v022", }, { }, };
-MODULE_DEVICE_TABLE(of, adi_cap_match);
+static int aptina_mt9v022_g_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 
+	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+	return v4l2_subdev_call(aptina_mt9v022_dev->sd, video, g_parm, a);
+}
+
+static int aptina_mt9v022_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+
+	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+	return v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_parm, a);
+}
+
+static int aptina_mt9v022_log_status(struct file *file, void *priv)
+{
+	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
+	/* status for sub devices */
+	v4l2_device_call_all(&aptina_mt9v022_dev->v4l2_dev, 0, core, log_status);
+	return 0;
+}
+
+
+static const struct v4l2_ioctl_ops aptina_mt9v022_ioctl_ops =
+{
+	.vidioc_querycap         = aptina_mt9v022_querycap,
+	.vidioc_g_fmt_vid_cap    = aptina_mt9v022_g_fmt_vid_cap,
+	.vidioc_enum_fmt_vid_cap = aptina_mt9v022_enum_fmt_vid_cap,
+	.vidioc_s_fmt_vid_cap    = aptina_mt9v022_s_fmt_vid_cap,
+	.vidioc_try_fmt_vid_cap	 = aptina_mt9v022_try_fmt_vid_cap,
+	.vidioc_enum_input	 = aptina_mt9v022_enum_input,
+	.vidioc_g_input		 = aptina_mt9v022_g_input,
+	.vidioc_s_input		 = aptina_mt9v022_s_input,
+	.vidioc_querystd	 = aptina_mt9v022_querystd,
+	.vidioc_s_std		 = aptina_mt9v022_s_std,
+	.vidioc_g_std		 = aptina_mt9v022_g_std,
+	.vidioc_s_dv_timings     = aptina_mt9v022_s_dv_timings,
+	.vidioc_g_dv_timings     = aptina_mt9v022_g_dv_timings,
+	.vidioc_query_dv_timings = aptina_mt9v022_query_dv_timings,
+	.vidioc_enum_dv_timings  = aptina_mt9v022_enum_dv_timings,
+	.vidioc_reqbufs          = vb2_ioctl_reqbufs,
+	.vidioc_create_bufs      = vb2_ioctl_create_bufs,
+	.vidioc_querybuf         = vb2_ioctl_querybuf,
+	.vidioc_qbuf             = vb2_ioctl_qbuf,
+	.vidioc_dqbuf            = vb2_ioctl_dqbuf,
+	.vidioc_expbuf           = vb2_ioctl_expbuf,
+	.vidioc_streamon         = aptina_mt9v022_streamon,
+	.vidioc_streamoff        = vb2_ioctl_streamoff,
+	.vidioc_g_parm		 = aptina_mt9v022_g_parm,
+	.vidioc_s_parm		 = aptina_mt9v022_s_parm,
+	.vidioc_log_status	 = aptina_mt9v022_log_status,
+};
+
+static struct v4l2_file_operations aptina_mt9v022_fops = {
+	.owner = THIS_MODULE,
+	.open = v4l2_fh_open,
+	.release = vb2_fop_release,
+	.unlocked_ioctl = video_ioctl2,
+	.mmap = vb2_fop_mmap,
+#ifndef CONFIG_MMU
+	.get_unmapped_area = vb2_fop_get_unmapped_area,
+#endif
+	.poll = vb2_fop_poll
+};
+
+static int get_int_prop(struct device_node *dn, const char *s)
+{
+	int ret;
+	u32 val;
+
+	ret = of_property_read_u32(dn, s, &val);
+	if (ret)
+		return 0;
+	return val;
+}
+
+static const struct of_device_id cap_match[] =
+{
+	{ .compatible =	"iris,gen6-aptina_mt9v022", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, cap_match);
 
 static int fill_config(struct platform_device *pdev,
-	struct aptina_mt9v022_capture_config *o_config) {
-
+		       struct aptina_mt9v022_capture_config *o_config)
+{
 	struct device_node *node = pdev->dev.of_node;
 	struct ppi_info *info;
 	struct resource *res;
@@ -1125,7 +999,8 @@ static int fill_config(struct platform_device *pdev,
 	return 0;
 }
 
-static int aptina_mt9v022_probe(struct platform_device *pdev) {
+static int aptina_mt9v022_probe(struct platform_device *pdev)
+{
 	struct aptina_mt9v022_device *aptina_mt9v022_dev;
 	struct video_device *vfd;
 	struct i2c_adapter *i2c_adap;
@@ -1136,7 +1011,7 @@ static int aptina_mt9v022_probe(struct platform_device *pdev) {
 	struct soc_camera_subdev_desc ssdd;
 	int ret;
 
-	match = of_match_device(adi_cap_match, &pdev->dev);
+	match = of_match_device(cap_match, &pdev->dev);
 	if (!match) {
 		dev_err(dev, "failed to matching of_match node\n");
 		return -ENODEV;
@@ -1183,17 +1058,18 @@ static int aptina_mt9v022_probe(struct platform_device *pdev) {
 	}
 
 	/* initialize field of video device */
-	vfd->release = video_device_release;
-	vfd->fops = &aptina_mt9v022_fops;
-	vfd->ioctl_ops = &aptina_mt9v022_ioctl_ops;
-	vfd->tvnorms = 0;
-	vfd->v4l2_dev = &aptina_mt9v022_dev->v4l2_dev;
+	vfd->release            = video_device_release;
+	vfd->fops               = &aptina_mt9v022_fops;
+	vfd->ioctl_ops          = &aptina_mt9v022_ioctl_ops;
+	vfd->tvnorms            = 0;
+	vfd->v4l2_dev           = &aptina_mt9v022_dev->v4l2_dev;
 	strncpy(vfd->name, CAPTURE_DRV_NAME, sizeof(vfd->name));
 	aptina_mt9v022_dev->video_dev = vfd;
 
 	ret = v4l2_device_register(&pdev->dev, &aptina_mt9v022_dev->v4l2_dev);
 	if (ret) {
-		v4l2_err(pdev->dev.driver, "Unable to register v4l2 device\n");
+		v4l2_err(pdev->dev.driver,
+				"Unable to register v4l2 device\n");
 		goto err_release_vdev;
 	}
 	v4l2_info(&aptina_mt9v022_dev->v4l2_dev, "v4l2 device registered\n");
@@ -1201,21 +1077,24 @@ static int aptina_mt9v022_probe(struct platform_device *pdev) {
 	aptina_mt9v022_dev->v4l2_dev.ctrl_handler = &aptina_mt9v022_dev->ctrl_handler;
 	ret = v4l2_ctrl_handler_init(&aptina_mt9v022_dev->ctrl_handler, 0);
 	if (ret) {
-		v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "Unable to init control handler\n");
+		v4l2_err(&aptina_mt9v022_dev->v4l2_dev,
+				"Unable to init control handler\n");
 		goto err_unreg_v4l2;
 	}
 
 	spin_lock_init(&aptina_mt9v022_dev->lock);
 	/* initialize queue */
-	q 				= &aptina_mt9v022_dev->buffer_queue;
+	q				= &aptina_mt9v022_dev->buffer_queue;
 	q->type				= V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	q->io_modes			= VB2_MMAP;
+	q->io_modes			= VB2_MMAP | VB2_DMABUF;
 	q->drv_priv			= aptina_mt9v022_dev;
 	q->buf_struct_size 		= sizeof(struct aptina_mt9v022_buffer);
 	q->ops 				= &aptina_mt9v022_video_qops;
 	q->mem_ops 			= &vb2_dma_contig_memops;
 	q->timestamp_flags 		= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+	q->min_buffers_needed 		= 1;					
 	q->lock 			= &aptina_mt9v022_dev->mutex;
+	q->dev = &pdev->dev;							
 
 	ret = vb2_queue_init(q);
 	if (ret)
@@ -1227,6 +1106,7 @@ static int aptina_mt9v022_probe(struct platform_device *pdev) {
 	INIT_LIST_HEAD(&aptina_mt9v022_dev->dma_queue);
 
 	vfd->lock = &aptina_mt9v022_dev->mutex;
+	vfd->queue = q; 
 
 	/* register video device */
 	ret = video_register_device(aptina_mt9v022_dev->video_dev, VFL_TYPE_GRABBER, -1);
@@ -1242,7 +1122,8 @@ static int aptina_mt9v022_probe(struct platform_device *pdev) {
 	/* load up the subdevice */
 	i2c_adap = i2c_get_adapter(aptina_mt9v022_dev->cfg.i2c_adapter_id);
 	if (!i2c_adap) {
-		v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "Unable to find i2c adapter\n");
+		v4l2_err(&aptina_mt9v022_dev->v4l2_dev,
+				"Unable to find i2c adapter\n");
 		ret = -ENODEV;
 		goto err_unreg_vdev;
 
@@ -1268,7 +1149,8 @@ static int aptina_mt9v022_probe(struct platform_device *pdev) {
 		for (i = 0; i < aptina_mt9v022_dev->cfg.num_inputs; i++)
 			vfd->tvnorms |= aptina_mt9v022_dev->cfg.inputs[i].std;
 	} else {
-		v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "Unable to register sub device\n");
+		v4l2_err(&aptina_mt9v022_dev->v4l2_dev,
+				"Unable to register sub device\n");
 		ret = -ENODEV;
 		goto err_unreg_vdev;
 	}
@@ -1285,8 +1167,8 @@ static int aptina_mt9v022_probe(struct platform_device *pdev) {
 	 * may not work at the state as we expected
 	 */
 	route = &aptina_mt9v022_dev->cfg.routes[0];
-	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_routing, route->input,
-			route->output, 0);
+	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, s_routing,
+				route->input, route->output, 0);
 	if ((ret < 0) && (ret != -ENOIOCTLCMD)) {
 		v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "Failed to set input\n");
 		goto err_unreg_vdev;
@@ -1299,48 +1181,53 @@ static int aptina_mt9v022_probe(struct platform_device *pdev) {
 		v4l2_std_id std;
 		ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, g_std, &std);
 		if (ret) {
-			v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "Unable to get std\n");
+			v4l2_err(&aptina_mt9v022_dev->v4l2_dev,
+					"Unable to get std\n");
 			goto err_unreg_vdev;
 		}
 		aptina_mt9v022_dev->std = std;
 	}
 	if (aptina_mt9v022_dev->cfg.inputs[0].capabilities & V4L2_IN_CAP_DV_TIMINGS) {
 		struct v4l2_dv_timings dv_timings;
-		ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video, g_dv_timings,
-				&dv_timings);
+		ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, video,
+				g_dv_timings, &dv_timings);
 		if (ret) {
-			v4l2_err(&aptina_mt9v022_dev->v4l2_dev, "Unable to get dv timings\n");
+			v4l2_err(&aptina_mt9v022_dev->v4l2_dev,
+					"Unable to get dv timings\n");
 			goto err_unreg_vdev;
 		}
 		aptina_mt9v022_dev->dv_timings = dv_timings;
 	}
-#if 0
 	ret = aptina_mt9v022_init_sensor_formats(aptina_mt9v022_dev);
 	if (ret) {
 		v4l2_err(&aptina_mt9v022_dev->v4l2_dev,
 				"Unable to create sensor formats table\n");
 		goto err_unreg_vdev;
 	}
-#endif
 	return 0;
-
-err_unreg_vdev: 	video_unregister_device(aptina_mt9v022_dev->video_dev);
-			aptina_mt9v022_dev->video_dev = NULL;
-err_free_handler: 	v4l2_ctrl_handler_free(&aptina_mt9v022_dev->ctrl_handler);
-err_unreg_v4l2: 	v4l2_device_unregister(&aptina_mt9v022_dev->v4l2_dev);
-err_release_vdev:	if (aptina_mt9v022_dev->video_dev)
-				video_device_release(aptina_mt9v022_dev->video_dev);
-err_cleanup:		vb2_dma_contig_clear_max_seg_size(&pdev->dev);
-err_free_ppi:		ppi_delete_instance(aptina_mt9v022_dev->ppi);
-err_free_dev:		kfree(aptina_mt9v022_dev);
+err_unreg_vdev:
+	video_unregister_device(aptina_mt9v022_dev->video_dev);
+	aptina_mt9v022_dev->video_dev = NULL;
+err_free_handler:
+	v4l2_ctrl_handler_free(&aptina_mt9v022_dev->ctrl_handler);
+err_unreg_v4l2:
+	v4l2_device_unregister(&aptina_mt9v022_dev->v4l2_dev);
+err_release_vdev:
+	if (aptina_mt9v022_dev->video_dev)
+		video_device_release(aptina_mt9v022_dev->video_dev);
+err_cleanup:
+	vb2_dma_contig_clear_max_seg_size(&pdev->dev);
+	ppi_delete_instance(aptina_mt9v022_dev->ppi);
+err_free_dev:
+	kfree(aptina_mt9v022_dev);
 	return ret;
 }
 
-static int aptina_mt9v022_remove(struct platform_device *pdev) {
+static int aptina_mt9v022_remove(struct platform_device *pdev)
+{
 	struct v4l2_device *v4l2_dev = platform_get_drvdata(pdev);
-	struct aptina_mt9v022_device
-	*aptina_mt9v022_dev = container_of(v4l2_dev,
-			struct aptina_mt9v022_device, v4l2_dev);
+	struct aptina_mt9v022_device *aptina_mt9v022_dev =
+		container_of(v4l2_dev, struct aptina_mt9v022_device, v4l2_dev);
 
 	aptina_mt9v022_free_sensor_formats(aptina_mt9v022_dev);
 	video_unregister_device(aptina_mt9v022_dev->video_dev);
@@ -1353,17 +1240,19 @@ static int aptina_mt9v022_remove(struct platform_device *pdev) {
 	return 0;
 }
 
-static struct platform_driver aptina_mt9v022_driver = {
-	.driver = { .name = CAPTURE_DRV_NAME,
+static struct platform_driver aptina_mt9v022_driver =
+{
+	.driver = { 
+			.name = CAPTURE_DRV_NAME,
 #ifdef CONFIG_OF
-				.of_match_table = adi_cap_match,
+			.of_match_table = cap_match,
 #endif
-				},
-	.probe = aptina_mt9v022_probe,
+		  },
+	.probe  = aptina_mt9v022_probe,
 	.remove = aptina_mt9v022_remove,
 };
 module_platform_driver(aptina_mt9v022_driver);
 
 MODULE_DESCRIPTION("video capture driver for an aptina_mt9v022 on Griffin-Lite");
-MODULE_AUTHOR("Lutz Freitag <Lutz.Freitag@irisgmbh.de>");
+MODULE_AUTHOR("Michael Glembottzki <Michael.Glembotzki@irisgmbh.de>");
 MODULE_LICENSE("GPL v2");
