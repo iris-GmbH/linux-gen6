@@ -1,30 +1,30 @@
 choice
-    prompt "EPC or Aptina?"
-    config EPC660
-          bool "EPC660"
-    config APTINA_MT9V022
-           bool "APTINA_MT9V022"
- endchoice
+    prompt "Select video capture driver?"
 
 config VIDEO_IRIS_GEN6_EPC660_CAPTURE
-	tristate "Iris-Gen6 Video Capture Driver for EPC660"
+	tristate "Iris-Gen6 EPC660"
 	depends on VIDEO_V4L2 && (BLACKFIN || ARCH_SC57X || ARCH_SC58X) && I2C
 	depends on HAS_DMA
-	depends on EPC660
 	select VIDEOBUF2_DMA_CONTIG
+	select IRIS_CUSTOM_DRIVERS 
+	select IRIS_IRMA_SIX_HARDWARE_DISCOVERY 
 	help
+	  Iris-Gen6 Video Capture Driver for EPC660:
 	  V4L2 bridge driver for Blackfin video capture device.
 	  Choose PPI or EPPI as its interface.
 	  To compile this driver as a module, choose M here: the
 	  module will be called iris_gen6_epc660_capture.
+
 config VIDEO_IRIS_GEN6_APTINA_MT9V022_CAPTURE
-	tristate "Iris-Gen6 Video Capture Driver for APTINA_MT9V022"
+	tristate "Iris-Gen6 APTINA_MT9V022"
 	depends on VIDEO_V4L2 && (BLACKFIN || ARCH_SC57X || ARCH_SC58X) && I2C
 	depends on HAS_DMA
-	depends on APTINA_MT9V022
 	select VIDEOBUF2_DMA_CONTIG
 	help
+	  Iris-Gen6 Video Capture Driver for APTINA_MT9V022:
 	  V4L2 bridge driver for Blackfin video capture device.
 	  Choose PPI or EPPI as its interface.
 	  To compile this driver as a module, choose M here: the
-	  module will be called iris_gen6_aptina_mt9v022_capture.
+	  module will be called iris_gen6_aptina_mt9v022.
+
+endchoice
