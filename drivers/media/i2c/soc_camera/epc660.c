@@ -131,7 +131,7 @@ fail:
 		   __func__, address);
 	return -1;
 }
-
+#if 0
 static int epc660_eeprom_read_word(struct i2c_client *client,
 								   u8 address, u16 *data)
 {
@@ -158,6 +158,7 @@ fail:
 		   __func__, address);
 	return -1;
 }
+#endif
 
 /*
  * Send an I2C sequence to the imager.
@@ -203,8 +204,7 @@ static int epc660_device_init(struct i2c_client *client)
 	udelay(350); // How long do we have to wait?
 
 	printk(KERN_INFO "EPC660 I2C initialization ");
-	ret = epc660_send_i2c_sequence(client,
-								   epc660_init_sequence);
+	ret = epc660_send_i2c_sequence(client, epc660_init_sequence);
 	if (ret < 0) {
 		goto fail;
 	};
@@ -213,8 +213,7 @@ static int epc660_device_init(struct i2c_client *client)
 
 
 	printk(KERN_INFO "Programming EPC660 sequencer ");
-	ret = epc660_send_i2c_sequence(client,
-								   epc660_003_Seq_Prog_8MHz_Default_8);
+	ret = epc660_send_i2c_sequence(client, epc660_003_Seq_Prog_8MHz_Default_8);
 	if (ret < 0) {
 		goto fail;
 	};
@@ -263,9 +262,11 @@ static int epc660_s_stream(struct v4l2_subdev *sd, int enable)
 	return 0;
 }
 
-static int epc660_g_fmt(struct v4l2_subdev *sd,
-			 struct v4l2_mbus_framefmt *mf)
+static int epc660_get_fmt(struct v4l2_subdev *sd,
+		struct v4l2_subdev_pad_config *cfg,
+		struct v4l2_subdev_format *format)
 {
+	struct v4l2_mbus_framefmt *mf = &format->format;
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct epc660 *epc660 = to_epc660(client);
 
@@ -278,18 +279,20 @@ static int epc660_g_fmt(struct v4l2_subdev *sd,
 	return 0;
 }
 
-static int epc660_s_fmt(struct v4l2_subdev *sd,
-			 struct v4l2_mbus_framefmt *mf)
+static int epc660_set_fmt(struct v4l2_subdev *sd,
+			struct v4l2_subdev_pad_config *cfg,
+			struct v4l2_subdev_format *format)
 {
+	struct v4l2_mbus_framefmt *mf = &format->format;
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct epc660 *epc660 = to_epc660(client);
-	int ret = 0;
 	const int centerX = (324+4)/2;
 	const int centerY = (246+6)/2;
 	const int bY = centerY-1;
 	int lX;
 	int rX;
 	int uY;
+	int align = 1;
 
 	// set the ROI on the EPC
 	lX = (centerX - mf->width / 2) & ~1; // the ROI has to start at an even offset
@@ -305,46 +308,32 @@ static int epc660_s_fmt(struct v4l2_subdev *sd,
 
 	epc660->rect.width  = mf->width;
 	epc660->rect.height = mf->height;
-	epc660->fmt	= epc660_find_datafmt(mf->code,
-					      epc660->fmts, epc660->num_fmts);
-	mf->colorspace	= epc660->fmt->colorspace;
-	return ret;
-}
 
-static int epc660_try_fmt(struct v4l2_subdev *sd,
-			   struct v4l2_mbus_framefmt *mf)
-{
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	struct epc660 *epc660 = to_epc660(client);
-	const struct epc660_datafmt *fmt;
-	int align = 1;
+	if (format->pad)
+		return -EINVAL;
 
 	v4l_bound_align_image(&mf->width, EPC660_MIN_WIDTH,
 		EPC660_MAX_WIDTH, align,
 		&mf->height, EPC660_MIN_HEIGHT,
 		EPC660_MAX_HEIGHT, align, 0);
-	fmt = epc660_find_datafmt(mf->code, epc660->fmts,
+	epc660->fmt = epc660_find_datafmt(mf->code, epc660->fmts,
 				   epc660->num_fmts);
-	if (!fmt) {
-		fmt = epc660->fmt;
-		mf->code = fmt->code;
-	}
-
-	mf->colorspace	= fmt->colorspace;
+	mf->colorspace	= epc660->fmt->colorspace;
 
 	return 0;
 }
 
-static int epc660_enum_fmt(struct v4l2_subdev *sd, unsigned int index,
-			    u32 *code)
+static int epc660_enum_mbus_code(struct v4l2_subdev *sd,
+		struct v4l2_subdev_pad_config *cfg,
+		struct v4l2_subdev_mbus_code_enum *code)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct epc660 *epc660 = to_epc660(client);
 
-	if (index >= epc660->num_fmts)
+	if (code->pad || code->index >= epc660->num_fmts)
 		return -EINVAL;
 
-	*code = epc660->fmts[index].code;
+	code->code = epc660->fmts[code->index].code;
 	return 0;
 }
 
@@ -456,12 +445,12 @@ static int epc660_video_probe(struct i2c_client *client)
 	if (epc660->chip_version < 0x03) {
 		ret = -ENODEV;
 		dev_err(&client->dev,
-				"\n"
-			    "\t\t************************************************\n"
-				"\t\t*                                              *\n"
-		        "\t\t*  No viable EPC660 found, IC version is 0x%02x  *\n"
-				"\t\t*                                              *\n"
-			    "\t\t************************************************\n",
+			"\n"
+			"\t\t************************************************\n"
+			"\t\t*                                              *\n"
+			"\t\t*  No viable EPC660 found, IC version is 0x%02x  *\n"
+			"\t\t*                                              *\n"
+			"\t\t************************************************\n",
 		        epc660->chip_version);
 		dev_err(&client->dev, "EPC660: Chip version must be at least 3.\n");
 		goto ei2c;
@@ -494,7 +483,23 @@ static int epc660_video_probe(struct i2c_client *client)
 ei2c:
 	return ret;
 }
+#if 0
+static int epc660_g_mbus_config(struct v4l2_subdev *sd,
+				struct v4l2_mbus_config *cfg)
+{
+	//not implemented yet
 
+	return 0;
+}
+
+static int epc660_s_mbus_config(struct v4l2_subdev *sd,
+				 const struct v4l2_mbus_config *cfg)
+{
+	//not implemented yet
+
+	return 0;
+}
+#endif
 
 static struct v4l2_subdev_core_ops epc660_subdev_core_ops = {
 #ifdef CONFIG_VIDEO_ADV_DEBUG
@@ -506,15 +511,26 @@ static struct v4l2_subdev_core_ops epc660_subdev_core_ops = {
 
 static struct v4l2_subdev_video_ops epc660_subdev_video_ops = {
 	.s_stream	= epc660_s_stream,
-	.s_mbus_fmt	= epc660_s_fmt,
-	.g_mbus_fmt	= epc660_g_fmt,
-	.try_mbus_fmt	= epc660_try_fmt,
-	.enum_mbus_fmt	= epc660_enum_fmt,
+#if 0
+	.g_mbus_config	= epc660_g_mbus_config,
+	.s_mbus_config	= epc660_s_mbus_config,
+#endif
+};
+
+static const struct v4l2_subdev_pad_ops epc660_subdev_pad_ops = {
+	.enum_mbus_code = epc660_enum_mbus_code,
+#if 0
+	.get_selection	= epc660_get_selection,
+	.set_selection	= epc660_set_selection,
+#endif
+	.get_fmt	= epc660_get_fmt,
+	.set_fmt	= epc660_set_fmt,
 };
 
 static struct v4l2_subdev_ops epc660_subdev_ops = {
 	.core	= &epc660_subdev_core_ops,
 	.video	= &epc660_subdev_video_ops,
+	.pad	= &epc660_subdev_pad_ops,
 };
 
 static int epc660_probe(struct i2c_client *client,
