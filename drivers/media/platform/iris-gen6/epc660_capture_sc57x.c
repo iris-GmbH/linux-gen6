@@ -50,10 +50,11 @@
 #include <asm/dma.h>
 #endif
 
-#define CAPTURE_DRV_NAME        "epc660_capture" //"EPC660"
+#define COMPATIBLE_DT_NAME	"iris,gen6-epc660"
+#define CAPTURE_DRV_NAME        "epc660_capture"
 #define MIN_NUM_BUF      	2
 
-struct epc660_format {
+struct imager_format {
 	char *desc;
 	u32 pixelformat;
 	u32 mbus_code;
@@ -64,27 +65,27 @@ struct epc660_format {
 };
 
 
-struct epc660_dma_desc_list_item {
+struct imager_dma_desc_list_item {
 	dma_addr_t next_desc_addr;
 	dma_addr_t start_addr;
 	unsigned long cfg;
 }__packed;
 
-struct epc660_buffer {
+struct imager_buffer {
 	struct vb2_v4l2_buffer vb;
 	// points to memory that is allocated to be reacheable by the dma and holds an array of dma descriptors
-	struct epc660_dma_desc_list_item *dma_desc;
+	struct imager_dma_desc_list_item *dma_desc;
 	// the dma reacheable address of the dma_desc
 	dma_addr_t desc_dma_addr;
 	struct list_head list;
 };
 
-struct epc660_route {
+struct imager_route {
 	u32 input;
 	u32 output;
 };
 
-struct epc660_capture_config {
+struct capture_config {
 	/* card name */
 	const char *card_name;
 	/* inputs available at the sub device */
@@ -92,7 +93,7 @@ struct epc660_capture_config {
 	/* number of inputs supported */
 	int num_inputs;
 	/* routing information for each input */
-	struct epc660_route *routes;
+	struct imager_route *routes;
 	/* i2c bus adapter no */
 	int i2c_adapter_id;
 	/* i2c subdevice board info */
@@ -118,7 +119,7 @@ struct epc660_device {
 	/* sub device instance */
 	struct v4l2_subdev *sd;
 	/* capture config */
-	struct epc660_capture_config cfg;
+	struct capture_config cfg;
 	/* dma channel */
 	int dma_channel;
 	/* ppi interface */
@@ -140,7 +141,7 @@ struct epc660_device {
 	/* the size of each pixel in bytes */
 	int pixel_depth_bytes;
 	/* used to store sensor supported format */
-	struct epc660_format *sensor_formats;
+	struct imager_format *sensor_formats;
 	/* number of sensor formats array */
 	int num_sensor_formats;
 	/* buffer queue used in videobuf2 */
@@ -157,7 +158,7 @@ struct epc660_device {
 	struct mutex mutex;
 };
 
-static const struct epc660_format epc660_formats[] = {
+static const struct imager_format epc660_formats[] = {
 	{
 		.desc	     = "12bit Grey Scale",
 		.pixelformat = V4L2_PIX_FMT_Y12,
@@ -216,7 +217,7 @@ static struct v4l2_input epc660_inputs[] = {
 	},
 };
 
-static struct epc660_route epc660_routes[] = {
+static struct imager_route epc660_routes[] = {
 	{
 		.input  = 0,
 		.output = 0,
@@ -228,9 +229,9 @@ static int epc660_start_transfering(struct epc660_device *epc660_dev,
 				dma_addr_t descrAddr);
 static void epc660_stop_transfering(struct epc660_device *epc660_dev);
 
-static struct epc660_buffer *to_epc660_vb(struct vb2_v4l2_buffer *vb)
+static struct imager_buffer *vb2v4l2_to_imagerbuffer(struct vb2_v4l2_buffer *vb)
 {
-	return container_of(vb, struct epc660_buffer, vb);
+	return container_of(vb, struct imager_buffer, vb);
 }
 
 /* The queue is busy if there is a owner and you are not that owner. */
@@ -245,7 +246,7 @@ static int epc660_init_sensor_formats(struct epc660_device *epc660_dev)
 	struct v4l2_subdev_mbus_code_enum code = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
-	struct epc660_format *sf;
+	struct imager_format *sf;
 	unsigned int num_formats = 0;
 	int i, j;
 
@@ -312,11 +313,11 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
-	struct epc660_buffer *buf = to_epc660_vb(vbuf);
+	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
 	int dmaDescArrCount;
 	int i, channel;
 	dma_addr_t start_addr, channelStartAddr, nextDescrDMAAddr;
-	struct epc660_dma_desc_list_item *dma_desc;
+	struct imager_dma_desc_list_item *dma_desc;
 	int halfImageSizeBytes, rowSizeBytes;
 
 	INIT_LIST_HEAD(&buf->list);
@@ -399,7 +400,7 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
-	struct epc660_buffer *buf = to_epc660_vb(vbuf);
+	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
 	unsigned long flags;
 	int last_dma_desc_idx;
 	last_dma_desc_idx = epc660_dev->pixel_channels * epc660_dev->fmt.height - 1;
@@ -408,8 +409,8 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
 
 	// setup the dma descriptor
 	if (!list_empty(&epc660_dev->dma_queue)) {
-		struct epc660_buffer* lastBuffer;
-		lastBuffer = list_last_entry(&epc660_dev->dma_queue, struct epc660_buffer, list);
+		struct imager_buffer* lastBuffer;
+		lastBuffer = list_last_entry(&epc660_dev->dma_queue, struct imager_buffer, list);
 		lastBuffer->dma_desc[last_dma_desc_idx].next_desc_addr = buf->desc_dma_addr;
 	}
 
@@ -433,7 +434,7 @@ static void epc660_buffer_cleanup(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
-	struct epc660_buffer *buf = to_epc660_vb(vbuf);
+	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
 	unsigned long flags;
 
 	spin_lock_irqsave(&epc660_dev->lock, flags);
@@ -501,8 +502,8 @@ static void epc660_stop_streaming(struct vb2_queue *vq)
 
 	/* release all active buffers */
 	while (!list_empty(&epc660_dev->dma_queue)) {
-		struct epc660_buffer *buf = list_entry(epc660_dev->dma_queue.next,
-						struct epc660_buffer, list);
+		struct imager_buffer *buf = list_entry(epc660_dev->dma_queue.next,
+						struct imager_buffer, list);
 		list_del_init(&buf->list);
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
 	}
@@ -581,7 +582,7 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 			lastDmaDescriptor = (dma_addr_t)get_dma_prev_desc_ptr(epc660_dev->dma_channel);
 			lastDmaDescriptor &= ~1; // the lowest bit masks when a decriptor fetch was invalid
 			list_for_each(iterator, &epc660_dev->dma_queue) {
-				struct epc660_buffer* buf = list_entry(iterator, struct epc660_buffer, list);
+				struct imager_buffer *buf = list_entry(iterator, struct imager_buffer, list);
 				if (buf->desc_dma_addr == lastDmaDescriptor) {
 					++completedCnt;
 					break;
@@ -592,7 +593,7 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 				printk("cannot find any completed buffers!\n");
 //				epc660_stop_transfering(epc660_dev);
 			} else {
-				struct epc660_buffer* buf;
+				struct imager_buffer* buf;
 				struct vb2_buffer *vb;
 //				printk("found %d completed buffers\n", completedCnt);
 				while (completedCnt--) {
@@ -600,7 +601,7 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 						break;
 					}
 					buf = list_entry(epc660_dev->dma_queue.next,
-							struct epc660_buffer, list);
+							struct imager_buffer, list);
 					vb = &buf->vb.vb2_buf;
 					vb->timestamp = ktime_get_ns(); // this has been changed from type struct timeval to -> u64 type
 					if (ppi->err) {
@@ -666,7 +667,7 @@ static int epc660_streamon(struct file *file, void *priv,
 	struct vb2_queue *vq = &epc660_dev->buffer_queue;
 	unsigned long flags;
 	int ret;
-	struct epc660_buffer* buf;
+	struct imager_buffer* buf;
 
 	if (vb2_queue_is_busy(epc660_dev->video_dev, file))
 		return -EBUSY;
@@ -687,7 +688,7 @@ static int epc660_streamon(struct file *file, void *priv,
 
 	/* get the next frame from the dma queue */
 	buf = list_entry(epc660_dev->dma_queue.next,
-			struct epc660_buffer, list);
+			struct imager_buffer, list);
 	epc660_start_transfering(epc660_dev, buf->desc_dma_addr);
 	spin_unlock_irqrestore(&epc660_dev->lock, flags);
 
@@ -732,7 +733,7 @@ static int epc660_enum_input(struct file *file, void *priv,
 				struct v4l2_input *input)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
-	struct epc660_capture_config *config = &epc660_dev->cfg;
+	struct capture_config *config = &epc660_dev->cfg;
 
 	int ret;
 	u32 status;
@@ -760,8 +761,8 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
 	struct vb2_queue *vq = &epc660_dev->buffer_queue;
-	struct epc660_capture_config *config = &epc660_dev->cfg;
-	struct epc660_route *route;
+	struct capture_config *config = &epc660_dev->cfg;
+	struct imager_route *route;
 	int ret;
 
 	if (vb2_is_busy(vq))
@@ -781,34 +782,34 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 	return 0;
 }
 
-static int epc660_try_format(struct epc660_device *bcap,
+static int epc660_try_format(struct epc660_device *epc660_dev,
 			     struct v4l2_pix_format *pixfmt,
-			     struct epc660_format *epc660_fmt)
+			     struct imager_format *epc660_fmt)
 {
-	struct epc660_format *sf = bcap->sensor_formats;
-	struct epc660_format *fmt = NULL;
+	struct imager_format *sf = epc660_dev->sensor_formats;
+	struct imager_format *fmt = NULL;
 	struct v4l2_subdev_pad_config pad_cfg;
 	struct v4l2_subdev_format format = {
 		.which = V4L2_SUBDEV_FORMAT_TRY,
 	};
 	int ret, i;
 
-	for (i = 0; i < bcap->num_sensor_formats; i++) {
+	for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
 		fmt = &sf[i];
 		if (pixfmt->pixelformat == fmt->pixelformat)
 			break;
 	}
-	if (i == bcap->num_sensor_formats)
+	if (i == epc660_dev->num_sensor_formats)
 		fmt = &sf[0];
 
 	v4l2_fill_mbus_format(&format.format, pixfmt, fmt->mbus_code);
-	ret = v4l2_subdev_call(bcap->sd, pad, set_fmt, &pad_cfg,
+	ret = v4l2_subdev_call(epc660_dev->sd, pad, set_fmt, &pad_cfg,
 				&format);
 	if (ret < 0)
 		return ret;
 	v4l2_fill_pix_format(pixfmt, &format.format);
 	if (epc660_fmt) {
-		for (i = 0; i < bcap->num_sensor_formats; i++) {
+		for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
 			fmt = &sf[i];
 			if (format.format.code == fmt->mbus_code)
 				break;
@@ -825,7 +826,7 @@ static int epc660_enum_fmt_vid_cap(struct file *file, void  *priv,
 					   struct v4l2_fmtdesc *fmt)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
-	struct epc660_format *sf = epc660_dev->sensor_formats;
+	struct imager_format *sf = epc660_dev->sensor_formats;
 
 	if (fmt->index >= epc660_dev->num_sensor_formats)
 		return -EINVAL;
@@ -862,7 +863,7 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	struct v4l2_subdev_format format = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
-	struct epc660_format epc660_fmt;
+	struct imager_format epc660_fmt;
 	struct v4l2_pix_format *pixfmt = &fmt->fmt.pix;
 	int dmaPoolMemorySize;
 	int ret;
@@ -902,7 +903,7 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 		dma_pool_destroy(epc660_dev->dma_pool);
 	}
 
-	dmaPoolMemorySize = (epc660_dev->pixel_channels * epc660_dev->fmt.height) * sizeof(struct epc660_dma_desc_list_item);
+	dmaPoolMemorySize = (epc660_dev->pixel_channels * epc660_dev->fmt.height) * sizeof(struct imager_dma_desc_list_item);
 	epc660_dev->dma_pool = dma_pool_create(CAPTURE_DRV_NAME, epc660_dev->v4l2_dev.dev,  dmaPoolMemorySize, 16, 0);
 	return 0;
 }
@@ -997,13 +998,13 @@ static int get_int_prop(struct device_node *dn, const char *s)
 
 static const struct of_device_id cap_match[] =
 {
-	{ .compatible = "iris,gen6-epc660", },
+	{ .compatible = COMPATIBLE_DT_NAME, },
 	{},
 };
 MODULE_DEVICE_TABLE(of, cap_match);
 
 static int fill_config(struct platform_device *pdev,
-		       struct epc660_capture_config *o_config)
+		       struct capture_config *o_config)
 {
 	struct device_node *node = pdev->dev.of_node;
 	struct ppi_info *info;
@@ -1040,7 +1041,7 @@ static int epc660_probe(struct platform_device *pdev)
 	struct video_device *vfd;
 	struct i2c_adapter *i2c_adap;
 	struct vb2_queue *q;
-	struct epc660_route *route;
+	struct imager_route *route;
 	struct of_device_id const* match;
 	struct device *dev = &pdev->dev;
 	int ret;
@@ -1123,7 +1124,7 @@ static int epc660_probe(struct platform_device *pdev)
 	q->type				= V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	q->io_modes			= VB2_MMAP | VB2_DMABUF;
 	q->drv_priv			= epc660_dev;
-	q->buf_struct_size		= sizeof(struct epc660_buffer);
+	q->buf_struct_size		= sizeof(struct imager_buffer);
 	q->ops				= &epc660_video_qops;
 	q->mem_ops 			= &vb2_dma_contig_memops;
 	q->timestamp_flags 		= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;

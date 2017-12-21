@@ -50,12 +50,11 @@
 #include <asm/dma.h>
 #endif
 
-#include <mach/portmux-sc57x.h>
-
-#define CAPTURE_DRV_NAME        "aptina_mt9v022"
+#define COMPATIBLE_DT_NAME	"iris,gen6-aptina_mt9v022"
+#define CAPTURE_DRV_NAME        "aptina_mt9v022_capture" //use this string in userspace-app
 #define MIN_NUM_BUF      	2
 
-struct aptina_mt9v022_format {
+struct imager_format {
 	char *desc;
 	u32 pixelformat;
 	u32 mbus_code;
@@ -64,27 +63,28 @@ struct aptina_mt9v022_format {
 	int pixel_depth_bytes;
 };
 
-struct aptina_mt9v022_dma_desc_list_item {
+
+struct imager_dma_desc_list_item {
 	dma_addr_t next_desc_addr;
 	dma_addr_t start_addr;
 	unsigned long cfg;
 }__packed;
 
-struct aptina_mt9v022_buffer {
+struct imager_buffer {
 	struct vb2_v4l2_buffer vb;
 	// points to memory that is allocated to be reacheable by the dma and holds an array of dma descriptors
-	struct aptina_mt9v022_dma_desc_list_item *dma_desc;
+	struct imager_dma_desc_list_item *dma_desc;
 	// the dma reacheable address of the dma_desc
 	dma_addr_t desc_dma_addr;
 	struct list_head list;
 };
 
-struct aptina_mt9v022_route {
+struct imager_route {
 	u32 input;
 	u32 output;
 };
 
-struct aptina_mt9v022_capture_config {
+struct capture_config {
 	/* card name */
 	const char *card_name;
 	/* inputs available at the sub device */
@@ -92,7 +92,7 @@ struct aptina_mt9v022_capture_config {
 	/* number of inputs supported */
 	int num_inputs;
 	/* routing information for each input */
-	struct aptina_mt9v022_route *routes;
+	struct imager_route *routes;
 	/* i2c bus adapter no */
 	int i2c_adapter_id;
 	/* i2c subdevice board info */
@@ -117,7 +117,7 @@ struct aptina_mt9v022_device {
 	/* sub device instance */
 	struct v4l2_subdev *sd;
 	/* capture config */
-	struct aptina_mt9v022_capture_config cfg;
+	struct capture_config cfg;
 	/* dma channel */
 	int dma_channel;
 	/* ppi interface */
@@ -137,7 +137,7 @@ struct aptina_mt9v022_device {
 	/* the size of each pixel in bytes */
 	int pixel_depth_bytes;
 	/* used to store sensor supported format */
-	struct aptina_mt9v022_format *sensor_formats;
+	struct imager_format *sensor_formats;
 	/* number of sensor formats array */
 	int num_sensor_formats;
 	/* buffer queue used in videobuf2 */
@@ -154,7 +154,47 @@ struct aptina_mt9v022_device {
 	struct mutex mutex;
 };
 
-static const struct aptina_mt9v022_format aptina_mt9v022_formats[] = {
+static const struct imager_format aptina_mt9v022_formats[] = {
+	{
+		.desc        = "YCbCr 4:2:2 Interleaved UYVY",
+		.pixelformat = V4L2_PIX_FMT_UYVY,
+		.mbus_code   = MEDIA_BUS_FMT_UYVY8_2X8,
+		.bpp         = 16,
+		.dlen        = 8,
+		.pixel_depth_bytes = 2,
+	},
+	{
+		.desc        = "YCbCr 4:2:2 Interleaved YUYV",
+		.pixelformat = V4L2_PIX_FMT_YUYV,
+		.mbus_code   = MEDIA_BUS_FMT_YUYV8_2X8,
+		.bpp         = 16,
+		.dlen        = 8,
+		.pixel_depth_bytes = 2,
+	},
+	{
+		.desc        = "YCbCr 4:2:2 Interleaved UYVY",
+		.pixelformat = V4L2_PIX_FMT_UYVY,
+		.mbus_code   = MEDIA_BUS_FMT_UYVY8_1X16,
+		.bpp         = 16,
+		.dlen        = 16,
+		.pixel_depth_bytes = 2,
+	},
+	{
+		.desc        = "RGB 565",
+		.pixelformat = V4L2_PIX_FMT_RGB565,
+		.mbus_code   = MEDIA_BUS_FMT_RGB565_2X8_LE,
+		.bpp         = 16,
+		.dlen        = 8,
+		.pixel_depth_bytes = 2,
+	},
+	{
+		.desc        = "RGB 444",
+		.pixelformat = V4L2_PIX_FMT_RGB444,
+		.mbus_code   = MEDIA_BUS_FMT_RGB444_2X8_PADHI_LE,
+		.bpp         = 16,
+		.dlen        = 8,
+		.pixel_depth_bytes = 2,
+	},
 	{
 		.desc 	    	   = "10bit Grey Scale",
 		.pixelformat	   = V4L2_PIX_FMT_Y10,
@@ -176,7 +216,7 @@ static struct v4l2_input aptina_mt9v022_inputs[] = {
 	},
 };
 
-static struct aptina_mt9v022_route aptina_mt9v022_routes[] = {
+static struct imager_route aptina_mt9v022_routes[] = {
 	{
 		.input  = 0,
 		.output = 0,
@@ -190,9 +230,9 @@ static int aptina_mt9v022_start_transfering(
 static void aptina_mt9v022_stop_transfering(
 				struct aptina_mt9v022_device *aptina_mt9v022_dev);
 
-static struct aptina_mt9v022_buffer *to_aptina_mt9v022_vb(struct vb2_v4l2_buffer *vb)
+static struct imager_buffer *vb2v4l2_to_imagerbuffer(struct vb2_v4l2_buffer *vb)
 {
-	return container_of(vb, struct aptina_mt9v022_buffer, vb);
+	return container_of(vb, struct imager_buffer, vb);
 }
 
 /* The queue is busy if there is a owner and you are not that owner. */
@@ -208,7 +248,7 @@ static int aptina_mt9v022_init_sensor_formats(
 	struct v4l2_subdev_mbus_code_enum code = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
-	struct aptina_mt9v022_format *sf;
+	struct imager_format *sf;
 	unsigned int num_formats = 0;
 	int i, j;
 
@@ -277,7 +317,7 @@ static int aptina_mt9v022_buffer_init(struct vb2_buffer *vb)
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct aptina_mt9v022_device *aptina_mt9v022_dev =
 						 vb2_get_drv_priv(vb->vb2_queue);
-	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vbuf);
+	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
 	dma_addr_t start_addr;
 
 	INIT_LIST_HEAD(&buf->list);
@@ -321,16 +361,16 @@ static void aptina_mt9v022_buffer_queue(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = vb2_get_drv_priv(vb->vb2_queue);
-	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vbuf);
+	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
 	unsigned long flags;
 
 	buf->dma_desc->next_desc_addr = buf->desc_dma_addr;
 	spin_lock_irqsave(&aptina_mt9v022_dev->lock, flags);
 	// setup the dma descriptor
 	if (!list_empty(&aptina_mt9v022_dev->dma_queue)) {
-		struct aptina_mt9v022_buffer* lastBuffer;
+		struct imager_buffer* lastBuffer;
 		lastBuffer = list_last_entry(&aptina_mt9v022_dev->dma_queue,
-							struct aptina_mt9v022_buffer, list);
+							struct imager_buffer, list);
 		lastBuffer->dma_desc->next_desc_addr = buf->desc_dma_addr;
 	}
 	list_add_tail(&buf->list, &aptina_mt9v022_dev->dma_queue);
@@ -342,7 +382,7 @@ static void aptina_mt9v022_buffer_cleanup(struct vb2_buffer *vb)
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct aptina_mt9v022_device *aptina_mt9v022_dev =
 						vb2_get_drv_priv(vb->vb2_queue);
-	struct aptina_mt9v022_buffer *buf = to_aptina_mt9v022_vb(vbuf);
+	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
 	unsigned long flags;
 
 	spin_lock_irqsave(&aptina_mt9v022_dev->lock, flags);
@@ -408,9 +448,9 @@ static void aptina_mt9v022_stop_streaming(struct vb2_queue *vq)
 
 	/* release all active buffers */
 	while (!list_empty(&aptina_mt9v022_dev->dma_queue)) {
-		struct aptina_mt9v022_buffer *buf = 
+		struct imager_buffer *buf = 
 					list_entry(aptina_mt9v022_dev->dma_queue.next,
-					struct aptina_mt9v022_buffer, list);
+						struct imager_buffer, list);
 		list_del_init(&buf->list);
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
 	}
@@ -488,7 +528,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 			lastDmaDescriptor &= ~1; // the lowest bit masks when a decriptor fetch was invalid
 			list_for_each(iterator, &aptina_mt9v022_dev->dma_queue)
 			{
-				struct aptina_mt9v022_buffer * buf = list_entry(iterator, struct aptina_mt9v022_buffer, list);
+				struct imager_buffer *buf = list_entry(iterator, struct imager_buffer, list);
 				if (buf->desc_dma_addr == lastDmaDescriptor) {
 					++completedCnt;
 					break;
@@ -497,7 +537,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 			if (0 == completedCnt) {
 
 			} else {
-				struct aptina_mt9v022_buffer* buf;
+				struct imager_buffer* buf;
 				struct vb2_buffer *vb;
 				while (completedCnt--) {
 					if (&aptina_mt9v022_dev->dma_queue
@@ -505,7 +545,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 						break;
 					}
 					buf = list_entry(aptina_mt9v022_dev->dma_queue.next,
-							struct aptina_mt9v022_buffer, list);
+							struct imager_buffer, list);
 					vb = &buf->vb.vb2_buf;
 					vb->timestamp = ktime_get_ns(); // this has been changed from type struct timeval to -> u64 type
 					if (ppi->err) {
@@ -576,7 +616,7 @@ static int aptina_mt9v022_streamon(struct file *file, void *priv,
 	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
 	unsigned long flags;
 	int ret;
-	struct aptina_mt9v022_buffer* buf;
+	struct imager_buffer* buf;
 
 	if (vb2_queue_is_busy(aptina_mt9v022_dev->video_dev, file))
 		return -EBUSY;
@@ -597,7 +637,7 @@ static int aptina_mt9v022_streamon(struct file *file, void *priv,
 
 	/* get the next frame from the dma queue */
 	buf = list_entry(aptina_mt9v022_dev->dma_queue.next,
-			struct aptina_mt9v022_buffer, list);
+			struct imager_buffer, list);
 	aptina_mt9v022_start_transfering(aptina_mt9v022_dev, buf->desc_dma_addr);
 	spin_unlock_irqrestore(&aptina_mt9v022_dev->lock, flags);
 
@@ -686,7 +726,7 @@ static int aptina_mt9v022_enum_input(struct file *file, void *priv,
 				     struct v4l2_input *input)
 {
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-	struct aptina_mt9v022_capture_config *config = &aptina_mt9v022_dev->cfg;
+	struct capture_config *config = &aptina_mt9v022_dev->cfg;
 
 	int ret;
 	u32 status;
@@ -715,8 +755,8 @@ static int aptina_mt9v022_s_input(struct file *file, void *priv,
 {
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
 	struct vb2_queue *vq = &aptina_mt9v022_dev->buffer_queue;
-	struct aptina_mt9v022_capture_config *config = &aptina_mt9v022_dev->cfg;
-	struct aptina_mt9v022_route *route;
+	struct capture_config *config = &aptina_mt9v022_dev->cfg;
+	struct imager_route *route;
 	int ret;
 
 	if (vb2_is_busy(vq))
@@ -736,34 +776,34 @@ static int aptina_mt9v022_s_input(struct file *file, void *priv,
 	return 0;
 }
 
-static int aptina_mt9v022_try_format(struct aptina_mt9v022_device *bcap,
+static int aptina_mt9v022_try_format(struct aptina_mt9v022_device *aptina_mt9v022_dev,
 				     struct v4l2_pix_format *pixfmt,
-				     struct aptina_mt9v022_format *aptina_mt9v022_fmt)
+				     struct imager_format *aptina_mt9v022_fmt)
 {
-	struct aptina_mt9v022_format *sf = bcap->sensor_formats;
-	struct aptina_mt9v022_format *fmt = NULL;
+	struct imager_format *sf = aptina_mt9v022_dev->sensor_formats;
+	struct imager_format *fmt = NULL;
 	struct v4l2_subdev_pad_config pad_cfg;
 	struct v4l2_subdev_format format = {
 		.which = V4L2_SUBDEV_FORMAT_TRY,
 	};
 	int ret, i;
 
-	for (i = 0; i < bcap->num_sensor_formats; i++) {
+	for (i = 0; i < aptina_mt9v022_dev->num_sensor_formats; i++) {
 		fmt = &sf[i];
 		if (pixfmt->pixelformat == fmt->pixelformat)
 			break;
 	}
-	if (i == bcap->num_sensor_formats)
+	if (i == aptina_mt9v022_dev->num_sensor_formats)
 		fmt = &sf[0];
 
 	v4l2_fill_mbus_format(&format.format, pixfmt, fmt->mbus_code);
-	ret = v4l2_subdev_call(bcap->sd, pad, set_fmt, &pad_cfg,
+	ret = v4l2_subdev_call(aptina_mt9v022_dev->sd, pad, set_fmt, &pad_cfg,
 				&format);
 	if (ret < 0)
 		return ret;
 	v4l2_fill_pix_format(pixfmt, &format.format);
 	if (aptina_mt9v022_fmt) {
-		for (i = 0; i < bcap->num_sensor_formats; i++) {
+		for (i = 0; i < aptina_mt9v022_dev->num_sensor_formats; i++) {
 			fmt = &sf[i];
 			if (format.format.code == fmt->mbus_code)
 				break;
@@ -780,7 +820,7 @@ static int aptina_mt9v022_enum_fmt_vid_cap(struct file *file, void *priv,
 					   struct v4l2_fmtdesc *fmt)
 {
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = video_drvdata(file);
-	struct aptina_mt9v022_format *sf = aptina_mt9v022_dev->sensor_formats;
+	struct imager_format *sf = aptina_mt9v022_dev->sensor_formats;
 
 	if (fmt->index >= aptina_mt9v022_dev->num_sensor_formats)
 		return -EINVAL;
@@ -817,7 +857,7 @@ static int aptina_mt9v022_s_fmt_vid_cap(struct file *file, void *priv,
 	struct v4l2_subdev_format format = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
-	struct aptina_mt9v022_format aptina_mt9v022_fmt;
+	struct imager_format aptina_mt9v022_fmt;
 	struct v4l2_pix_format *pixfmt = &fmt->fmt.pix;
 	int dmaPoolMemorySize;
 	int ret;
@@ -861,7 +901,7 @@ static int aptina_mt9v022_s_fmt_vid_cap(struct file *file, void *priv,
 	}
 
 	// we need only one dma descriptor per image
-	dmaPoolMemorySize = sizeof(struct aptina_mt9v022_dma_desc_list_item);
+	dmaPoolMemorySize = sizeof(struct imager_dma_desc_list_item);
 	aptina_mt9v022_dev->dma_pool = dma_pool_create(CAPTURE_DRV_NAME,
 			aptina_mt9v022_dev->v4l2_dev.dev, dmaPoolMemorySize, 16, 0);
 	return 0;
@@ -962,13 +1002,13 @@ static int get_int_prop(struct device_node *dn, const char *s)
 
 static const struct of_device_id cap_match[] =
 {
-	{ .compatible =	"iris,gen6-aptina_mt9v022", },
+	{ .compatible = COMPATIBLE_DT_NAME, },
 	{},
 };
 MODULE_DEVICE_TABLE(of, cap_match);
 
 static int fill_config(struct platform_device *pdev,
-		       struct aptina_mt9v022_capture_config *o_config)
+		       struct capture_config *o_config)
 {
 	struct device_node *node = pdev->dev.of_node;
 	struct ppi_info *info;
@@ -1005,7 +1045,7 @@ static int aptina_mt9v022_probe(struct platform_device *pdev)
 	struct video_device *vfd;
 	struct i2c_adapter *i2c_adap;
 	struct vb2_queue *q;
-	struct aptina_mt9v022_route *route;
+	struct imager_route *route;
 	struct of_device_id const* match;
 	struct device *dev = &pdev->dev;
 	struct soc_camera_subdev_desc ssdd;
@@ -1088,7 +1128,7 @@ static int aptina_mt9v022_probe(struct platform_device *pdev)
 	q->type				= V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	q->io_modes			= VB2_MMAP | VB2_DMABUF;
 	q->drv_priv			= aptina_mt9v022_dev;
-	q->buf_struct_size 		= sizeof(struct aptina_mt9v022_buffer);
+	q->buf_struct_size		= sizeof(struct imager_buffer);
 	q->ops 				= &aptina_mt9v022_video_qops;
 	q->mem_ops 			= &vb2_dma_contig_memops;
 	q->timestamp_flags 		= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
