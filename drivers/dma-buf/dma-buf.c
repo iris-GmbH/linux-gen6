@@ -108,20 +108,24 @@ static loff_t dma_buf_llseek(struct file *file, loff_t offset, int whence)
 
 	dmabuf = file->private_data;
 
-	/* only support discovering the end of the buffer,
-	   but also allow SEEK_SET to maintain the idiomatic
-	   SEEK_END(0), SEEK_CUR(0) pattern */
-	if (whence == SEEK_END)
+		if (whence == SEEK_END)
 		base = dmabuf->size;
 	else if (whence == SEEK_SET)
-		base = 0;
+		base = offset;
+	else if (whence == SEEK_CUR)
+		base = file->f_pos + offset;
 	else
 		return -EINVAL;
 
-	if (offset != 0)
-		return -EINVAL;
+	if (base > dmabuf->size)
+		base = dmabuf->size;
+	if (base < 0)
+		base = 0;
 
-	return base + offset;
+
+	file->f_pos = base;
+
+	return base;
 }
 
 /**
@@ -276,6 +280,92 @@ out:
 	return events;
 }
 
+static ssize_t dma_buf_read(struct file *file, char __user *buffer, size_t  remain, loff_t *offset)
+{
+	struct dma_buf *dmabuf = file->private_data;
+	size_t total, not_copied, to_copy;
+	unsigned long idx;
+	unsigned int start;
+	void *vaddr;
+
+	if (!is_dma_buf_file(file))
+		return -EBADF;
+
+	total = 0;
+	idx = *offset >> PAGE_SHIFT;
+	start = offset_in_page(*offset);
+	while (remain)
+	{
+		to_copy = min_t(size_t, remain, PAGE_SIZE-start);
+
+		if (*offset >= dmabuf->size)
+			return total;
+
+		vaddr = dma_buf_kmap(dmabuf, idx);
+		if (!vaddr)
+			return total ?: -EIO;
+
+		not_copied = copy_to_user(buffer, vaddr+start, to_copy);
+		dma_buf_kunmap(dmabuf, idx, vaddr);
+
+		total += not_copied ?: to_copy;
+		if (not_copied)
+		{
+			*offset += not_copied;
+			return total ?: -EFAULT;
+		}
+
+		remain  -= to_copy;
+		*offset += to_copy;
+		buffer  += to_copy;
+		start    = 0;
+		idx++;
+	}
+
+	return total;
+}
+
+static ssize_t dma_buf_write(struct file *file, const char __user *buffer, size_t remain, loff_t *offset)
+{
+	struct dma_buf *dmabuf = file->private_data;
+	size_t total, not_copied, to_copy;
+	unsigned long idx;
+	unsigned int start;
+	void *vaddr;
+
+
+	if (!is_dma_buf_file(file))
+		return -EBADF;
+
+	total = 0;
+	idx = *offset >> PAGE_SHIFT;
+	start = offset_in_page(*offset);
+	while (remain)
+	{
+		to_copy = min_t(size_t, remain, PAGE_SIZE-start);
+		vaddr = dma_buf_kmap(dmabuf, idx);
+		if (!vaddr)
+			return total ?: -EIO;
+
+		not_copied = copy_from_user(vaddr, buffer, to_copy);
+		dma_buf_kunmap(dmabuf, idx, vaddr);
+
+		total += not_copied ?: to_copy;
+		if (not_copied)
+		{
+			*offset += not_copied;
+			return total ?: -EFAULT;
+		}
+
+		remain  -= to_copy;
+		*offset += to_copy;
+		buffer  += to_copy;
+		start    = 0;
+		idx++;
+	}
+	return total;
+}
+
 static long dma_buf_ioctl(struct file *file,
 			  unsigned int cmd, unsigned long arg)
 {
@@ -328,6 +418,8 @@ static const struct file_operations dma_buf_fops = {
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= dma_buf_ioctl,
 #endif
+	.read		= dma_buf_read,
+	.write		= dma_buf_write,
 };
 
 /*
@@ -442,7 +534,7 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 		goto err_dmabuf;
 	}
 
-	file->f_mode |= FMODE_LSEEK;
+	file->f_mode |= FMODE_LSEEK|FMODE_PREAD|FMODE_PWRITE; //add PREAD & PWRITE
 	dmabuf->file = file;
 
 	mutex_init(&dmabuf->lock);
