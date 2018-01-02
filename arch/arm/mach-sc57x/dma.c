@@ -436,7 +436,7 @@ static int adi_dma_probe(struct platform_device *pdev)
 
 	id_str = strchr(node->full_name, '@');
 	if (id_str != NULL && (++id_str) != NULL)
-		ret = kstrtoul(id_str, 10, &id);
+		ret = kstrtoint(id_str, 10, &id);
 
 	if (ret != 0 || id < 0 || id >= MAX_DMA_CHANNELS) {
 		dev_err(&pdev->dev, "Invalid ADI DMA channel.\n");

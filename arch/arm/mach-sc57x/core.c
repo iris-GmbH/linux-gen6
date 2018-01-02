@@ -27,7 +27,6 @@
 
 #include <asm/irq.h>
 #include <asm/hardware/arm_timer.h>
-//#include <asm/hardware/icst.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/mach-types.h>
 
@@ -128,235 +127,6 @@ void __init sc57x_init_early(void)
 	sc57x_clock_init();
 }
 
-#if IS_ENABLED(CONFIG_VIDEO_BLACKFIN_CAPTURE)
-#include <linux/videodev2.h>
-#include <media/blackfin/bfin_capture.h>
-#include <media/blackfin/ppi.h>
-
-#if IS_ENABLED(CONFIG_VIDEO_ADV7842)
-#include <media/adv7842.h>
-static struct v4l2_input adv7842_inputs[] = {
-	{
-		.index = 0,
-		.name = "Composite",
-		.type = V4L2_INPUT_TYPE_CAMERA,
-		.std = V4L2_STD_ALL,
-		.capabilities = V4L2_IN_CAP_STD,
-	},
-	{
-		.index = 1,
-		.name = "S-Video",
-		.type = V4L2_INPUT_TYPE_CAMERA,
-		.std = V4L2_STD_ALL,
-		.capabilities = V4L2_IN_CAP_STD,
-	},
-	{
-		.index = 2,
-		.name = "Component",
-		.type = V4L2_INPUT_TYPE_CAMERA,
-		.capabilities = V4L2_IN_CAP_CUSTOM_TIMINGS,
-	},
-	{
-		.index = 3,
-		.name = "VGA",
-		.type = V4L2_INPUT_TYPE_CAMERA,
-		.capabilities = V4L2_IN_CAP_CUSTOM_TIMINGS,
-	},
-	{
-		.index = 4,
-		.name = "HDMI",
-		.type = V4L2_INPUT_TYPE_CAMERA,
-		.capabilities = V4L2_IN_CAP_CUSTOM_TIMINGS,
-	},
-};
-
-static struct bcap_route adv7842_routes[] = {
-	{
-		.input = 3,
-		.output = 0,
-		.ppi_control = (PACK_EN | DLEN_8 | EPPI_CTL_FLDSEL
-				| EPPI_CTL_ACTIVE656),
-	},
-	{
-		.input = 4,
-		.output = 0,
-	},
-	{
-		.input = 2,
-		.output = 0,
-	},
-	{
-		.input = 1,
-		.output = 0,
-	},
-	{
-		.input = 0,
-		.output = 1,
-		.ppi_control = (EPPI_CTL_SPLTWRD | PACK_EN | DLEN_16
-				| EPPI_CTL_FS1HI_FS2HI | EPPI_CTL_POLC2
-				| EPPI_CTL_SYNC2 | EPPI_CTL_NON656),
-	},
-};
-
-static struct adv7842_output_format adv7842_opf[] = {
-	{
-		.op_ch_sel = ADV7842_OP_CH_SEL_BRG,
-		.op_format_sel = ADV7842_OP_FORMAT_SEL_SDR_ITU656_8,
-		.op_656_range = 1,
-		.blank_data = 1,
-		.insert_av_codes = 1,
-	},
-	{
-		.op_ch_sel = ADV7842_OP_CH_SEL_RGB,
-		.op_format_sel = ADV7842_OP_FORMAT_SEL_SDR_ITU656_16,
-		.op_656_range = 1,
-		.blank_data = 1,
-	},
-};
-
-static struct adv7842_platform_data adv7842_data = {
-	.opf = adv7842_opf,
-	.num_opf = ARRAY_SIZE(adv7842_opf),
-	.ain_sel = ADV7842_AIN10_11_12_NC_SYNC_4_1,
-	.prim_mode = ADV7842_PRIM_MODE_SDP,
-	.vid_std_select = ADV7842_SDP_VID_STD_CVBS_SD_4x1,
-	.inp_color_space = ADV7842_INP_COLOR_SPACE_AUTO,
-	.i2c_sdp_io = 0x40,
-	.i2c_sdp = 0x41,
-	.i2c_cp = 0x42,
-	.i2c_vdp = 0x43,
-	.i2c_afe = 0x44,
-	.i2c_hdmi = 0x45,
-	.i2c_repeater = 0x46,
-	.i2c_edid = 0x47,
-	.i2c_infoframe = 0x48,
-	.i2c_cec = 0x49,
-	.i2c_avlink = 0x4a,
-};
-
-static struct bfin_capture_config bfin_capture_data = {
-	.inputs = adv7842_inputs,
-	.num_inputs = ARRAY_SIZE(adv7842_inputs),
-	.routes = adv7842_routes,
-	.board_info = {
-		.type = "adv7842",
-		.addr = 0x20,
-		.platform_data = (void *)&adv7842_data,
-	},
-	.ppi_control = (PACK_EN | DLEN_8 | EPPI_CTL_FLDSEL
-			| EPPI_CTL_ACTIVE656),
-};
-#endif
-#endif
-
-#if IS_ENABLED(CONFIG_VIDEO_BLACKFIN_DISPLAY)
-#include <linux/videodev2.h>
-#include <media/blackfin/bfin_display.h>
-#include <media/blackfin/ppi.h>
-
-#if IS_ENABLED(CONFIG_VIDEO_ADV7511)
-#include <media/adv7511.h>
-
-static struct v4l2_output adv7511_outputs[] = {
-	{
-		.index = 0,
-		.name = "HDMI",
-		.type = V4L2_INPUT_TYPE_CAMERA,
-		.capabilities = V4L2_OUT_CAP_CUSTOM_TIMINGS,
-	},
-};
-
-static struct disp_route adv7511_routes[] = {
-	{
-		.output = 0,
-	},
-};
-
-static struct adv7511_platform_data adv7511_data = {
-	.edid_addr = 0x7e,
-};
-
-static struct bfin_display_config bfin_display_data = {
-	.outputs = adv7511_outputs,
-	.num_outputs = ARRAY_SIZE(adv7511_outputs),
-	.routes = adv7511_routes,
-	.board_info = {
-		.type = "adv7511",
-		.addr = 0x39,
-		.platform_data = (void *)&adv7511_data,
-	},
-	.ppi_control = (EPPI_CTL_SPLTWRD | PACK_EN | DLEN_16
-			| EPPI_CTL_FS1LO_FS2LO | EPPI_CTL_POLC3
-			| EPPI_CTL_IFSGEN | EPPI_CTL_SYNC2
-			| EPPI_CTL_NON656 | EPPI_CTL_DIR),
-};
-#endif
-
-#if IS_ENABLED(CONFIG_VIDEO_ADV7343)
-#include <media/adv7343.h>
-
-static struct v4l2_output adv7343_outputs[] = {
-	{
-		.index = 0,
-		.name = "Composite",
-		.type = V4L2_OUTPUT_TYPE_ANALOG,
-		.std = V4L2_STD_ALL,
-		.capabilities = V4L2_OUT_CAP_STD,
-	},
-	{
-		.index = 1,
-		.name = "S-Video",
-		.type = V4L2_OUTPUT_TYPE_ANALOG,
-		.std = V4L2_STD_ALL,
-		.capabilities = V4L2_OUT_CAP_STD,
-	},
-	{
-		.index = 2,
-		.name = "Component",
-		.type = V4L2_OUTPUT_TYPE_ANALOG,
-		.std = V4L2_STD_ALL,
-		.capabilities = V4L2_OUT_CAP_STD,
-	},
-};
-
-static struct disp_route adv7343_routes[] = {
-	{
-		.output = ADV7343_COMPOSITE_ID,
-	},
-	{
-		.output = ADV7343_SVIDEO_ID,
-	},
-	{
-		.output = ADV7343_COMPONENT_ID,
-	},
-};
-
-static struct adv7343_platform_data adv7343_data = {
-	.mode_config = {
-		.sleep_mode = false,
-		.pll_control = false,
-		.dac = {1, 1, 1, 1, 1, 1},
-	},
-	.sd_config = {
-		.sd_dac_out = {0},
-	},
-};
-
-static struct bfin_display_config bfin_display_data = {
-	.outputs = adv7343_outputs,
-	.num_outputs = ARRAY_SIZE(adv7343_outputs),
-	.routes = adv7343_routes,
-	.board_info = {
-		.type = "adv7343",
-		.addr = 0x2b,
-		.platform_data = (void *)&adv7343_data,
-	},
-	.ppi_control = (PACK_EN | DLEN_8 | EPPI_CTL_FS1LO_FS2LO
-			| EPPI_CTL_POLC3 | EPPI_CTL_BLANKGEN | EPPI_CTL_SYNC2
-		| EPPI_CTL_NON656 | EPPI_CTL_DIR),
-};
-#endif
-#endif
 
 #ifdef CONFIG_OF
 static const struct of_dev_auxdata sc57x_auxdata_lookup[] __initconst = {
@@ -367,14 +137,6 @@ static const struct of_dev_auxdata sc57x_auxdata_lookup[] __initconst = {
 	OF_DEV_AUXDATA("arm,adi-watchdog", REG_WDOG0_CTL, "adi-watchdog.0", NULL),
 	OF_DEV_AUXDATA("adi,spi3", 0, "adi-spi3.2", NULL),
 	OF_DEV_AUXDATA("adi,mmc", 0x31010000, "mmc.0", NULL),
-#if IS_ENABLED(CONFIG_VIDEO_BLACKFIN_DISPLAY)
-	OF_DEV_AUXDATA("adi,disp", 0x3102D000,
-					"bfin_display.0", &bfin_display_data),
-#endif
-#if IS_ENABLED(CONFIG_VIDEO_BLACKFIN_CAPTURE)
-	OF_DEV_AUXDATA("adi,cap", 0x3102D000,
-					"bfin_capture.0", &bfin_capture_data),
-#endif
 	{},
 };
 
@@ -384,65 +146,37 @@ static struct of_device_id sc57x_of_bus_ids[] __initdata = {
 };
 #endif
 
-static int sc57x_phy0_fixup(struct phy_device *phydev)
-{
-	int  phy_data = 0;
-
-	phy_data = phy_read(phydev, 0x12);
-
-	/* enable 3com mode for RGMII */
-
-	phy_write(phydev, 0x12, (3 << 12) | phy_data);
-
-	return 0;
-}
-
-static int sc57x_phy1_fixup(struct phy_device *phydev)
-{
-	phy_write(phydev, 0x11, 3);
-
-	return 0;
-}
-
-#if IS_ENABLED(CONFIG_SND_SC5XX_PCM)
-static struct platform_device sc57x_pcm = {
-	.name = "sc5xx-pcm-audio",
-	.id = -1,
-};
-#endif
-
 static struct platform_device *ezkit_devices[] __initdata = {
-#if IS_ENABLED(CONFIG_SND_SC5XX_PCM)
-	&sc57x_pcm,
-#endif
 };
 
 void __init sc57x_init(void)
 {
+	u64 pcfg0;
 #ifdef CONFIG_CACHE_L2X0
 	l2x0_of_init(0, ~0UL);
 #endif
 
 	pr_info("%s: registering device resources\n", __func__);
 
-	sec_init(__io_address(SEC_COMMON_BASE), __io_address(SEC_SCI_BASE),
-			__io_address(SEC_SSI_BASE));
+	/*sec_init(__io_address(SEC_COMMON_BASE), __io_address(SEC_SCI_BASE),
+			__io_address(SEC_SSI_BASE));*/
 #ifdef CONFIG_OF
 	of_platform_populate(NULL, sc57x_of_bus_ids,
 				sc57x_auxdata_lookup, NULL);
 #endif
 
-	if (IS_BUILTIN(CONFIG_PHYLIB))
-		writel((readl(__io_address(REG_PADS0_PCFG0)) | 0xc),
-				__io_address(REG_PADS0_PCFG0));
+	if (IS_BUILTIN(CONFIG_PHYLIB)) {
+		// De-assert the external reset to enable the PHY
+		writel(0x04, __io_address(REG_RCU0_CTL));
 
-	if (IS_BUILTIN(CONFIG_PHYLIB))
-		phy_register_fixup_for_uid(0x20005c7a, 0xffffffff,
-				sc57x_phy0_fixup);
+		// Set EMAC0 to RMII
+		pcfg0 = readl(__io_address(REG_PADS0_PCFG0));
+		pcfg0 &= 0xfffdffe0;	// reset all emac settings
+		pcfg0 |= PADS_PCFG_EMACRMII;
+		pcfg0 |= PADS_PCFG_EMACNORESET;
+		writel(pcfg0, __io_address(REG_PADS0_PCFG0));
+	}
 
-	if (IS_BUILTIN(CONFIG_PHYLIB))
-		phy_register_fixup_for_uid(0x20005c90, 0xffffffff,
-				sc57x_phy1_fixup);
 	platform_add_devices(ezkit_devices, ARRAY_SIZE(ezkit_devices));
 #ifdef CONFIG_ICC
 	platform_ipi_init();
@@ -552,40 +286,6 @@ static int gptmr_set_state_oneshot(struct clock_event_device *evt)
 	return 0;
 }
 
-
-static void gptmr_set_mode(enum clock_event_state state,
-		struct clock_event_device *evt)
-{
-	int id = timer_event->id;
-
-	switch (state) {
-	case CLOCK_EVT_STATE_PERIODIC:
-		disable_gptimers(1 << id);
-		set_gptimer_config(timer_event, TIMER_OUT_DIS
-				| TIMER_MODE_PWM_CONT | TIMER_PULSE_HI |
-				TIMER_IRQ_PER);
-
-		set_gptimer_period(timer_event, get_sclk() / HZ);
-		set_gptimer_pwidth(timer_event, get_sclk() / HZ - 1);
-		enable_gptimers(1 << id);
-		break;
-
-	case CLOCK_EVT_STATE_ONESHOT:
-		while(1);
-		disable_gptimers(1 << id);
-		set_gptimer_config(timer_event, TIMER_OUT_DIS | TIMER_MODE_PWM
-				| TIMER_PULSE_HI | TIMER_IRQ_WID_DLY);
-		set_gptimer_period(timer_event, 0);
-		break;
-	case CLOCK_EVT_STATE_DETACHED:
-	case CLOCK_EVT_STATE_SHUTDOWN:
-		disable_gptimers(1 << id);
-		break;
-	case CLOCK_EVT_STATE_ONESHOT_STOPPED:
-		break;
-	}
-}
-
 static void gptmr_ack(int id)
 {
 	set_gptimer_status(1 << id);
@@ -625,7 +325,6 @@ static struct clock_event_device clockevent_gptmr = {
 	.set_state_shutdown = gptmr_set_state_shutdown,
 	.set_state_periodic = gptmr_set_state_periodic,
 	.set_state_oneshot = gptmr_set_state_oneshot,
-	//.set_mode       = gptmr_set_mode,
 };
 
 
@@ -643,7 +342,7 @@ static void __init gptmr_clockevent_init(struct clock_event_device *evt)
 	clockevents_register_device(evt);
 }
 
-static struct sc57x_gptimer *sc57x_timer_of_init(struct device_node *node)
+struct sc57x_gptimer *sc57x_timer_of_init(struct device_node *node)
 {
 	void __iomem *base;
 	int irq;

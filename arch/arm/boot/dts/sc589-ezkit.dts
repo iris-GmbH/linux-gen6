@@ -9,7 +9,7 @@
 
 /dts-v1/;
 
-#include "sc58x.dtsi"
+/include/ "sc58x.dtsi"
 
 / {
 	model = "ADI sc589-ezkit";

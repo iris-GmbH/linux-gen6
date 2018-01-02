@@ -897,13 +897,13 @@ adi_uart4_serial_verify_port(struct uart_port *port, struct serial_struct *ser)
  * Enable the IrDA function if tty->ldisc.num is N_IRDA.
  * In other cases, disable IrDA function.
  */
-static void adi_uart4_serial_set_ldisc(struct uart_port *port, int ld)
+static void adi_uart4_serial_set_ldisc(struct uart_port *port, struct ktermios *termios)
 {
 	struct adi_uart4_serial_port *uart =
 		container_of(port, struct adi_uart4_serial_port, port);
 	unsigned int val;
 
-	switch (ld) {
+	switch (termios->c_line) {
 	case N_IRDA:
 		val = UART_GET_GCTL(uart);
 		val |= (UMOD_IRDA | RPOLC);
