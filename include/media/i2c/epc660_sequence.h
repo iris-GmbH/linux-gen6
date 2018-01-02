@@ -11,7 +11,7 @@
 #ifndef _EPC660_SEQUENCE_H
 #define _EPC660_SEQUENCE_H
 
-#define EPC660_CHIP_VERSION			0x00
+#define EPC660_IC_TYPE				0x00
 
 /*
  * Register definitions
@@ -41,6 +41,9 @@
 #define EPC660_REG_POWER_CTRL		0xA5
 #define EPC660_REG_TCMI_POLARITY	0xCC
 
+#define EPC660_REG_CUSTOMER_ID		0xF5
+#define EPC660_REG_WAFER_ID_MSB		0xF6
+#define EPC660_REG_CHIP_ID_MSB		0xF8
 #define EPC660_REG_PART_TYPE		0xFA
 #define EPC660_REG_PART_VERSION		0xFB
 

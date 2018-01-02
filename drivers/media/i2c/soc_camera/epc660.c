@@ -74,8 +74,12 @@ struct epc660 {
 	const struct epc660_datafmt *fmt;
 	const struct epc660_datafmt *fmts;
 	int num_fmts;
-	u8 chip_version;
-	u8 part_version;
+	u8  ic_version;
+	u8  customer_id;
+	u16 wafer_id;
+	u16 chip_id;
+	u8  part_type;
+	u8  part_version;
 };
 
 static struct epc660 *to_epc660(const struct i2c_client *client)
@@ -131,7 +135,7 @@ fail:
 		   __func__, address);
 	return -1;
 }
-#if 0
+
 static int epc660_eeprom_read_word(struct i2c_client *client,
 								   u8 address, u16 *data)
 {
@@ -158,7 +162,6 @@ fail:
 		   __func__, address);
 	return -1;
 }
-#endif
 
 /*
  * Send an I2C sequence to the imager.
@@ -439,10 +442,10 @@ static int epc660_video_probe(struct i2c_client *client)
 	if (ret < 0) {
 		goto ei2c;
 	};
-	epc660->chip_version = (u8)(ret & 0xff);
+	epc660->ic_version = (u8)(ret & 0xff);
 
 	// We need at least chip revision 3
-	if (epc660->chip_version < 0x03) {
+	if (epc660->ic_version < 0x03) {
 		ret = -ENODEV;
 		dev_err(&client->dev,
 			"\n"
@@ -451,23 +454,46 @@ static int epc660_video_probe(struct i2c_client *client)
 			"\t\t*  No viable EPC660 found, IC version is 0x%02x  *\n"
 			"\t\t*                                              *\n"
 			"\t\t************************************************\n",
-		        epc660->chip_version);
+		        epc660->ic_version);
 		dev_err(&client->dev, "EPC660: Chip version must be at least 3.\n");
 		goto ei2c;
 	}
 
-	/* Read the part version from EEPROM */
-	ret = epc660_eeprom_read_byte(client,
-								  EPC660_REG_PART_VERSION,
-							      &epc660->part_version);
+	ret = reg_read_byte(client, EPC660_REG_CUSTOMER_ID);
 	if (ret < 0) {
-		printk(KERN_ERR "Failed to read the part version!\n");
+		goto ei2c;
+	};
+	ret = 0;
+
+	ret |= epc660_eeprom_read_byte(client, EPC660_REG_CUSTOMER_ID,
+					&epc660->customer_id);
+	ret |= epc660_eeprom_read_word(client, EPC660_REG_WAFER_ID_MSB,
+					&epc660->wafer_id);
+	ret |= epc660_eeprom_read_word(client, EPC660_REG_CHIP_ID_MSB,
+					&epc660->chip_id);
+	ret |= epc660_eeprom_read_byte(client, EPC660_REG_PART_TYPE,
+					&epc660->part_type);
+	ret |= epc660_eeprom_read_byte(client, EPC660_REG_PART_VERSION,
+					&epc660->part_version);
+	if (ret < 0) {
+		printk(KERN_ERR "Failed to read the manufacturer properties!\n");
 		goto ei2c;
 	};
 
 	printk(KERN_INFO
-	       "Found EPC660 with chip version %02x and part version %02x\n",
-		   epc660->chip_version, epc660->part_version);
+	       "Found EPC660 with:\n"
+			"\tic version %02x\n"
+			"\tcustomer id %02x\n"
+			"\twafer id %04x\n"
+			"\tchip id %02x\n"
+			"\tpart type %02x\n"
+			"\tpart version:%02x\n",
+		   (int)(epc660->ic_version),
+		   (int)(epc660->customer_id),
+		   (int)(epc660->wafer_id),
+		   (int)(epc660->chip_id),
+		   (int)(epc660->part_type),
+		   (int)(epc660->part_version));
 
 	ret = epc660_device_init(client);
 	if (ret < 0)
