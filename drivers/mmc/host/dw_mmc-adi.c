@@ -22,8 +22,8 @@
 #include <mach/portmux.h>
 #include <mach/cpu.h>
 
-#include "dw_mmc-pltfm.h"
 #include "dw_mmc.h"
+#include "dw_mmc-pltfm.h"
 
 static int dwmmc_adi_priv_init(struct dw_mci *host)
 {
