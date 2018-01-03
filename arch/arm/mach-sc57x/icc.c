@@ -18,7 +18,7 @@ void platform_send_ipi(cpumask_t callmap, int irq)
 {
 	unsigned int cpu;
 
-	for_each_cpu_mask(cpu, callmap) {
+	for_each_cpu(cpu, callmap) {
 		platform_send_ipi_cpu(cpu, irq);
 	}
 }
