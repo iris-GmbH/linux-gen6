@@ -1,6 +1,11 @@
 choice
     prompt "Select video capture driver?"
 
+config VIDEO_IRIS_NO_CAPTURE
+	tristate "Iris-Gen6 No Capture Device"
+	help
+	  No Video Capture Driver connected on Iris-Gen6 
+
 config VIDEO_IRIS_GEN6_EPC660_CAPTURE
 	tristate "Iris-Gen6 EPC660"
 	depends on VIDEO_V4L2 && (BLACKFIN || ARCH_SC57X || ARCH_SC58X) && I2C

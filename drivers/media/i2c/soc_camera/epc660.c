@@ -595,9 +595,7 @@ static int epc660_probe(struct i2c_client *client,
 
 	ret = epc660_video_probe(client);
 	if (ret)
-		v4l2_clk_put(epc660->clk);
-
-	v4l2_ctrl_handler_free(&epc660->hdl);
+		v4l2_ctrl_handler_free(&epc660->hdl);
 
 	return ret;
 }
@@ -606,7 +604,6 @@ static int epc660_remove(struct i2c_client *client)
 {
 	struct epc660 *epc660 = to_epc660(client);
 
-	v4l2_clk_put(epc660->clk);
 	v4l2_device_unregister_subdev(&epc660->subdev);
 	v4l2_ctrl_handler_free(&epc660->hdl);
 
