@@ -18,7 +18,8 @@
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
 #include <linux/wait.h>
-#include <linux/sched.h>
+//#include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/of_irq.h>
