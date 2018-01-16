@@ -96,10 +96,10 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&spi2_quad>;
 
-			flash: w25q128@0 {
+			flash: s25fl128s@0 {
 				#address-cells = <1>;
 				#size-cells = <1>;
-				compatible = "winbond,w25q128";
+				compatible = "spansion,s25fl128s", "jedec,spi-nor";
 				spi-max-frequency = <50000000>;
 				reg = <31>;
 				spi-cpol;
