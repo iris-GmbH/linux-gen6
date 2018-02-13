@@ -67,7 +67,7 @@ static struct miscdevice cont_memory_dev = {
 static int cont_mem_remove(struct platform_device *pdev);
 static int cont_mem_probe(struct platform_device *pdev);
 static const struct of_device_id cap_match[] = {
-	{ .compatible = "iris,gen6-dsp-xchange", }, {},
+	{ .compatible = "iris,gen6-cont-memory", }, {},
 };
 MODULE_DEVICE_TABLE(of, cap_match);
 static struct platform_driver cont_mem_driver = {
@@ -86,7 +86,6 @@ static int cont_mem_probe(struct platform_device *pdev)
 	struct device_node* np;
 	int ret;
 
-	dev_err(dev, "\n\n\n\n\n\n\ncont_mem");
 	if (!of_match_device(cap_match, &pdev->dev)) {
 		dev_err(dev, "failed to matching of_match node\n");
 		return -ENODEV;
