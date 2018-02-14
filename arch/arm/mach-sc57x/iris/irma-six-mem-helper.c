@@ -16,27 +16,50 @@
 #define DRV_NAME        "gen6_cont_memory"
 
 struct cont_mem_dev_data {
-	/* used to access capture device */
-	struct mutex mutex;
+	struct list_head list;
 	struct resource r;
+	struct miscdevice misc_device;
 };
 
-static struct cont_mem_dev_data* dev_data;
+static struct list_head dev_datas = LIST_HEAD_INIT(dev_datas);
 
 struct cont_mem_dev_data* getExtraInfo(struct file* file) {
 	return (struct cont_mem_dev_data*)(file->private_data);
 }
 
+
+struct ioctl_info {
+	unsigned long baseAddr;
+	unsigned long size;
+};
+
+
 static int cont_mem_mmap(struct file *file, struct vm_area_struct *vma)
 {
+	struct list_head* position;
+	int posCounter = 0;
+	struct cont_mem_dev_data* dd = NULL;
 	size_t size = vma->vm_end - vma->vm_start;
-	if (size > resource_size(&dev_data->r)) {
+
+	list_for_each (position , &dev_datas) {
+		if (MINOR(file->f_inode->i_rdev) == posCounter) {
+			dd = list_entry(position, struct cont_mem_dev_data, list);
+			break;
+		}
+		++posCounter;
+	}
+	if (!dd) {
+		printk("cannot mmap a file which is not handled\n");
+		return -EINVAL;
+	}
+
+	if (size > resource_size(&dd->r)) {
 		printk("cannot mmap bigger region of cont memory than available");
 		return -ENOMEM;
 	}
 
 	if (remap_pfn_range(vma, vma->vm_start,
-			dev_data->r.start >> PAGE_SHIFT,
+			dd->r.start >> PAGE_SHIFT,
 			size, PAGE_SHARED))
 	{
 	     printk("remap page range failed\n");
@@ -48,7 +71,29 @@ static int cont_mem_mmap(struct file *file, struct vm_area_struct *vma)
 static long cont_mem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
-	ret = copy_to_user(&arg, &(dev_data->r.start), sizeof(dev_data->r.start));
+	switch (cmd) {
+	case 0:
+	{
+		struct list_head* position;
+		int posCounter = 0;
+		list_for_each (position , &dev_datas) {
+			if (posCounter == MINOR(filp->f_inode->i_rdev)) {
+				struct cont_mem_dev_data* dd = NULL;
+				struct ioctl_info info;
+				dd = list_entry(position, struct cont_mem_dev_data, list);
+				info.baseAddr = dd->r.start;
+				info.size = resource_size(&dd->r);
+				ret = copy_to_user((void*)arg, &(info), sizeof(info));
+				break;
+			}
+			++posCounter;
+		}
+	}
+	break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
 	return ret;
 }
 
@@ -56,12 +101,6 @@ static const struct file_operations cont_memory_fops = {
 	.owner = THIS_MODULE,
 	.unlocked_ioctl = cont_mem_ioctl,
 	.mmap = cont_mem_mmap,
-};
-
-static struct miscdevice cont_memory_dev = {
-		.minor = MISC_DYNAMIC_MINOR,
-		.name  = "cont-memory",
-		.fops  = &cont_memory_fops,
 };
 
 static int cont_mem_remove(struct platform_device *pdev);
@@ -85,42 +124,56 @@ static int cont_mem_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node* np;
 	int ret;
+	int num_regions = 0;
 
+	dev_err(dev, "\n\n\n\n\n\n\n");
 	if (!of_match_device(cap_match, &pdev->dev)) {
 		dev_err(dev, "failed to matching of_match node\n");
 		return -ENODEV;
 	}
-	np = of_parse_phandle(dev->of_node, "memory-region", 0);
-	if (!np) {
-		dev_err(dev, "No %s specified\n", "memory-region");
-		return -EINVAL;
+	while (1) {
+		int subRet = 0;
+		struct cont_mem_dev_data* dd;
+		np = of_parse_phandle(dev->of_node, "memory-region", num_regions);
+		if (!np) {
+			break;
+		}
+		dd = devm_kzalloc(&pdev->dev, sizeof(*dd), GFP_KERNEL);
+		if (!dd) {
+			dev_err(dev, "cannot allocate device data\n");
+			return -ENOMEM;
+		}
+		subRet = of_address_to_resource(np, 0, &dd->r);
+		if (subRet) {
+			devm_kfree(&pdev->dev, dd);
+			break;
+		}
+		INIT_LIST_HEAD(&dd->list);
+		dd->misc_device.name = dd->r.name;
+		dd->misc_device.minor = num_regions;
+		dd->misc_device.fops  = &cont_memory_fops;
+		subRet = misc_register(&dd->misc_device);
+		++num_regions;
+		if (subRet) {
+			devm_kfree(&pdev->dev, dd);
+			dev_err(dev, "cannot register misc device for region: %s\n", dd->r.name);
+			continue;
+		}
+		list_add_tail(&dd->list, &dev_datas);
+		dev_info(dev, "reserved memory %s@0x%X-0x%X", dd->r.name, dd->r.start, dd->r.end);
 	}
-	dev_data = devm_kzalloc(&pdev->dev, sizeof(*dev_data), GFP_KERNEL);
-	if (!dev_data) {
-		dev_err(dev, "cannot allocate dev data\n");
-		return -ENOMEM;
-	}
-	ret = of_address_to_resource(np, 0, &dev_data->r);
-	if (ret) {
-		dev_err(dev, "No memory address assigned to the region\n");
-		devm_kfree(&pdev->dev, dev_data);
-		return -EINVAL;
-	}
-
-	ret = misc_register(&cont_memory_dev);
-	if (ret) {
-		dev_err(dev, "No memory register misc device\n");
-		devm_kfree(&pdev->dev, dev_data);
-		return -EINVAL;
-	}
-
-	dev_info(dev, "cont_mem reserved memory 0x%X-0x%X", dev_data->r.start, dev_data->r.end);
 	return ret;
 }
 
 static int cont_mem_remove(struct platform_device *pdev)
 {
-	devm_kfree(&pdev->dev, dev_data);
+	struct list_head *position, *q;
+	list_for_each_safe(position, q, &dev_datas) {
+		struct cont_mem_dev_data* dd = NULL;
+		dd = list_entry(position, struct cont_mem_dev_data, list);
+		list_del(position);
+		devm_kfree(&pdev->dev, dd);
+	}
 	return 0;
 }
 
