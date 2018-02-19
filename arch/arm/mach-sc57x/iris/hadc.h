@@ -1,8 +1,12 @@
 #ifndef ARM_MACH_SC57X_IRIS_HADC_H_
 #define ARM_MACH_SC57X_IRIS_HADC_H_
 
+#ifdef __KERNEL__
 #include <asm/io.h> /* ioremap */
 #include <linux/types.h>
+#else
+#include <sys/ioctl.h>
+#endif
 
 #define SET(x,y) x |= (1 << y)
 #define CLEAR(x,y) x &= ~(1<< y)
