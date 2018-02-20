@@ -18,6 +18,7 @@
 #define STOP_HADC				_IO(IOC_HADC_MAGIC,		3)
 #define READ_HADC_IOTCL_SINGLE	_IOR(IOC_HADC_MAGIC,	4, struct hadc0_data) //start & stop automatically
 
+#define MAX_HADC_CHANNEL		8
 
 #define HADC_CTRL_ENLS			13
 #define HADC_CTRL_DOUTOREOCB	12
@@ -27,5 +28,9 @@
 #define HADC_CTRL_STARTCNV		2
 #define HADC_CTRL_PD			1
 #define HADC_CTRL_NRST			0
+
+struct hadc0_data{
+	uint32_t data[8];
+};
 
 #endif /* ARM_MACH_SC57X_IRIS_HADC_H_ */
