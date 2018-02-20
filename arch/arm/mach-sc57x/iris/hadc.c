@@ -21,9 +21,11 @@ static struct cdev *hadc_object;
 static struct class *hadc_class;
 static struct device *hadc_dev;
 
+static void __iomem *hadc_ctrl_reg;
+static void __iomem *status_reg;
+static void __iomem *data;
+
 void initHADC(void){
-	void __iomem *hadc_ctrl_reg = ioremap(HADC0_CTL, SZ_4);
-	void __iomem *status_reg = ioremap(HADC0_STAT, SZ_4);
 	uint32_t tmp_ctrl = readl(hadc_ctrl_reg);
 	uint32_t tmp_status;
 
@@ -37,8 +39,6 @@ void initHADC(void){
 	while( ((tmp_status=readl(status_reg))&0x01)==0){
 		pr_info("not ready. status_reg:%#04x\n", tmp_status);
 	}
-	iounmap(hadc_ctrl_reg);
-	iounmap(status_reg);
 }
 
 void stopHADC(void){
@@ -51,14 +51,12 @@ void stopHADC(void){
 }
 
 struct hadc0_data getValue(void){
-	void __iomem *data = ioremap(HADC0_DATA0, SZ_32);
 	struct hadc0_data newdata;
 	int i=0;
 	for(i=0;i<MAX_HADC_CHANNEL;i++){
 		newdata.data[i] = readl(data+(i* sizeof(uint32_t)));
 		//pr_info("HADC0_DATA%d: %#04x\n", i, newdata.data[i]);
 	}
-	iounmap(data);
 	return newdata;
 }
 
@@ -91,7 +89,7 @@ static long driver_ioctl(struct file *instance, unsigned int cmd, unsigned long 
 		not_copied=copy_to_user((void *)arg, &mydata,sizeof(struct hadc0_data));
 		break;
 	case HADC_READ_SINGLE_CHANNEL_START_STOP:
-		copy_from_user(&channel ,(int32_t*) arg, sizeof(channel));
+		not_copied=copy_from_user(&channel ,(int32_t*) arg, sizeof(channel));
 		if(channel>=MAX_HADC_CHANNEL){
 			pr_err("invalid channel:%d \n", channel);
 			break;
@@ -120,9 +118,13 @@ static struct file_operations hadc_fops = {
 	.unlocked_ioctl=driver_ioctl
 };
 
-
 static int __init hadc_init(void){
-
+	if( (hadc_ctrl_reg = ioremap(HADC0_CTL, SZ_4))==NULL)
+		goto unioremap;
+	if( (status_reg = ioremap(HADC0_STAT, SZ_4))==NULL)
+		goto unioremap_hadc;
+	if( (data = ioremap(HADC0_DATA0, SZ_32))==NULL)
+		goto unioremap_status;
 	if(alloc_chrdev_region(&hadc_dev_number,0,1,DEV_NAME)<0)
 		return -EIO;
 	hadc_object = cdev_alloc();
@@ -145,16 +147,25 @@ static int __init hadc_init(void){
 	}
 	dev_info(hadc_dev, "hadc __init called\n");
 	return 0;
+
 free_class:
 	class_destroy(hadc_class);
 free_cdev:
 	kobject_put(&hadc_object->kobj);
 free_device_number:
 	unregister_chrdev_region(hadc_dev_number, 1);
+unioremap_status:
+	iounmap(status_reg);
+unioremap_hadc:
+	iounmap(hadc_ctrl_reg);
+unioremap:
 	return -EIO;
 }
 
 static void __exit hadc_exit(void){
+	iounmap(hadc_ctrl_reg);
+	iounmap(status_reg);
+	iounmap(data);
 	device_destroy(hadc_class, hadc_dev_number);
 	class_destroy(hadc_class);
 	cdev_del(hadc_object);
