@@ -34,8 +34,7 @@ void initHADC(void){
 	writel(tmp_ctrl, hadc_ctrl_reg);
 
 	//wait until adc is ready
-	while( ((tmp_status=readl(status_reg))&0x01)==0)
-	{
+	while( ((tmp_status=readl(status_reg))&0x01)==0){
 		pr_info("not ready. status_reg:%#04x\n", tmp_status);
 	}
 	iounmap(hadc_ctrl_reg);
@@ -67,30 +66,44 @@ static long driver_ioctl(struct file *instance, unsigned int cmd, unsigned long 
 	int not_copied;
 	struct hadc0_data mydata;
 	//dev_info(hadc_dev, "ioctl called 0x%4.4x %p\n",cmd, (void *)arg);
+	uint32_t channel;
+	uint32_t raw;
 
 	switch(cmd){
-	case START_HADC:
+	case HADC_START:
 		stopHADC();
 		dev_info(hadc_dev, "start continous hadc\n");
 		break;
-	case STOP_HADC:
+	case HADC_STOP:
 		initHADC();
 		dev_info(hadc_dev, "stop hadc\n");
 		break;
-	case READ_HADC_IOTCL:
+	case HADC_READ_ALLCHANNEL_CONT:
 		/* do not forget to start & stop in userspace application */
 		mydata = getValue();
 		//dev_info(hadc_dev, "val0:%u\n",mydata.data[0]);
 		not_copied=copy_to_user((void *)arg, &mydata,sizeof(struct hadc0_data));
 		break;
-	case READ_HADC_IOTCL_SINGLE:
+	case HADC_READ_ALLCHANNEL_START_STOP:
 		initHADC();
 		mydata = getValue();
 		stopHADC();
 		not_copied=copy_to_user((void *)arg, &mydata,sizeof(struct hadc0_data));
 		break;
-	case IOCTL_TESTINPUT:
-		 printk(KERN_INFO "HADC welcomes you to the world!\n");
+	case HADC_READ_SINGLE_CHANNEL_START_STOP:
+		copy_from_user(&channel ,(int32_t*) arg, sizeof(channel));
+		if(channel>=MAX_HADC_CHANNEL){
+			pr_err("invalid channel:%d \n", channel);
+			break;
+		}
+		initHADC();
+		mydata = getValue();
+		stopHADC();
+		raw = mydata.data[channel];
+		not_copied=copy_to_user((void *)arg, &raw, sizeof(uint32_t));
+		break;
+	case HADC_IOCTL_TEST:
+		 printk(KERN_INFO "HADC_READ_SINGLE_CHANNEL_START_STOP invalid channel.\n");
 		break;
 	default:
 		printk("unknown IOCTL 0x%x\n",cmd);
@@ -108,8 +121,8 @@ static struct file_operations hadc_fops = {
 };
 
 
-static int __init hadc_init(void)
-{
+static int __init hadc_init(void){
+
 	if(alloc_chrdev_region(&hadc_dev_number,0,1,DEV_NAME)<0)
 		return -EIO;
 	hadc_object = cdev_alloc();
@@ -141,8 +154,7 @@ free_device_number:
 	return -EIO;
 }
 
-static void __exit hadc_exit( void )
-{
+static void __exit hadc_exit(void){
 	device_destroy(hadc_class, hadc_dev_number);
 	class_destroy(hadc_class);
 	cdev_del(hadc_object);
