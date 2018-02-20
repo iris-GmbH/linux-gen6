@@ -14,13 +14,7 @@
 #include <mach/sc57x.h>
 #include "hadc.h"
 
-
-struct hadc0_data{
-	uint32_t data[8];
-};
-
 #define DEV_NAME				"hadc"
-#define MAX_HADC_CHANNEL		8
 
 static dev_t hadc_dev_number;
 static struct cdev *hadc_object;
@@ -28,8 +22,8 @@ static struct class *hadc_class;
 static struct device *hadc_dev;
 
 void initHADC(void){
-	void __iomem *hadc_ctrl_reg = ioremap(HADC0_CTL, 4);
-	void __iomem *status_reg = ioremap(HADC0_STAT, 4);
+	void __iomem *hadc_ctrl_reg = ioremap(HADC0_CTL, SZ_4);
+	void __iomem *status_reg = ioremap(HADC0_STAT, SZ_4);
 	uint32_t tmp_ctrl = readl(hadc_ctrl_reg);
 	uint32_t tmp_status;
 
@@ -49,7 +43,7 @@ void initHADC(void){
 }
 
 void stopHADC(void){
-	void __iomem *hadc_ctrl_reg = ioremap(HADC0_CTL, 4);
+	void __iomem *hadc_ctrl_reg = ioremap(HADC0_CTL, SZ_4);
 	uint32_t tmp_ctrl = readl(hadc_ctrl_reg);
 	CLEAR(tmp_ctrl, HADC_CTRL_PD);		//- Deassert the HADC_CTL.PD bit (HADC power down)
 	SET(tmp_ctrl,HADC_CTRL_NRST);		//- Set the HADC_CTL.NRST bit (Reset)
@@ -58,7 +52,7 @@ void stopHADC(void){
 }
 
 struct hadc0_data getValue(void){
-	void __iomem *data = ioremap(HADC0_DATA0, MAX_HADC_CHANNEL * sizeof(uint32_t));
+	void __iomem *data = ioremap(HADC0_DATA0, SZ_32);
 	struct hadc0_data newdata;
 	int i=0;
 	for(i=0;i<MAX_HADC_CHANNEL;i++){
