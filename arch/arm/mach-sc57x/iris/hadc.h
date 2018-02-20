@@ -11,12 +11,13 @@
 #define SET(x,y) x |= (1 << y)
 #define CLEAR(x,y) x &= ~(1<< y)
 
-#define IOC_HADC_MAGIC 'k' // defines the magic number
-#define IOCTL_TESTINPUT			_IO(IOC_HADC_MAGIC,		0)
-#define READ_HADC_IOTCL			_IOR(IOC_HADC_MAGIC,	1, struct hadc0_data) //continous read needs start & stop
-#define START_HADC				_IO(IOC_HADC_MAGIC,		2)
-#define STOP_HADC				_IO(IOC_HADC_MAGIC,		3)
-#define READ_HADC_IOTCL_SINGLE	_IOR(IOC_HADC_MAGIC,	4, struct hadc0_data) //start & stop automatically
+#define HADC_IOC_MAGIC 		'k' // defines the magic number
+#define HADC_IOCTL_TEST		_IO(HADC_IOC_MAGIC,		0)
+#define HADC_START			_IO(HADC_IOC_MAGIC,		1)
+#define HADC_STOP			_IO(HADC_IOC_MAGIC,		2)
+#define HADC_READ_ALLCHANNEL_CONT			_IOR(HADC_IOC_MAGIC,	3, struct hadc0_data) //continous read needs start & stop
+#define HADC_READ_ALLCHANNEL_START_STOP		_IOR(HADC_IOC_MAGIC,	4, struct hadc0_data) //start & stop automatically
+#define HADC_READ_SINGLE_CHANNEL_START_STOP	_IOWR(HADC_IOC_MAGIC,	5, uint32_t) //start & stop automatically, read single channel
 
 #define MAX_HADC_CHANNEL		8
 
