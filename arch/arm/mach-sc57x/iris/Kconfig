@@ -15,4 +15,11 @@ config IRIS_IRMA_SIX_HARDWARE_DISCOVERY
 	help
 	  A driver that can do additional device initialization and device population on irma-six devices.
 
+config IRIS_IRMA_SIX_HADC
+	bool "Driver for Housekeeping AD Converter (HADC) on sc57c platform"
+	default y
+	depends on ARCH_SC57X
+	help
+	  A driver that can do additional device initialization and device population on irma-six devices.
+
 endmenu

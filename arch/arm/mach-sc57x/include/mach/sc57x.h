@@ -187,3 +187,29 @@
    ========================= */
 #define EPPI0_CTL                   0x3102D020 /* EPPI0 Control Register */
 
+/* =========================
+        HADC0
+   ========================= */
+#define HADC0_CTL                   0x31016000
+#define HADC0_CHAN_MSK              0x31016004
+#define HADC0_IMSK                  0x31016008
+#define HADC0_STAT					0x3101600C
+#define HADC0_DATA0                 0x31016010
+#define HADC0_DATA1                 0x31016014
+#define HADC0_DATA2                 0x31016018
+#define HADC0_DATA3                 0x3101601C
+#define HADC0_DATA4                 0x31016020
+#define HADC0_DATA5                 0x31016024
+#define HADC0_DATA6                 0x31016028
+#define HADC0_DATA7                 0x3101602C
+#if 0 //not available
+#define HADC0_DATA8                 0x31016030
+#define HADC0_DATA9                 0x31016034
+#define HADC0_DATA10                0x31016038
+#define HADC0_DATA11                0x3101603C
+#define HADC0_DATA12				0x31016040
+#define HADC0_DATA13                0x31016044
+#define HADC0_DATA14                0x31016048
+#define HADC0_DATA15                0x3101604C
+#endif
+
