@@ -2,7 +2,6 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/ioctl.h>
-#include <linux/uaccess.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
@@ -12,6 +11,7 @@
 #include <linux/platform_device.h>
 #include <linux/printk.h>
 #include <linux/types.h>
+#include <linux/uaccess.h>
 
 #define DRV_NAME        "gen6_cont_memory"
 
@@ -126,7 +126,6 @@ static int cont_mem_probe(struct platform_device *pdev)
 	int ret;
 	int num_regions = 0;
 
-	dev_err(dev, "\n\n\n\n\n\n\n");
 	if (!of_match_device(cap_match, &pdev->dev)) {
 		dev_err(dev, "failed to matching of_match node\n");
 		return -ENODEV;
