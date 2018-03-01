@@ -1122,9 +1122,9 @@ static int epc660_probe(struct platform_device *pdev)
 	/* initialize queue */
 	q				= &epc660_dev->buffer_queue;
 	q->type				= V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	q->io_modes			= VB2_MMAP | VB2_DMABUF;
+	q->io_modes			= VB2_MMAP | VB2_DMABUF | VB2_USERPTR;
 	q->drv_priv			= epc660_dev;
-	q->buf_struct_size		= sizeof(struct imager_buffer);
+	q->buf_struct_size	= sizeof(struct imager_buffer);
 	q->ops				= &epc660_video_qops;
 	q->mem_ops 			= &vb2_dma_contig_memops;
 	q->timestamp_flags 		= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
