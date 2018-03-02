@@ -223,20 +223,5 @@
 			pinctrl-1 = <&ppi0_10b>;
 			pinctrl-2 = <&ppi0_12b>;
 		};
-		
-/*
-		magic_ppi: cap_generic_ppi {
-			compatible = "iris,generic_ppi_capture";
-			type = <2>;
-			dma-channel = <28>;
-			interrupts = <0 83 0>;
-			reg = <0x3102D000 0xfff>;
-			spu_securep_id = <95>;
-			pinctrl-names = "8bit", "10bit", "12bit";
-			pinctrl-0 = <&ppi0_8b>;
-			pinctrl-1 = <&ppi0_10b>;
-			pinctrl-2 = <&ppi0_12b>;
-		};
-*/	
 	};
 };
