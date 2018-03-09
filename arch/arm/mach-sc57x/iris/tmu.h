@@ -42,6 +42,8 @@
 /* TMU0_TEMP */
 #define TMU0_TEMP_MASK		0x1FFF
 
+/* TMU_ALERT_HIGH*/
+#define TMU0_ALRT_LIM_HI_MASK		0xFF
 
 
 #endif /* ARCH_ARM_MACH_SC57X_IRIS_TMU_H_ */
