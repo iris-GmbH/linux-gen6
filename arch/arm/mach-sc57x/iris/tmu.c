@@ -12,6 +12,8 @@
 #include <asm/io.h> /* ioremap */
 #include <linux/types.h>
 #include <mach/sc57x.h>
+#include <mach/irqs.h>
+#include <linux/interrupt.h>
 #include "tmu.h"
 
 #define DEV_NAME	"tmu"
@@ -22,7 +24,20 @@ static struct class *tmu_class;
 static struct device *tmu_dev;
 
 static void __iomem *regTmuBaseAddress; //REG_TMU0_CTL
+static uint16_t temperatureQ7_8;
+static irqreturn_t alert_high_isr(int p_irq, void *p_data){
+#if 0
+	uint32_t status = readl(regTmuBaseAddress + SZ_4*REGP_TMU0_STAT);
+/*	uint32_t temp   = readl(regTmuBaseAddress + SZ_4*REGP_TMU0_TEMP);*/
+	if(status& (1>>5))
+		printk("tmu alert high cpu-temperature: %uC \n", (temp>>8)&0xFF);
+	if(status& (1>>4))
+#endif
+	printk("tmu alert high cpu-temperature: \n");
 
+
+	return IRQ_HANDLED;
+}
 
 void setOffset(uint32_t offset){
 	writel((offset & TMU0_OFFSET_MASK), regTmuBaseAddress + SZ_4 * REGP_TMU0_OFFSET); //set REG_TMU0_OFFSET
@@ -39,6 +54,11 @@ void setGain(uint32_t gain){
 void setConfigure(uint32_t config){
 	//power down up and start periodic read
 	writel((config & TMU0_CTL_MASK), regTmuBaseAddress); //set REG_TMU0_CTL
+}
+
+void setAlertHigh(uint8_t alertTemp){
+	//should only be set, for values higher then 60°C
+	writel((alertTemp & TMU0_ALRT_LIM_HI_MASK), regTmuBaseAddress + SZ_4 * REGP_TMU0_ALRT_LIM_HI); //set REG_TMU0_CTL
 }
 
 static int tmu_open( struct inode *device_file, struct file *entity){
@@ -67,16 +87,21 @@ void printTmuRegisters(void){
 
 static ssize_t tmu_read(struct file *entity, char __user *user,
 	size_t count, loff_t *offset){
-	uint16_t rawQ7_8 = 0;
 
 	//printTmuRegisters();
-	if(count != sizeof(rawQ7_8))
+	if(count != sizeof(temperatureQ7_8))
 		return -EINVAL; //other sizes are not valid
 
-	rawQ7_8 = readl(regTmuBaseAddress + SZ_4*REGP_TMU0_TEMP) & 0xFFFF; // return value in Q7.8 format
+	temperatureQ7_8 = (uint16_t) readl(regTmuBaseAddress + SZ_4*REGP_TMU0_TEMP) & 0xFFFF; // return value in Q7.8 format
 	//printk(KERN_INFO "tmu_read: tempvalue: %u hex:0x%08x\n\n", (rawQ7_8>>8)&0xFFFF, rawQ7_8);
-	return copy_to_user(user, &rawQ7_8, sizeof(rawQ7_8));
+
+	if(put_user(temperatureQ7_8, (uint16_t*)user)){
+		printk( "tmu_read: put_user failed\n");
+		return -EFAULT;
+	}
+	return temperatureQ7_8;
 }
+
 
 static struct file_operations tmu_fops = {
 	.owner		= THIS_MODULE,
@@ -87,6 +112,8 @@ static struct file_operations tmu_fops = {
 
 
 static int __init tmu_init(void){
+	int ret;
+
 	if( (regTmuBaseAddress = ioremap(REG_TMU0_BASE_ADDRESS, SZ_4 *13))==NULL) //base address
 		goto unioremap;
 
@@ -110,6 +137,22 @@ static int __init tmu_init(void){
 		pr_err("tmu: device create faileed\n");
 		goto free_class;
 	}
+
+	setAlertHigh(36);
+#if 0
+	ret = request_irq(IRQ_TMU0_ALERT, alert_high_isr,
+				0,
+				"tmu alert irq", tmu_object);
+#endif
+#if 0
+	ret = devm_request_irq(tmu_dev, IRQ_TMU0_ALERT, alert_high_isr,
+			       0, "tmu alert irq", tmu_dev_number);
+
+	if(ret<0){
+		pr_err("tmu: configure_irq error\n");
+		goto free_class;
+	}
+#endif
 	dev_info(tmu_dev, "tmu __init called\n");
 	return 0;
 
