@@ -241,6 +241,14 @@
 			interrupts = <0 75 0>;
 		};
 
+		tmu@0x31016800 {
+			compatible = "adi,sc57x-tmu";
+			reg = <0x31016800 0x3C>; 
+			interrupt-parent = <&gic>;
+			interrupts =	<0 7 0>, /* TMU0_FAULT */
+					<0 8 0>; /* TMU0_ALERT */
+		};
+
 		watchdog@0x31008000 {
 			compatible = "arm,adi-watchdog";
 			reg = <0x31008000 0x10>;
