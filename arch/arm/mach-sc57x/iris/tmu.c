@@ -9,7 +9,6 @@
 #include <mach/sc57x.h>
 #include "tmu.h"
 
-
 #define DEV_NAME	"tmu"
 
 static dev_t tmu_dev_number;
@@ -54,8 +53,17 @@ void setHighIrMask(void){
 	writel(((TMU0_IMSK_FLTHI|TMU0_IMSK_ALRTHI) & TMU0_IMSK_MASK), regTmuBaseAddress + SZ_4 * REGP_TMU0_IMSK);
 }
 
-static int tmu_open( struct inode *device_file, struct file *entity){
+void printTmuRegisters(void){
+	uint32_t regs[13];
+	int i = 0;
 
+	for(i=0;i<13;i++){
+		regs[i] = readl(regTmuBaseAddress + SZ_4*i);
+		printk(KERN_INFO "tmu_read reg[%d]: 0x%08x\n", i, regs[i]);
+	}
+}
+
+static int tmu_open( struct inode *device_file, struct file *entity){
 	pr_info("TMU OPEN\n");
 	setGain(0);
 	setOffset(0);
@@ -65,22 +73,9 @@ static int tmu_open( struct inode *device_file, struct file *entity){
 }
 
 static int tmu_close( struct inode *device_file, struct file *entity){
-
 	pr_info("TMU CLOSE\n");
-
-	//power down tmu driver
-	writel( (0x0 & TMU0_CTL_MASK), regTmuBaseAddress); //set REG_TMU0_CTL
+	writel( (0x0 & TMU0_CTL_MASK), regTmuBaseAddress); //power down tmu driver
 	return 0;
-}
-
-void printTmuRegisters(void){
-	uint32_t regs[13];
-	int i = 0;
-
-	for(i=0;i<13;i++){
-		regs[i] = readl(regTmuBaseAddress + SZ_4*i);
-		printk(KERN_INFO "tmu_read reg[%d]: 0x%08x\n", i, regs[i]);
-	}
 }
 
 static ssize_t tmu_read(struct file *entity, char __user *user,
@@ -101,11 +96,11 @@ static ssize_t tmu_read(struct file *entity, char __user *user,
 static irqreturn_t tmu_isr(int p_irq, void *p_data){
 	uint32_t status = readl(regTmuBaseAddress + SZ_4*REGP_TMU0_STAT);
 	if(status&TMU0_STAT_FLTHI){
-		printk("tmu fault high cpu-temperature >%uC\n", (temperatureQ7_8>>8)+1);
+		printk("tmu fault high cpu-temperature >%uC\n", HIGH_FAULT_LIM);
 		writel(TMU0_STAT_FLTHI &TMU0_STAT_MASK, regTmuBaseAddress + SZ_4*REGP_TMU0_STAT); //clear irq
 		return IRQ_HANDLED;
 	}else if(status&TMU0_STAT_ALRTHI){
-		printk("tmu alert high cpu-temperature >%uC\n", (temperatureQ7_8>>8)+1);
+		printk("tmu alert high cpu-temperature >%uC\n", HIGH_ALERT_LIM);
 		writel(TMU0_STAT_ALRTHI &TMU0_STAT_MASK, regTmuBaseAddress + SZ_4*REGP_TMU0_STAT); //clear irq
 		return IRQ_HANDLED;
 	}
@@ -118,7 +113,7 @@ static int tmu_probe_device(struct platform_device *pdev)
 	int ret, irq;
 
 	pr_info("tmu_probe_device( %p )\n", dev);
-	pr_info("pdev->id: %d\n", pdev->id );
+//	pr_info("pdev->id: %d\n", pdev->id );
 
 	if( (regTmuBaseAddress = ioremap(REG_TMU0_BASE_ADDRESS, SZ_4 *13))==NULL) //base address
 		return -1;
@@ -130,13 +125,13 @@ static int tmu_probe_device(struct platform_device *pdev)
 		dev_err(dev, "%s: no TMU_FAULT irq.\n", __func__);
 		return -ENODEV;
 	}
-	setFaultHigh(35); //HIGH_FAULT_LIM
+	setFaultHigh(HIGH_FAULT_LIM);
 	ret = request_irq(irq, tmu_isr, 0, "TMU_FAULT", NULL);
 	if(ret<0){
 		dev_err(dev, "TMU_FAULT: configure_irq error, ret:%d\n",ret);
 		return ret;
 	}
-	setAlertHigh(35); //HIGH_ALERT_LIM
+	setAlertHigh(HIGH_ALERT_LIM);
 	irq = platform_get_irq(pdev, 1);
 	if (irq < 0) {
 		dev_err(dev, "%s: no TMU_ALERT irq.\n", __func__);
@@ -153,9 +148,14 @@ static int tmu_probe_device(struct platform_device *pdev)
 
 static int tmu_remove_device(struct platform_device *pdev){
 	struct device *dev = &pdev->dev;
+	int irq;
 	pr_info("tmu_remove_device( %p )\n", dev);
-	pr_info("pdev->id: %d\n", pdev->id );
+//	pr_info("pdev->id: %d\n", pdev->id );
 	iounmap(regTmuBaseAddress);
+	irq = platform_get_irq(pdev, 0);
+	free_irq(irq,dev);
+	irq = platform_get_irq(pdev, 1);
+	free_irq(irq,dev);
 	return 0;
 }
 
@@ -173,6 +173,7 @@ static struct file_operations tmu_fops = {
 
 struct platform_device tmu_device = {
 	.name  = "tmu",
+	.id   = -1, /* remove ".0" from /dev/tmu.0 to /dev/tmu */
 	.dev = {
 		.release = tmu_release,
 	}
@@ -194,7 +195,7 @@ static struct platform_driver tmu_driver = {
 
 static int __init tmu_init(void){
 	pr_info("tmu_init()\n");
-	strcpy( tmu_pdi.name, "my_dev" );
+	strcpy( tmu_pdi.name, "tmudev" );
 	tmu_driver.id_table = &tmu_pdi;
 	if (platform_driver_register(&tmu_driver)!=0) {
 		pr_err("driver_register failed\n");
@@ -225,8 +226,7 @@ free_device_number:
 	return -EIO;
 }
 
-static void __exit tmu_exit(void)
-{
+static void __exit tmu_exit(void){
 	device_release_driver( &tmu_device.dev );
 	platform_device_unregister( &tmu_device );
 	class_destroy( tmu_class );
