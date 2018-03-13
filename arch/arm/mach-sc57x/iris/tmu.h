@@ -17,6 +17,7 @@
 #define TMU0_AVG_VALUE		(1<<0)	//Enable averaging the TMU; (7 x previous_avg_value + current_value)/8
 
 /* TMU_STAT */
+#define TMU0_STAT_MASK		0xF0
 #define TMU0_STAT_ALRTLO	(1<<7)	//Alert Low
 #define TMU0_STAT_FLTLO		(1<<6)	//Fault Low
 #define TMU0_STAT_ALRTHI	(1<<5)	//Alert High
@@ -34,6 +35,7 @@
 #define TMU0_IMSK_FLTLO		(3<<0)
 #define TMU0_IMSK_ALRTHI	(2<<0)
 #define TMU0_IMSK_FLTHI		(1<<0)
+#define TMU0_IMSK_MASK		0xF
 
 /* TMU_OFFSET */
 #define TMU0_OFFSET_MASK		0x1FFF
@@ -44,6 +46,9 @@
 
 /* TMU_ALERT_HIGH*/
 #define TMU0_ALRT_LIM_HI_MASK		0xFF
+#define TMU0_FLT_LIM_HI_MASK		0xFF
 
+#define HIGH_ALERT_LIM				60	/* °C */
+#define HIGH_FAULT_LIM				65	/* °C */
 
 #endif /* ARCH_ARM_MACH_SC57X_IRIS_TMU_H_ */
