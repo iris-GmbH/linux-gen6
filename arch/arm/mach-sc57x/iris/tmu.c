@@ -11,6 +11,8 @@
 
 #define DEV_NAME	"tmu"
 
+//#define EnableIR
+
 static dev_t tmu_dev_number;
 static struct cdev *tmu_object;
 static struct class *tmu_class;
@@ -93,6 +95,7 @@ static ssize_t tmu_read(struct file *entity, char __user *user,
 	return temperatureQ7_8;
 }
 
+#ifdef EnableIR
 static irqreturn_t tmu_isr(int p_irq, void *p_data){
 	uint32_t status = readl(regTmuBaseAddress + SZ_4*REGP_TMU0_STAT);
 	if(status&TMU0_STAT_FLTHI){
@@ -106,18 +109,20 @@ static irqreturn_t tmu_isr(int p_irq, void *p_data){
 	}
 	return IRQ_NONE; //e.g. low temp not implemented yet
 }
+#endif
 
 static int tmu_probe_device(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+#ifdef EnableIR
 	int ret, irq;
-
+#endif
 	pr_info("tmu_probe_device( %p )\n", dev);
 //	pr_info("pdev->id: %d\n", pdev->id );
 
 	if( (regTmuBaseAddress = ioremap(REG_TMU0_BASE_ADDRESS, SZ_4 *13))==NULL) //base address
 		return -1;
-
+#ifdef EnableIR
 	setHighIrMask();
 
 	irq = platform_get_irq(pdev, 0);
@@ -142,7 +147,7 @@ static int tmu_probe_device(struct platform_device *pdev)
 		dev_err(dev, "TMU_ALERT: configure_irq error, ret:%d\n",ret);
 		return ret;
 	}
-
+#endif
 	return 0;
 }
 
@@ -152,10 +157,12 @@ static int tmu_remove_device(struct platform_device *pdev){
 	pr_info("tmu_remove_device( %p )\n", dev);
 //	pr_info("pdev->id: %d\n", pdev->id );
 	iounmap(regTmuBaseAddress);
+#ifdef EnableIR
 	irq = platform_get_irq(pdev, 0);
 	free_irq(irq,dev);
 	irq = platform_get_irq(pdev, 1);
 	free_irq(irq,dev);
+#endif
 	return 0;
 }
 
