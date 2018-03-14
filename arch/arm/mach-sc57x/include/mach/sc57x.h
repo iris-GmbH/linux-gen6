@@ -213,3 +213,40 @@
 #define HADC0_DATA15                0x3101604C
 #endif
 
+/* =========================
+        TMU0 (Thermal monitoring unit)
+   ========================= */
+#define REG_TMU0_BASE_ADDRESS                0x31016800            /*   */
+#define REG_TMU0_CTL                         0x31016800            /*  TMU0 TMU Control Register */
+#define REG_TMU0_TEMP                        0x31016804            /*  TMU0 Temperature Value Register */
+#define REG_TMU0_AVG                         0x31016808            /*  TMU0 Averaging Register */
+#define REG_TMU0_FLT_LIM_HI                  0x3101680C            /*  TMU0 Fault High Limit Register */
+#define REG_TMU0_ALRT_LIM_HI                 0x31016810            /*  TMU0 Alert High Limit Register */
+#define REG_TMU0_FLT_LIM_LO                  0x31016814            /*  TMU0 Fault Low Limit Register */
+#define REG_TMU0_ALRT_LIM_LO                 0x31016818            /*  TMU0 Alert Low Limit Register */
+#define REG_TMU0_STAT                        0x3101681C            /*  TMU0 Status Register */
+#define REG_TMU0_GAIN                        0x31016824            /*  TMU0 Gain Value Register */
+#define REG_TMU0_IMSK                        0x31016828            /*  TMU0 Interrupt Mask Register */
+#define REG_TMU0_OFFSET                      0x3101682C            /*  TMU0 Offset Register */
+#define REG_TMU0_CNV_BLANK                   0x31016834            /*  TMU0 Temperature Conversion Blank Register */
+#define REG_TMU0_REFR_CNTR                   0x31016838            /*  TMU0 Temperature Refresh Counter */
+
+//register position from Base address
+#define REGP_TMU0_CTL                         0
+#define REGP_TMU0_TEMP                        1
+#define REGP_TMU0_AVG                         2
+#define REGP_TMU0_FLT_LIM_HI                  3
+#define REGP_TMU0_ALRT_LIM_HI                 4
+#define REGP_TMU0_FLT_LIM_LO                  5
+#define REGP_TMU0_ALRT_LIM_LO                 6
+#define REGP_TMU0_STAT                        7
+#define REGP_TMU0_GAIN                        8
+#define REGP_TMU0_IMSK                        9
+#define REGP_TMU0_OFFSET                      10
+#define REGP_TMU0_CNV_BLANK                   11
+#define REGP_TMU0_REFR_CNTR                   12
+
+
+
+
+
