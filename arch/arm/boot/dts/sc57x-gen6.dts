@@ -129,10 +129,10 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&spi2_quad>;
 
-			flash: s25fl128s@0 {
+			flash: is25lp256d@0 {
 				#address-cells = <1>;
 				#size-cells = <1>;
-				compatible = "spansion,s25fl128s", "jedec,spi-nor";
+				compatible = "issi,is25lp256d", "jedec,spi-nor";
 				spi-max-frequency = <50000000>;
 				reg = <31>;
 				spi-cpol;
@@ -150,7 +150,7 @@
 				};
 				partition@2 {
 					label = "root file system (spi)";
-					reg = <0x600000 0xa00000>;
+					reg = <0x600000 0x1a00000>;
 				};
 			};
 		};
