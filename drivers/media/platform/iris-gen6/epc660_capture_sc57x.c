@@ -336,7 +336,7 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	dma_desc = buf->dma_desc;
 	nextDescrDMAAddr = buf->desc_dma_addr + sizeof(*dma_desc);
 	for (channel = 0; channel < epc660_dev->pixel_channels; ++channel) {
-		channelStartAddr = start_addr + channel * ((epc660_dev->bpp + 7) / 8) * 2; // * 2 because the dma transfers two pixels at a time
+		channelStartAddr = start_addr + channel * ((epc660_dev->bpp + 7) / 8) * 16; // * 16 because the dma transfers sixteen pixels at a time
 		for (i = 0; i < epc660_dev->fmt.height/2; i += 1) {
 			/* bottom half */
 			dma_desc->next_desc_addr = nextDescrDMAAddr;
@@ -891,13 +891,13 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	epc660_dev->dma_cfg_template.cfg      = RESTART | 
 						DMATOVEN |
 						WNR |
-						WDSIZE_32 |
+						WDSIZE_256 |
 						PSIZE_32 |
 						NDSIZE_2 |
 						DMAFLOW_LIST |
 						DMAEN;
-	epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width / 2;
-	epc660_dev->dma_cfg_template.x_modify = epc660_dev->pixel_depth_bytes * 2;
+	epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width / 16;
+	epc660_dev->dma_cfg_template.x_modify = epc660_dev->pixel_depth_bytes * 16;
 
 	if (epc660_dev->dma_pool) {
 		dma_pool_destroy(epc660_dev->dma_pool);
