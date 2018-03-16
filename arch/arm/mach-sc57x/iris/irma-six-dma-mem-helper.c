@@ -13,7 +13,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
-#define DRV_NAME        "gen6_cont_memory"
+#define DRV_NAME        "gen6_cont_nocached_memory"
 
 struct cont_mem_dev_data {
 	struct list_head list;
@@ -54,7 +54,7 @@ static int cont_mem_mmap(struct file *file, struct vm_area_struct *vma)
 
 	if (remap_pfn_range(vma, vma->vm_start,
 			dd->r.start >> PAGE_SHIFT,
-			size, PAGE_SHARED))
+			size, pgprot_dmacoherent(PAGE_SHARED)))
 	{
 	     printk("remap page range failed\n");
 	     return -ENXIO;
@@ -98,7 +98,7 @@ static const struct file_operations cont_memory_fops = {
 static int cont_mem_remove(struct platform_device *pdev);
 static int cont_mem_probe(struct platform_device *pdev);
 static const struct of_device_id cap_match[] = {
-	{ .compatible = "iris,gen6-cont-memory", }, {},
+	{ .compatible = "iris,gen6-cont-dma-memory", }, {},
 };
 MODULE_DEVICE_TABLE(of, cap_match);
 static struct platform_driver cont_mem_driver = {
@@ -168,6 +168,6 @@ static int cont_mem_remove(struct platform_device *pdev)
 	return 0;
 }
 
-MODULE_DESCRIPTION("Driver that provides mmapped contiguous memory regions into userspace");
+MODULE_DESCRIPTION("Driver that provides mmapped contiguous nocached memory regions into userspace");
 MODULE_AUTHOR("Lutz Freitag <Lutz.Freitag@irisgmbh.de>");
 MODULE_LICENSE("GPL v2");

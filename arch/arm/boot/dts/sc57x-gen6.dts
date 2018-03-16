@@ -34,19 +34,30 @@
 			reg = <0x80000000 0x1000000>;
 			reg-names = "cont_memory";
 		};
-		sram_mem: sram_res@0x20001000 {
-			compatible = "iris,gen6-
-			cont-memory";
-			reg = <0x20001000 0x00FF000>;
+		
+		sram_mem_dma: sram_res_dma@0x20001000 {
+			compatible = "iris,gen6-cont-dma-memory";
+			reg = <0x20001000 0x00080000>;
+			reg-names = "sram_mem_dma";
+		};
+		sram_mem: sram_res@0x200A1000 {
+			compatible = "iris,gen6-cont-memory";
+			reg = <0x20081000 0x0007F000>;
 			reg-names = "sram_mem";
 		};
 	};
 
 	scb {
+		cont_memory_dma {
+			compatible = "iris,gen6-cont-dma-memory";
+			memory-region = <&sram_mem_dma>;
+		};
+
 		cont_memory {
 			compatible = "iris,gen6-cont-memory";
 			memory-region = <&cont_memory &sram_mem>;
 		};
+
 /*		
 		uart2: uart@0x31003800 {
 			compatible = "arm,adi-uart4";
