@@ -16,10 +16,24 @@ config IRIS_IRMA_SIX_HARDWARE_DISCOVERY
 	  A driver that can do additional device initialization and device population on irma-six devices.
 
 config IRIS_IRMA_SIX_HADC
-	bool "Driver for Housekeeping AD Converter (HADC) on sc57c platform"
+	bool "HADC (Housekeeping AD Converter)"
 	default y
 	depends on ARCH_SC57X
 	help
-	  A driver that can do additional device initialization and device population on irma-six devices.
+	  Driver for Housekeeping AD Converter (HADC) on sc57x platform. A driver that can get HADC0 values via ioctls.
+
+config IRIS_IRMA_SIX_MEM_HELPER
+	bool "Memory Helper Driver"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Memory Helper Driver that allows mmapping of a reserved contiguous memory region at the beginning of RAM to the userspace devices. Supports multiple contiguous regions to map the beginning of the RAM as well as the non-icc-part of the L2.
+
+config IRIS_IRMA_SIX_TMU
+	bool "TMU (Thermal monitoring unit)"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Driver that provides the processor temperature on sc57x platform (via tmu).
 
 endmenu

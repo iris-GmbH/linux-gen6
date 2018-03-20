@@ -295,7 +295,19 @@ static int epc660_set_fmt(struct v4l2_subdev *sd,
 	int lX;
 	int rX;
 	int uY;
-	int align = 1;
+	int walign = 4;
+	int halign = 1;
+
+	if (format->pad)
+		return -EINVAL;
+
+	v4l_bound_align_image(&mf->width, EPC660_MIN_WIDTH,
+		EPC660_MAX_WIDTH, walign,
+		&mf->height, EPC660_MIN_HEIGHT,
+		EPC660_MAX_HEIGHT, halign, 0);
+	epc660->fmt = epc660_find_datafmt(mf->code, epc660->fmts,
+				   epc660->num_fmts);
+	mf->colorspace	= epc660->fmt->colorspace;
 
 	// set the ROI on the EPC
 	lX = (centerX - mf->width / 2) & ~1; // the ROI has to start at an even offset
@@ -311,17 +323,6 @@ static int epc660_set_fmt(struct v4l2_subdev *sd,
 
 	epc660->rect.width  = mf->width;
 	epc660->rect.height = mf->height;
-
-	if (format->pad)
-		return -EINVAL;
-
-	v4l_bound_align_image(&mf->width, EPC660_MIN_WIDTH,
-		EPC660_MAX_WIDTH, align,
-		&mf->height, EPC660_MIN_HEIGHT,
-		EPC660_MAX_HEIGHT, align, 0);
-	epc660->fmt = epc660_find_datafmt(mf->code, epc660->fmts,
-				   epc660->num_fmts);
-	mf->colorspace	= epc660->fmt->colorspace;
 
 	return 0;
 }
