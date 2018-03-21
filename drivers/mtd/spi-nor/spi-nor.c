@@ -1004,6 +1004,8 @@ static const struct flash_info spi_nor_ids[] = {
 	{ "640s33b",  INFO(0x898913, 0, 64 * 1024, 128, 0) },
 
 	/* ISSI */
+	{ "is25lp256d", INFO(0x9d6019, 0, 64 * 1024, 512, SECT_4K | SPI_NOR_DUAL_READ |
+			SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK | SPI_NOR_4B_OPCODES) },
 	{ "is25cd512", INFO(0x7f9d20, 0, 32 * 1024,   2, SECT_4K) },
 
 	/* Macronix */
@@ -2416,6 +2418,7 @@ static int spi_nor_init_params(struct spi_nor *nor,
 				   SNOR_HWCAPS_PP_QUAD)) {
 		switch (JEDEC_MFR(info)) {
 		case SNOR_MFR_MACRONIX:
+		case SNOR_MFR_ISSI:
 			params->quad_enable = macronix_quad_enable;
 			break;
 
@@ -2441,6 +2444,11 @@ static int spi_nor_init_params(struct spi_nor *nor,
 			nor->addr_width = 0;
 			nor->mtd.erasesize = 0;
 		} else {
+			if(JEDEC_MFR(info)==SNOR_MFR_ISSI){
+				/* issi-flash does not correctly (jesd216b) response address_byte,
+				 * so set addr_width=0 to use the default init in spi_nor_scan() */
+				nor->addr_width = 0;
+			}
 			memcpy(params, &sfdp_params, sizeof(*params));
 		}
 	}
