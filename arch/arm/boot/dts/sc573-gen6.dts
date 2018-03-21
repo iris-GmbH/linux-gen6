@@ -1,0 +1,238 @@
+/*
+ * Device tree for ADI sc57x-gen6 board
+ *
+ * Copyright 2014 Analog Devices Inc.
+ *
+ * Licensed under the GPL-2 or later.
+ *
+ */
+
+/dts-v1/;
+
+/include/ "sc57x.dtsi"
+
+/ {
+	model = "ADI sc57x-gen6";
+	compatible = "adi,sc57x-gen6", "adi,sc57x";
+
+	aliases {
+		/*serial2 = &uart2;*/
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x80000000 0xF000000>;
+	};
+	
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		cont_memory: dsp_res@0x80000000 {
+			compatible = "iris,gen6-cont-memory";
+			reg = <0x80000000 0x1000000>;
+			reg-names = "cont_memory";
+		};
+		
+		sram_mem_dma: sram_res_dma@0x20001000 {
+			compatible = "iris,gen6-cont-dma-memory";
+			reg = <0x20001000 0x00080000>;
+			reg-names = "sram_mem_dma";
+		};
+		sram_mem: sram_res@0x200A1000 {
+			compatible = "iris,gen6-cont-memory";
+			reg = <0x20081000 0x0007F000>;
+			reg-names = "sram_mem";
+		};
+	};
+
+	scb {
+		cont_memory_dma {
+			compatible = "iris,gen6-cont-dma-memory";
+			memory-region = <&sram_mem_dma>;
+		};
+
+		cont_memory {
+			compatible = "iris,gen6-cont-memory";
+			memory-region = <&cont_memory &sram_mem>;
+		};
+
+/*		
+		uart2: uart@0x31003800 {
+			compatible = "arm,adi-uart4";
+			reg = <0x31003800 0x40>;
+			dma-channel = <37>, <38>;
+			pinctrl-names = "default", "hwflow";
+			pinctrl-0 = <&uart2_default>;
+			pinctrl-1 = <&uart2_hwflow>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 112 0>,
+			             <0 113 0>,
+			             <0 114 0>;
+		};
+*/
+
+		gptimer3: gptimer@0x310180C0 {
+			compatible = "adi,sc57x-timer,aptina-clk";
+		};
+
+/*		spi_0: spi@0x3102E000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "adi,spi3";
+			reg = <0x3102E000 0xFF>;
+			interrupts = <0 101 0>;
+			num-cs = <128>;
+			dma-channel = <22>, <23>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi0_default>;
+
+			spidev {
+				#address-cells = <1>;
+				size-cells = <1>;
+				compatible = "rohm,dh2228fv";
+				spi-max-frequency = <5000000>;
+				reg = <38>;
+			};
+		};
+*/
+
+		spi_1: spi@0x3102F000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "adi,spi3";
+			reg = <0x3102F000 0xFF>;
+			interrupts = <0 105 0>;
+			num-cs = <128>;
+			dma-channel = <24>, <25>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi1_default>;
+
+			spidev {
+				#address-cells = <1>;
+				size-cells = <1>;
+				compatible = "rohm,dh2228fv";
+				spi-max-frequency = <1000000>;
+				reg = <42>;
+			};
+		};
+
+		spi_2: spi@0x31044000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "adi,spi3";
+			reg = <0x31044000 0xFF>;
+			interrupts = <0 71 0>;
+			num-cs = <128>;
+			dma-channel = <26>, <27>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi2_quad>;
+
+			flash: is25lp256d@0 {
+				#address-cells = <1>;
+				#size-cells = <1>;
+				compatible = "issi,is25lp256d", "jedec,spi-nor";
+				spi-max-frequency = <50000000>;
+				reg = <31>;
+				spi-cpol;
+				spi-cpha;
+				spi-tx-bus-width = <4>;
+				spi-rx-bus-width = <4>;
+				dma-mode;
+				partition@0 {
+					label = "uboot (spi)";
+					reg = <0x0 0x80000>;
+				};
+				partition@1 {
+					label = "kernel (spi)";
+					reg = <0x80000 0x580000>;
+				};
+				partition@2 {
+					label = "root file system (spi)";
+					reg = <0x600000 0x1a00000>;
+				};
+			};
+		};
+
+		mmc0: mmc@0x31010000 {
+			compatible = "adi,mmc";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x31010000 0xFF>;
+			interrupts = <0 123 0>;
+			spu_securep_id = <41>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&mmc0_default>;
+			fifo-depth = <1024>;
+			bus-width = <4>;
+			non-removable;
+			no-1-8-v;
+		};
+
+		pinctrl@0 {
+			uart {
+				uart1_default: uart1@0 {
+					adi,group = "uart1grp";
+					adi,function = "uart1";
+				};
+				uart1_hwflow: uart1@1 {
+					adi,group = "uart1_hwflowgrp";
+					adi,function = "uart1";
+				};
+				/*uart2_default: uart2@0 {
+					adi,group = "uart2grp";
+					adi,function = "uart2";
+				};
+				uart2_hwflow: uart2@1 {
+					adi,group = "uart2_hwflowgrp";
+					adi,function = "uart2";
+				};*/
+			};
+			mmc {
+			    mmc0_default: mmc0@0 {
+			        adi,group = "mmc0f4bgrp";
+			        adi,function = "mmc0";
+			    };
+			};
+		};
+
+		icc@0 {
+			compatible = "adi,icc";
+			reg = <0x20000000 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 206 1>;
+			peerinfo = <1 71>, <2 72>;
+		};
+		
+		video_decoder_aptina: cap_aptina {
+			compatible = "iris,gen6-aptina_mt9v022";
+			card-name = "mt9v022";
+			type = <2>;
+			dma-channel = <28>;
+			interrupts = <0 83 0>;
+			reg = <0x3102D000 0xfff>;
+			spu_securep_id = <95>;
+			i2c_bus_id = <0>;
+			pinctrl-names = "8bit", "10bit", "12bit";
+			pinctrl-0 = <&ppi0_8b>;
+			pinctrl-1 = <&ppi0_10b>;
+			pinctrl-2 = <&ppi0_12b>;
+		};
+
+		video_decoder_epc660: cap_epc660 {
+			compatible = "iris,gen6-epc660";
+			card-name = "epc660";
+			type = <2>;
+			dma-channel = <28>;
+			interrupts = <0 83 0>;
+			reg = <0x3102D000 0xfff>;
+			spu_securep_id = <95>;
+			i2c_bus_id = <0>;
+			pinctrl-names = "8bit", "10bit", "12bit";
+			pinctrl-0 = <&ppi0_8b>;
+			pinctrl-1 = <&ppi0_10b>;
+			pinctrl-2 = <&ppi0_12b>;
+		};
+	};
+};

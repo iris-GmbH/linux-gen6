@@ -10,8 +10,11 @@ choice
 config	MACH_SC573_EZKIT
 	bool "ADI sc573 EZKIT board"
 
-config	MACH_SC57X_GEN6
-	bool "ADI sc57x on iris Gen6 board"
+config	MACH_SC572_GEN6
+	bool "ADI sc572 on iris Gen6 board"
+
+config	MACH_SC573_GEN6
+	bool "ADI sc573 on iris Gen6 board"
 
 endchoice
 
