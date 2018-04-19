@@ -509,7 +509,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 	struct ppi_if *ppi = dev_id;
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = ppi->priv;
 	int dmaStatus;
-	dma_addr_t lastDmaDescriptor;
+	dma_addr_t lastDmaDescriptor, currDmaDescriptor;
 	struct list_head* iterator;
 
 	spin_lock(&aptina_mt9v022_dev->lock);
@@ -519,33 +519,29 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 
 	if (dmaStatus & DMA_DONE) {
 		// if there are at least two buffers in the queue we can deque one
-		if (&aptina_mt9v022_dev->dma_queue
-				== aptina_mt9v022_dev->dma_queue.next->next) {
+		if (&aptina_mt9v022_dev->dma_queue == aptina_mt9v022_dev->dma_queue.next->next) {
 		} else {
-			/* publish all buffers that are done */
-			int completedCnt = 0;
+			/* publish the one buffer that is finished */
 			lastDmaDescriptor = (dma_addr_t) get_dma_prev_desc_ptr(aptina_mt9v022_dev->dma_channel);
-			lastDmaDescriptor &= ~1; // the lowest bit masks when a decriptor fetch was invalid
+			lastDmaDescriptor &= ~0x0F; // the lowest bits masks when a decriptor fetch was invalid
+			currDmaDescriptor = (dma_addr_t) get_dma_curr_desc_ptr(aptina_mt9v022_dev->dma_channel);
+			currDmaDescriptor &= ~0x0F;
+
 			list_for_each(iterator, &aptina_mt9v022_dev->dma_queue)
 			{
 				struct imager_buffer *buf = list_entry(iterator, struct imager_buffer, list);
 				if (buf->desc_dma_addr == lastDmaDescriptor) {
-					++completedCnt;
-					break;
-				}
-			}
-			if (0 == completedCnt) {
-
-			} else {
-				struct imager_buffer* buf;
-				struct vb2_buffer *vb;
-				while (completedCnt--) {
-					if (&aptina_mt9v022_dev->dma_queue
-							== aptina_mt9v022_dev->dma_queue.next->next) {
+					if (&aptina_mt9v022_dev->dma_queue == aptina_mt9v022_dev->dma_queue.next->next) {
 						break;
 					}
-					buf = list_entry(aptina_mt9v022_dev->dma_queue.next,
-							struct imager_buffer, list);
+
+					if (lastDmaDescriptor == currDmaDescriptor) {
+						/* if the buffer is already queued by the DMA again, wait a bit,
+						 * so the actual dequeing is done after the DMA wrote to the memory again */
+						udelay(1000);
+					}
+
+					struct vb2_buffer *vb;
 					vb = &buf->vb.vb2_buf;
 					vb->timestamp = ktime_get_ns(); // this has been changed from type struct timeval to -> u64 type
 					if (ppi->err) {
@@ -554,6 +550,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 						vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 					}
 					list_del_init(&buf->list);
+					break;
 				}
 			}
 		}
