@@ -37,12 +37,12 @@
 		
 		sram_mem_dma: sram_res_dma@0x20001000 {
 			compatible = "iris,gen6-cont-dma-memory";
-			reg = <0x20001000 0x00080000>;
+			reg = <0x20001000 0x000a0000>;
 			reg-names = "sram_mem_dma";
 		};
 		sram_mem: sram_res@0x200A1000 {
 			compatible = "iris,gen6-cont-memory";
-			reg = <0x20081000 0x0007F000>;
+			reg = <0x200a1000 0x0005F000>;
 			reg-names = "sram_mem";
 		};
 	};
