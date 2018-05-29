@@ -47,6 +47,13 @@ source "drivers/net/wireless/ti/Kconfig"
 source "drivers/net/wireless/zydas/Kconfig"
 source "drivers/net/wireless/quantenna/Kconfig"
 
+config LORAWAN_SEMTECH
+    tristate "LoRa WAN end device based on Semtech SX127x"
+    depends on GPIOLIB && SPI_ADI_V3
+    ---help---
+      Say Y here if you intend to attach a Semtech sx127x
+      compatible LoRaWAN chip/module to the spi bus.
+
 config PCMCIA_RAYCS
 	tristate "Aviator/Raytheon 2.4GHz wireless support"
 	depends on PCMCIA

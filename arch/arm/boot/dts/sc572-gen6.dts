@@ -109,11 +109,16 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&spi1_default>;
 
-			spidev {
+			spidev: sx127x {
 				#address-cells = <1>;
 				size-cells = <1>;
-				compatible = "rohm,dh2228fv";
-				spi-max-frequency = <1000000>;
+				compatible = "semtech,sx127x";
+                pinctrl-names = "reset", "irq";
+                pinctrl-0 = <&sx127x_reset>;
+                pinctrl-1 = <&sx127x_irq>;
+                irq-gpios = <&sx127x_irq 1 3 2>;
+				/*spi-max-frequency = <10000000>;*/
+				spi-max-frequency = <5000000>;
 				reg = <42>;
 			};
 		};
@@ -194,6 +199,18 @@
 			        adi,group = "mmc0f4bgrp";
 			        adi,function = "mmc0";
 			    };
+			};
+			spi {
+                sx127x {
+                    sx127x_reset: sx127x@0 {
+                        adi,group = "spi1grp";
+                        adi,function = "spi1";
+                    };
+                    sx127x_irq: sx127x@1 {
+                        adi,group = "spi1grp";
+                        adi,function = "spi1";
+                    };
+                };
 			};
 		};
 
