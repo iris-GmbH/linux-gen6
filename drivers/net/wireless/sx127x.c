@@ -8,7 +8,7 @@
 #include <linux/kfifo.h>
 #include <linux/wait.h>
 #include <linux/uaccess.h>
-
+#include <mach/hardware.h>
 
 #include "sx127x.h"
 
@@ -184,6 +184,63 @@
 #define SX127X_REG_AGCTHRESH3											0x64
 #define SX127X_REG_PLL													0x70
 
+#if IS_ENABLED(CONFIG_ARCH_SC57X)
+#if IS_ENABLED(CONFIG_LORAWAN_SEMTECH)
+
+#define INTERRUPT_NUM     16
+//#define INTERRUPT_NUM     20
+#if (INTERRUPT_NUM == 16)
+#define INTERRUPT_PORT 0x00000020
+#else
+#define INTERRUPT_PORT 0x00000800
+#endif
+
+#define REG_PINT4_MSK_SET  0x31005400
+#define REG_PINT4_MSK_CLR  0x31005404
+#define REG_PINT4_REQ      0x31005408
+#define REG_PINT4_ASSIGN   0x3100540C
+#define REG_PINT4_EDGE_SET 0x31005410
+#define REG_PINT4_EDGE_CLR 0x31005414
+#define REG_PINT4_INV_SET  0x31005418
+#define REG_PINT4_INV_CLR  0x3100541C
+#define REG_PINT4_PINSTATE 0x31005420
+#define REG_PINT4_LATCH    0x31005424
+
+#define REG_PINT0_MSK_SET  0x31005000
+#define REG_PINT0_MSK_CLR  0x31005004
+#define REG_PINT0_REQ      0x31005008
+#define REG_PINT0_ASSIGN   0x3100500C
+#define REG_PINT0_EDGE_SET 0x31005010
+#define REG_PINT0_EDGE_CLR 0x31005014
+#define REG_PINT0_INV_SET  0x31005018
+#define REG_PINT0_INV_CLR  0x3100501C
+#define REG_PINT0_PINSTATE 0x31005020
+#define REG_PINT0_LATCH    0x31005024
+
+#define REG_PORTF_FER      0x31004280
+#define REG_PORTF_FER_SET  0x31004284
+#define REG_PORTF_FER_CLR  0x31004288
+#define REG_PORTF_DIR      0x31004298
+#define REG_PORTF_DIR_SET  0x3100429C
+#define REG_PORTF_DIR_CLR  0x310042A0
+#define REG_PORTF_INEN     0x310042A4
+#define REG_PORTF_INEN_SET 0x310042A8
+#define REG_PORTF_INEN_CLR 0x310042A8
+#define REG_PORTF_MUX      0x310042B0
+
+#define REG_PORTB_FER      0x31004080
+#define REG_PORTB_FER_SET  0x31004084
+#define REG_PORTB_FER_CLR  0x31004088
+#define REG_PORTB_DIR      0x31004098
+#define REG_PORTB_DIR_SET  0x3100409C
+#define REG_PORTB_DIR_CLR  0x310040A0
+#define REG_PORTB_INEN     0x310040A4
+#define REG_PORTB_INEN_SET 0x310040A8
+#define REG_PORTB_INEN_CLR 0x310040A8
+#define REG_PORTB_MUX      0x310040B0
+#endif
+#endif
+
 static int devmajor;
 static struct class *devclass;
 
@@ -230,14 +287,14 @@ static int sx127x_reg_read(struct spi_device *spi, u16 reg, u8* result){
 	return ret;
 }
 
-static int sx127x_reg_read16(struct spi_device *spi, u16 reg, u16* result){
+/*static int sx127x_reg_read16(struct spi_device *spi, u16 reg, u16* result){
 	u8 addr = reg & 0xff;
 	int ret = spi_write_then_read(spi,
 			&addr, 1,
 			result, 2);
 	dev_info(&spi->dev, "read: @%02x %02x\n", addr, *result);
 	return ret;
-}
+}*/
 
 static int sx127x_reg_read24(struct spi_device *spi, u16 reg, u32* result){
 	u8 addr = reg & 0xff, buf[3];
@@ -250,7 +307,7 @@ static int sx127x_reg_read24(struct spi_device *spi, u16 reg, u32* result){
 }
 
 static int sx127x_reg_write(struct spi_device *spi, u16 reg, u8 value){
-	u8 addr = SX127X_REGADDR(reg), buff[2], readback;
+	u8 addr = SX127X_REGADDR(reg), buff[2];//, readback;
 	int ret;
 //	printk("\nInside sx127x.c: sx127x_reg_write()!\n\n");
 	buff[0] = SX127X_WRITEADDR(addr);
@@ -393,9 +450,11 @@ static int sx127x_setmodulation(struct sx127x *data, enum sx127x_modulation modu
 			opmode &= ~SX127X_REG_OPMODE_LONGRANGEMODE;
 			data->loraregmap = 0;
 			break;
-		case SX127X_MODULATION_LORA:
+                case SX127X_MODULATION_LORA:
 			opmode |= SX127X_REG_OPMODE_LONGRANGEMODE;
 			data->loraregmap = 1;
+			break;
+                case SX127X_MODULATION_INVALID:
 			break;
 	}
 	sx127x_reg_write(data->spidevice, SX127X_REG_OPMODE, opmode);
@@ -664,7 +723,7 @@ static ssize_t sx127x_bw_show(struct device *dev, struct device_attribute *attr,
 
 static ssize_t sx127x_bw_store(struct device *dev, struct device_attribute *attr,
 			 const char *buf, size_t count){
-	struct sx127x *data = dev_get_drvdata(dev);
+	//struct sx127x *data = dev_get_drvdata(dev);
 	return count;
 }
 
@@ -693,7 +752,7 @@ static ssize_t sx127x_codingrate_show(struct device *dev, struct device_attribut
 
 static ssize_t sx127x_codingrate_store(struct device *dev, struct device_attribute *attr,
 			 const char *buf, size_t count){
-	struct sx127x *data = dev_get_drvdata(dev);
+	//struct sx127x *data = dev_get_drvdata(dev);
 	return count;
 }
 
@@ -714,7 +773,7 @@ static ssize_t sx127x_implicitheadermodeon_show(struct device *dev, struct devic
 
 static ssize_t sx127x_implicitheadermodeon_store(struct device *dev, struct device_attribute *attr,
 			 const char *buf, size_t count){
-	struct sx127x *data = dev_get_drvdata(dev);
+	//struct sx127x *data = dev_get_drvdata(dev);
 	return count;
 }
 
@@ -733,7 +792,7 @@ static ssize_t sx127x_paoutput_show(struct device *dev, struct device_attribute 
 }
 
 static int sx127x_setpaoutput(struct sx127x *data, enum sx127x_pa pa){
-	int ret = 0;
+	//int ret = 0;
 	u8 paconfig;
 	sx127x_reg_read(data->spidevice, SX127X_REG_PACONFIG, &paconfig);
 	switch(pa){
@@ -785,7 +844,7 @@ static ssize_t sx127x_outputpower_show(struct device *dev, struct device_attribu
 static ssize_t sx127x_outputpower_store(struct device *dev, struct device_attribute *attr,
 			 const char *buf, size_t count){
 	struct sx127x *data = dev_get_drvdata(dev);
-	int idx = sx127x_indexofstring(buf, paoutput, ARRAY_SIZE(paoutput));
+	//int idx = sx127x_indexofstring(buf, paoutput, ARRAY_SIZE(paoutput));
 	u8 paconfig;
 	sx127x_reg_read(data->spidevice, SX127X_REG_PACONFIG, &paconfig);
 	sx127x_reg_write(data->spidevice, SX127X_REG_PACONFIG, paconfig);
@@ -855,7 +914,7 @@ static int sx127x_setlorasyncword(struct sx127x *data, unsigned syncw){
 	sx127x_reg_write(data->spidevice, SX127X_REG_LORA_SYNCWORD, (u8)syncw);
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_SYNCWORD, &r);
     if (r!=(u8)syncw)
-        printk("\nlora sync word = 0x%02x\n\n");
+        printk("\nlora sync word = 0x%02X\n\n", syncw);
 	return 0;
 }
 
@@ -863,17 +922,30 @@ static ssize_t sx127x_dev_write(struct file *filp, const char __user *buf, size_
 	struct sx127x *data = filp->private_data;
 	size_t packetsz, offset, maxpkt = 256;
 	u8 kbuf[256];
-    sx127x_setlorasyncword(data, 0x34);
+	int i;
 	dev_info(&data->spidevice->dev, "char device write; %d\n", count);
+	sx127x_setopmode(data, SX127X_OPMODE_STANDBY, true); //put into Stand-by mode
+	sx127x_setlorasyncword(data, 0x34); //Static configuration registers can only be accessed in Sleep mode, Stand-by mode or FSTX mode.
 	for(offset = 0; offset < count; offset += maxpkt){
 		packetsz = min((count - offset), maxpkt);
 		mutex_lock(&data->mutex);
-		copy_from_user(kbuf, buf + offset, packetsz);
-		sx127x_fifo_writepkt(data->spidevice, kbuf, packetsz);
+		printk("\ncount = %d\n\n", (u32)count);
+                printk("\npacketsz = %d\n\n", (u32)packetsz);
+		printk("\ncopy from user = %ld\n\n", copy_from_user(kbuf, buf + offset, packetsz));
+		for (i=0; i < packetsz; i++) {
+			printk("%c", kbuf[i]);
+		}
+		printk("\nfifo write pkt = %d\n\n", sx127x_fifo_writepkt(data->spidevice, kbuf, packetsz));
 		data->transmitted = 0;
-		sx127x_setopmode(data, SX127X_OPMODE_TX, false);
+		printk("\nREG_PINT0_PINSTATE = 0x%08X\n\n", readl(__io_address(REG_PINT0_PINSTATE)));
+		printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
+		printk("\nREG_PINT0_LATCH = 0x%08X\n\n", readl(__io_address(REG_PINT0_LATCH)));
+		sx127x_setopmode(data, SX127X_OPMODE_TX, false); //Data transmission is initiated by sending TX mode request.
+		//sx127x_setopmode(data, SX127X_OPMODE_TX, true); //Data transmission is initiated by sending TX mode request.
 		mutex_unlock(&data->mutex);
-		wait_event_interruptible_timeout(data->writewq, data->transmitted, 60 * HZ);
+		writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_SET)); //enable IRQ
+		wait_event_interruptible_timeout(data->writewq, data->transmitted, 60 * HZ); //Upon completion the TxDone interrupt is issued and the radio returns to Stand-by mode.
+		writel(0xffffffff, __io_address(REG_PINT0_MSK_CLR)); //disable all IRQs
 	}
 	return count;
 }
@@ -951,6 +1023,9 @@ static irqreturn_t sx127x_irq(int irq, void *dev_id)
 {
 	struct sx127x *data = dev_id;
 	schedule_work(&data->irq_work);
+	//printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
+	writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_CLR)); //disable IRQ
+	//printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
 	return IRQ_HANDLED;
 }
 
@@ -959,6 +1034,7 @@ static void sx127x_irq_work_handler(struct work_struct *work){
 	u8 irqflags, buf[128], len, snr, rssi;
 	u32 fei;
 	struct sx127x_pkt pkt;
+	dev_warn(&data->spidevice->dev, "IN TASKLET sx127x_irq_work_handler()\n");
 	mutex_lock(&data->mutex);
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_IRQFLAGS, &irqflags);
 	if(irqflags & SX127X_REG_LORA_IRQFLAGS_RXDONE){
@@ -1078,20 +1154,28 @@ static int sx127x_probe(struct spi_device *spi){
 		data->gpio_rxen = NULL;
 	}
 
+	printk("\nREG_PORTB_MUX = 0x%08X\n\n", readl(__io_address(REG_PORTB_MUX)));
+	writel(INTERRUPT_PORT, __io_address(REG_PORTB_FER_CLR));
+	mdelay(100); // 100ms udelay(100); //100us
+	printk("\nREG_PORTB_FER = 0x%08X\n\n", readl(__io_address(REG_PORTB_FER)));
+	writel(INTERRUPT_PORT, __io_address(REG_PORTB_DIR_CLR));
+	mdelay(100); // 100ms udelay(100); //100us
+	printk("\nREG_PORTB_DIR = 0x%08X\n\n", readl(__io_address(REG_PORTB_DIR)));
+	writel(0x00000101 | readl(__io_address(REG_PINT0_ASSIGN)), __io_address(REG_PINT0_ASSIGN)); //default: 0x00000101
+	mdelay(100); // 100ms udelay(100); //100us
+	printk("\nREG_PINT0_ASSIGN = 0x%08X\n\n", readl(__io_address(REG_PINT0_ASSIGN)));
+	writel(INTERRUPT_PORT | readl(__io_address(REG_PINT0_EDGE_SET)), __io_address(REG_PINT0_EDGE_SET));
+	mdelay(100); // 100ms udelay(100); //100us
+	printk("\nREG_PINT0_EDGE_SET = 0x%08X\n\n", readl(__io_address(REG_PINT0_EDGE_SET)));
 	// get the irq
-	irq = irq_of_parse_and_map(spi->dev.of_node, 0);
+	//irq = irq_of_parse_and_map(spi->dev.of_node, 0);
+	irq = INTERRUPT_NUM;
+	printk("\ndevm_request_irq(&spi->dev, %d, ...) = %d\n\n", irq, devm_request_irq(&spi->dev, irq, sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
 	if (!irq) {
-        struct device_node *irq_sx127 = NULL;
 		dev_err(&spi->dev, "No irq in platform data\n");
-        for_each_compatible_node(irq_sx127,NULL,"semtech,sx127x") {
-             //irq = irq + 1;
-             irq = irq_of_parse_and_map(irq_sx127, 0);
-             printk("\nirq_sx127 = %d\n\n", irq);
-        }
-/*		ret = -EINVAL;
+		ret = -EINVAL;
 		goto err_irq;
-*/	}
-	devm_request_irq(&spi->dev, irq, sx127x_irq, 0, SX127X_DRIVERNAME, data);
+	}
 
 	// create the frontend device and stash it in the spi device
 	mutex_lock(&device_list_lock);
@@ -1122,14 +1206,14 @@ static int sx127x_probe(struct spi_device *spi){
 
 	return 0;
 
-	err_sysfs:
-		device_destroy(devclass, data->devt);
+	//err_sysfs:
+	//	device_destroy(devclass, data->devt);
 	err_createdevice:
 		mutex_unlock(&device_list_lock);
 	err_irq:
 	err_chipid:
-	err_resetgpio:
-		kfifo_free(&data->out);
+	//err_resetgpio:
+	//	kfifo_free(&data->out);
 	err_allocoutfifo:
 		kfree(data);
 	err_allocdevdata:
