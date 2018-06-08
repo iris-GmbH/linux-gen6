@@ -140,17 +140,25 @@
 				spi-tx-bus-width = <4>;
 				spi-rx-bus-width = <4>;
 				dma-mode;
+
+				/* Second Stage Bootloader  */
+				/* <0x00000 0x80000>; */                  	/* 0.5MB */
+
 				partition@0 {
-					label = "uboot (spi)";
-					reg = <0x0 0x80000>;
+					label = "uboot fallback (spi)";
+					reg = <0x80000 0xC0000>;                /* 0.75MB */
 				};
 				partition@1 {
-					label = "kernel (spi)";
-					reg = <0x80000 0x580000>;
+					label = "uboot modern (spi)";
+					reg = <0x140000 0xC0000>;                /* 0.75MB */
 				};
 				partition@2 {
-					label = "root file system (spi)";
-					reg = <0x600000 0xa00000>;
+					label = "kernel 1. (spi)";
+					reg = <0x200000 0x500000>;              /* 5MB */
+				};
+				partition@3 {
+					label = "root file system 1. (spi)";
+					reg = <0x700000 0x900000>;              /* 9MB */
 				};
 			};
 		};
