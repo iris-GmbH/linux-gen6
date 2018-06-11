@@ -943,9 +943,9 @@ static ssize_t sx127x_dev_write(struct file *filp, const char __user *buf, size_
 		sx127x_setopmode(data, SX127X_OPMODE_TX, false); //Data transmission is initiated by sending TX mode request.
 		//sx127x_setopmode(data, SX127X_OPMODE_TX, true); //Data transmission is initiated by sending TX mode request.
 		mutex_unlock(&data->mutex);
-		writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_SET)); //enable IRQ
+//		writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_SET)); //enable IRQ
 		wait_event_interruptible_timeout(data->writewq, data->transmitted, 60 * HZ); //Upon completion the TxDone interrupt is issued and the radio returns to Stand-by mode.
-		writel(0xffffffff, __io_address(REG_PINT0_MSK_CLR)); //disable all IRQs
+//		writel(0xffffffff, __io_address(REG_PINT0_MSK_CLR)); //disable all IRQs
 	}
 	return count;
 }
@@ -1023,9 +1023,10 @@ static irqreturn_t sx127x_irq(int irq, void *dev_id)
 {
 	struct sx127x *data = dev_id;
 	schedule_work(&data->irq_work);
-	//printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
-	writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_CLR)); //disable IRQ
-	//printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
+//	printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
+////	writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_CLR)); //disable IRQ
+//	writel(INTERRUPT_PORT, __io_address(REG_PINT0_REQ)); //re-trigger IRQ
+//	printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
 	return IRQ_HANDLED;
 }
 
@@ -1164,13 +1165,14 @@ static int sx127x_probe(struct spi_device *spi){
 	writel(0x00000101 | readl(__io_address(REG_PINT0_ASSIGN)), __io_address(REG_PINT0_ASSIGN)); //default: 0x00000101
 	mdelay(100); // 100ms udelay(100); //100us
 	printk("\nREG_PINT0_ASSIGN = 0x%08X\n\n", readl(__io_address(REG_PINT0_ASSIGN)));
-	writel(INTERRUPT_PORT | readl(__io_address(REG_PINT0_EDGE_SET)), __io_address(REG_PINT0_EDGE_SET));
-	mdelay(100); // 100ms udelay(100); //100us
-	printk("\nREG_PINT0_EDGE_SET = 0x%08X\n\n", readl(__io_address(REG_PINT0_EDGE_SET)));
+	//writel(INTERRUPT_PORT | readl(__io_address(REG_PINT0_EDGE_SET)), __io_address(REG_PINT0_EDGE_SET));
+	//mdelay(100); // 100ms udelay(100); //100us
+	//printk("\nREG_PINT0_EDGE_SET = 0x%08X\n\n", readl(__io_address(REG_PINT0_EDGE_SET)));
 	// get the irq
 	//irq = irq_of_parse_and_map(spi->dev.of_node, 0);
 	irq = INTERRUPT_NUM;
 	printk("\ndevm_request_irq(&spi->dev, %d, ...) = %d\n\n", irq, devm_request_irq(&spi->dev, irq, sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
+	//printk("\ndevm_request_irq(&spi->dev, %d, ...) = %d\n\n", irq, devm_request_irq(&spi->dev, irq, sx127x_irq, 0, SX127X_DRIVERNAME, data));
 	if (!irq) {
 		dev_err(&spi->dev, "No irq in platform data\n");
 		ret = -EINVAL;
@@ -1204,6 +1206,7 @@ static int sx127x_probe(struct spi_device *spi){
 	ret = device_create_file(data->chardevice, &dev_attr_codingrate);
 	ret = device_create_file(data->chardevice, &dev_attr_implicitheadermodeon);
 
+	writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_SET)); //enable IRQ
 	return 0;
 
 	//err_sysfs:
@@ -1240,6 +1243,7 @@ static int sx127x_remove(struct spi_device *spi){
 	kfifo_free(&data->out);
 	kfree(data);
 
+	writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_CLR)); //disable IRQ
 	return 0;
 }
 
