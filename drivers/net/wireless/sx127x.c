@@ -220,6 +220,9 @@
 #define REG_PORTF_FER      0x31004280
 #define REG_PORTF_FER_SET  0x31004284
 #define REG_PORTF_FER_CLR  0x31004288
+#define REG_PORTF_DATA      0x3100428C
+#define REG_PORTF_DATA_SET  0x31004290
+#define REG_PORTF_DATA_CLR  0x31004294
 #define REG_PORTF_DIR      0x31004298
 #define REG_PORTF_DIR_SET  0x3100429C
 #define REG_PORTF_DIR_CLR  0x310042A0
@@ -227,6 +230,8 @@
 #define REG_PORTF_INEN_SET 0x310042A8
 #define REG_PORTF_INEN_CLR 0x310042A8
 #define REG_PORTF_MUX      0x310042B0
+
+#define GPO1_PORT           0x00000020 //SC57x Pin PF_05 (A19) = GPO1 ("LP-GEN6-FE-01.pdf" Frontend schematic)
 
 #define REG_PORTB_FER      0x31004080
 #define REG_PORTB_FER_SET  0x31004084
@@ -943,9 +948,7 @@ static ssize_t sx127x_dev_write(struct file *filp, const char __user *buf, size_
 		sx127x_setopmode(data, SX127X_OPMODE_TX, false); //Data transmission is initiated by sending TX mode request.
 		//sx127x_setopmode(data, SX127X_OPMODE_TX, true); //Data transmission is initiated by sending TX mode request.
 		mutex_unlock(&data->mutex);
-//		writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_SET)); //enable IRQ
 		wait_event_interruptible_timeout(data->writewq, data->transmitted, 60 * HZ); //Upon completion the TxDone interrupt is issued and the radio returns to Stand-by mode.
-//		writel(0xffffffff, __io_address(REG_PINT0_MSK_CLR)); //disable all IRQs
 	}
 	return count;
 }
@@ -960,6 +963,22 @@ static int sx127x_dev_release(struct inode *inode, struct file *filp){
 	return 0;
 }
 
+static int sx127x_irqout_on(void){
+	writel(GPO1_PORT, __io_address(REG_PORTF_FER_CLR));
+        writel(GPO1_PORT, __io_address(REG_PORTF_DIR_SET));
+        writel(GPO1_PORT, __io_address(REG_PORTF_DATA_SET));
+
+        return 0;
+}
+
+static int sx127x_irqout_off(void){
+        writel(GPO1_PORT, __io_address(REG_PORTF_FER_CLR));
+        writel(GPO1_PORT, __io_address(REG_PORTF_DIR_SET));
+        writel(GPO1_PORT, __io_address(REG_PORTF_DATA_CLR));
+
+        return 0;
+}
+ 
 static long sx127x_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg){
 	struct sx127x *data = filp->private_data;
 	int ret;
@@ -998,11 +1017,17 @@ static long sx127x_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 			ret = 0;
 			break;
 		case SX127X_IOCTL_CMD_SETLORASYNCWORD:
-			ret = 0; //ret = sx127x_setlorasyncword(data, arg);
+			ret = sx127x_setlorasyncword(data, arg);
 			break;
 		case SX127X_IOCTL_CMD_GETLORASYNCWORD:
 			ret = 0;
 			break;
+                case SX127X_IOCTL_CMD_IRQOUTON:
+                        ret = sx127x_irqout_on();
+                        break;
+                case SX127X_IOCTL_CMD_IRQOUTOFF:
+                        ret = sx127x_irqout_off();
+                        break;
 		default:
 			ret = -EINVAL;
 			break;
@@ -1019,19 +1044,22 @@ static struct file_operations fops = {
 		.unlocked_ioctl = sx127x_dev_ioctl
 };
 
-static irqreturn_t sx127x_irq(int irq, void *dev_id)
+/*static irqreturn_t sx127x_irq(int irq, void *dev_id)
 {
 	struct sx127x *data = dev_id;
 	schedule_work(&data->irq_work);
-//	printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
-////	writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_CLR)); //disable IRQ
-//	writel(INTERRUPT_PORT, __io_address(REG_PINT0_REQ)); //re-trigger IRQ
-//	printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
 	return IRQ_HANDLED;
+}*/
+
+static irqreturn_t hard_isr(int irq, void *dev_id){
+	return IRQ_WAKE_THREAD;
 }
 
-static void sx127x_irq_work_handler(struct work_struct *work){
-	struct sx127x *data = container_of(work, struct sx127x, irq_work);
+//static void sx127x_irq_work_handler(struct work_struct *work){
+//	struct sx127x *data = container_of(work, struct sx127x, irq_work);
+static irqreturn_t sx127x_irq(int irq, void *dev_id)
+{
+        struct sx127x *data = dev_id;
 	u8 irqflags, buf[128], len, snr, rssi;
 	u32 fei;
 	struct sx127x_pkt pkt;
@@ -1083,6 +1111,7 @@ static void sx127x_irq_work_handler(struct work_struct *work){
 	}
 	sx127x_reg_write(data->spidevice, SX127X_REG_LORA_IRQFLAGS, 0xff);
 	mutex_unlock(&data->mutex);
+        return IRQ_HANDLED;
 }
 
 static int sx127x_probe(struct spi_device *spi){
@@ -1091,8 +1120,6 @@ static int sx127x_probe(struct spi_device *spi){
 	u8 version;
 	int irq;
 	unsigned minor;
-
-//	printk("\nInside sx127x.c: sx127x_probe()!\n\n");
 
     // allocate all of the crap we need
 	data = kmalloc(sizeof(*data), GFP_KERNEL);
@@ -1103,7 +1130,7 @@ static int sx127x_probe(struct spi_device *spi){
 	}
 
 	data->open = 0;
-	INIT_WORK(&data->irq_work, sx127x_irq_work_handler);
+//	INIT_WORK(&data->irq_work, sx127x_irq_work_handler);
 	INIT_LIST_HEAD(&data->device_entry);
 	init_waitqueue_head(&data->readwq);
 	init_waitqueue_head(&data->writewq);
@@ -1119,20 +1146,6 @@ static int sx127x_probe(struct spi_device *spi){
 		goto err_allocoutfifo;
 	}
 
-/*
-	// get the reset gpio and reset the chip
-	data->gpio_reset = devm_gpiod_get(&spi->dev, "reset", GPIOD_OUT_LOW);
-	if(IS_ERR(data->gpio_reset)){
-		dev_err(&spi->dev, "reset gpio is required");
-		ret = -ENOMEM;
-		goto err_resetgpio;
-	}
-
-	gpiod_set_value(data->gpio_reset, 1);
-	mdelay(100);
-	gpiod_set_value(data->gpio_reset, 0);
-	mdelay(100);
-*/
 	// get the rev from the chip and check it's what we expect
 	sx127x_reg_read(spi, SX127X_REG_VERSION, &version);
 	if(version != 0x12){
@@ -1155,24 +1168,12 @@ static int sx127x_probe(struct spi_device *spi){
 		data->gpio_rxen = NULL;
 	}
 
-	printk("\nREG_PORTB_MUX = 0x%08X\n\n", readl(__io_address(REG_PORTB_MUX)));
 	writel(INTERRUPT_PORT, __io_address(REG_PORTB_FER_CLR));
-	mdelay(100); // 100ms udelay(100); //100us
-	printk("\nREG_PORTB_FER = 0x%08X\n\n", readl(__io_address(REG_PORTB_FER)));
 	writel(INTERRUPT_PORT, __io_address(REG_PORTB_DIR_CLR));
-	mdelay(100); // 100ms udelay(100); //100us
-	printk("\nREG_PORTB_DIR = 0x%08X\n\n", readl(__io_address(REG_PORTB_DIR)));
 	writel(0x00000101 | readl(__io_address(REG_PINT0_ASSIGN)), __io_address(REG_PINT0_ASSIGN)); //default: 0x00000101
-	mdelay(100); // 100ms udelay(100); //100us
-	printk("\nREG_PINT0_ASSIGN = 0x%08X\n\n", readl(__io_address(REG_PINT0_ASSIGN)));
-	//writel(INTERRUPT_PORT | readl(__io_address(REG_PINT0_EDGE_SET)), __io_address(REG_PINT0_EDGE_SET));
-	//mdelay(100); // 100ms udelay(100); //100us
-	//printk("\nREG_PINT0_EDGE_SET = 0x%08X\n\n", readl(__io_address(REG_PINT0_EDGE_SET)));
-	// get the irq
-	//irq = irq_of_parse_and_map(spi->dev.of_node, 0);
 	irq = INTERRUPT_NUM;
-	printk("\ndevm_request_irq(&spi->dev, %d, ...) = %d\n\n", irq, devm_request_irq(&spi->dev, irq, sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
-	//printk("\ndevm_request_irq(&spi->dev, %d, ...) = %d\n\n", irq, devm_request_irq(&spi->dev, irq, sx127x_irq, 0, SX127X_DRIVERNAME, data));
+//	printk("\ndevm_request_irq(&spi->dev, %d, ...) = %d\n\n", irq, devm_request_irq(&spi->dev, irq, sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
+	printk("\nrequest_threaded_irq(%d, ...) = %d\n\n", irq, request_threaded_irq(irq, hard_isr, sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
 	if (!irq) {
 		dev_err(&spi->dev, "No irq in platform data\n");
 		ret = -EINVAL;
@@ -1209,14 +1210,10 @@ static int sx127x_probe(struct spi_device *spi){
 	writel(INTERRUPT_PORT, __io_address(REG_PINT0_MSK_SET)); //enable IRQ
 	return 0;
 
-	//err_sysfs:
-	//	device_destroy(devclass, data->devt);
 	err_createdevice:
 		mutex_unlock(&device_list_lock);
 	err_irq:
 	err_chipid:
-	//err_resetgpio:
-	//	kfifo_free(&data->out);
 	err_allocoutfifo:
 		kfree(data);
 	err_allocdevdata:
