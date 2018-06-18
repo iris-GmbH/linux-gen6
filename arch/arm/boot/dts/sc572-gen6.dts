@@ -147,11 +147,11 @@
 				};
 				partition@1 {					
 					label = "kernel 1. (spi)";		
-					reg = <0x200000 0x4F8000>;		/* 5MB */
+					reg = <0x200000 0x4F0000>;		/* 5MB */
 				};						/* kernel+devtree */		
 				partition@2 {					
 					label = "device tree 1. (spi)";
-					reg = <0x6F8000 0x8000>;              
+					reg = <0x6F0000 0x10000>;              
 				};
 				partition@3 {
 					label = "root file system 1. (spi)";
