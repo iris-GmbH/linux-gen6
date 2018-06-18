@@ -136,7 +136,7 @@ static struct cdev	*driver_object;
 static struct class	*gpio_class;
 static struct device	*gpio_dev;
 static int 		 rpi_irq_16;
-static char		*devname = "int_pin_to_irq16";
+static char		*devname = "SX127X";
 static wait_queue_head_t sleeping_for_ir;
 static int 		 interrupt_arrived;
 
@@ -165,8 +165,8 @@ static int config_gpio(int p_gpionr){
 	_rpi_irq = p_gpionr;
 	printk("gpio_to_irq returned %d\n",_rpi_irq);
 	_err = request_threaded_irq(_rpi_irq, hard_isr, rpi_gpio_isr,
-		IRQF_TRIGGER_RISING, //gpio 16 successfull configured ... | IRQF_TRIGGER_FALLING, genirq: Setting trigger mode 3 for irq 16 failed (0xc017744c)
-//    0,
+//		IRQF_TRIGGER_RISING, //gpio 16 successfull configured ... | IRQF_TRIGGER_FALLING, genirq: Setting trigger mode 3 for irq 16 failed (0xc017744c)
+    0, // IRQF_TRIGGER_NONE meaning: setting should be assumed to be "as already configured"
 //    IRQF_ONESHOT,
 //    IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
 //    IRQF_ONESHOT | IRQF_TRIGGER_RISING,
