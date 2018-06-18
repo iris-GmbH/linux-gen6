@@ -145,11 +145,15 @@
 					label = "uboot (spi)";
 					reg = <0x00000 0x200000>;               /* 2MB */
 				};
-				partition@1 {
-					label = "kernel 1. (spi)";
-					reg = <0x200000 0x500000>;              /* 5MB */
+				partition@1 {					
+					label = "kernel 1. (spi)";		
+					reg = <0x200000 0x4F8000>;		/* 5MB */
+				};						/* kernel+devtree */		
+				partition@2 {					
+					label = "device tree 1. (spi)";
+					reg = <0x6F8000 0x8000>;              
 				};
-				partition@2 {
+				partition@3 {
 					label = "root file system 1. (spi)";
 					reg = <0x700000 0x900000>;              /* 9MB */
 				};
