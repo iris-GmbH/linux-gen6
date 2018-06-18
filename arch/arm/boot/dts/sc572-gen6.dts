@@ -140,17 +140,22 @@
 				spi-tx-bus-width = <4>;
 				spi-rx-bus-width = <4>;
 				dma-mode;
+
 				partition@0 {
 					label = "uboot (spi)";
-					reg = <0x0 0x80000>;
+					reg = <0x00000 0x200000>;               /* 2MB */
 				};
-				partition@1 {
-					label = "kernel (spi)";
-					reg = <0x80000 0x580000>;
+				partition@1 {					
+					label = "kernel 1. (spi)";		
+					reg = <0x200000 0x4F0000>;		/* 5MB */
+				};						/* kernel+devtree */		
+				partition@2 {					
+					label = "device tree 1. (spi)";
+					reg = <0x6F0000 0x10000>;              
 				};
-				partition@2 {
-					label = "root file system (spi)";
-					reg = <0x600000 0xa00000>;
+				partition@3 {
+					label = "root file system 1. (spi)";
+					reg = <0x700000 0x900000>;              /* 9MB */
 				};
 			};
 		};
