@@ -68,7 +68,7 @@
 			pinctrl-1 = <&uart2_hwflow>;
 			interrupt-parent = <&gic>;
 			interrupts = <0 112 0>,
-			             <0 113 0>,
+			             <0 115 0>,
 			             <0 114 0>;
 		};
 */
@@ -116,6 +116,8 @@
 				/*spi-max-frequency = <10000000>;*/
 				spi-max-frequency = <5000000>;
 				reg = <42>;
+/*                interrupts = <0 51 0>;*/ /*PINT4(IRQ20)*/
+                interrupts = <0 47 0>; /*PINT0(IRQ16)*/
 			};
 		};
 
