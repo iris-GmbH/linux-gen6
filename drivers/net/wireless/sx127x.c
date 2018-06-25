@@ -1233,8 +1233,8 @@ static int sx127x_probe(struct spi_device *spi){
 // sc57x-gen6.dts line 106: interrupts = <0 51 0>;  -> linux kernel boot: adi-spi3 3102f000.spi: can not request spi error irq + adi-spi3: probe of 3102f000.spi failed with error -22
 //	printk("\ngpio_to_irq(GPIO_PF11=91(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PF11=%d, ...) = %d\n\n", gpio_to_irq(GPIO_PF11), devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PF11), sx127x_irq, 0, SX127X_DRIVERNAME, data));
 //	printk("\ngpio_to_irq(GPIO_PF11=91(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PF11=%d, ...) = %d\n\n", gpio_to_irq(GPIO_PF11), devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PF11), sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
-//	printk("\ngpio_to_irq(GPIO_PB3 =19(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PB3 =%d, ...) = %d\n\n", gpio_to_irq(GPIO_PB3),  devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PB3),  sx127x_irq, 0, SX127X_DRIVERNAME, data));
-	printk("\ngpio_to_irq(GPIO_PB3 =19(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PB3 =%d, ...) = %d\n\n", gpio_to_irq(GPIO_PB3),  devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PB3),  sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
+//	printk("\ngpio_to_irq(GPIO_PB5 =21(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PB5 =%d, ...) = %d\n\n", gpio_to_irq(GPIO_PB5),  devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PB5),  sx127x_irq, 0, SX127X_DRIVERNAME, data));
+	printk("\ngpio_to_irq(GPIO_PB5 =21(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PB5 =%d, ...) = %d\n\n", gpio_to_irq(GPIO_PB5),  devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PB5),  sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
 	if (!irq) {
 		dev_err(&spi->dev, "No irq in platform data\n");
 /*		ret = -EINVAL;
