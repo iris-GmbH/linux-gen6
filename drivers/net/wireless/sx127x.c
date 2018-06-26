@@ -681,6 +681,8 @@ static ssize_t sx127x_sf_show(struct device *dev, struct device_attribute *attr,
     return sprintf(buf, "%d\n", sf);
 }
 
+#define RxPayloadCrcOn 0x04
+
 static int sx127x_setsf(struct sx127x *data, unsigned sf){
 	u8 r;
 	dev_info(data->chardevice, "setting spreading factor to %u\n", sf);
@@ -689,7 +691,7 @@ static int sx127x_setsf(struct sx127x *data, unsigned sf){
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG2, &r);
 	r &= ~SX127X_REG_LORA_MODEMCONFIG2_SPREADINGFACTOR;
 	r |= sf << SX127X_REG_LORA_MODEMCONFIG2_SPREADINGFACTOR_SHIFT;
-	sx127x_reg_write(data->spidevice, SX127X_REG_LORA_MODEMCONFIG2, r);
+	sx127x_reg_write(data->spidevice, SX127X_REG_LORA_MODEMCONFIG2, r | RxPayloadCrcOn);
 
 	// set the detection optimization magic number depending on the spreading factor
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_DETECTOPTIMIZATION, &r);
@@ -945,14 +947,14 @@ static ssize_t sx127x_dev_write(struct file *filp, const char __user *buf, size_
 	struct sx127x *data = filp->private_data;
 	size_t packetsz, offset, maxpkt = 256;
 	u8 kbuf[256];
-	int i;
+/*	int i;*/
 	dev_info(&data->spidevice->dev, "char device write; %d\n", count);
 	sx127x_setopmode(data, SX127X_OPMODE_STANDBY, true); //put into Stand-by mode
-	sx127x_setlorasyncword(data, 0x34); //Static configuration registers can only be accessed in Sleep mode, Stand-by mode or FSTX mode.
+//	sx127x_setlorasyncword(data, 0x34); //Static configuration registers can only be accessed in Sleep mode, Stand-by mode or FSTX mode.
 	for(offset = 0; offset < count; offset += maxpkt){
 		packetsz = min((count - offset), maxpkt);
 		mutex_lock(&data->mutex);
-		printk("\ncount = %d\n\n", (u32)count);
+/*		printk("\ncount = %d\n\n", (u32)count);
                 printk("\npacketsz = %d\n\n", (u32)packetsz);
 		printk("\ncopy from user = %ld\n\n", copy_from_user(kbuf, buf + offset, packetsz));
 		for (i=0; i < packetsz; i++) {
@@ -962,7 +964,9 @@ static ssize_t sx127x_dev_write(struct file *filp, const char __user *buf, size_
 		data->transmitted = 0;
 		printk("\nREG_PINT0_PINSTATE = 0x%08X\n\n", readl(__io_address(REG_PINT0_PINSTATE)));
 		printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
-		printk("\nREG_PINT0_LATCH = 0x%08X\n\n", readl(__io_address(REG_PINT0_LATCH)));
+		printk("\nREG_PINT0_LATCH = 0x%08X\n\n", readl(__io_address(REG_PINT0_LATCH)));*/
+		sx127x_fifo_writepkt(data->spidevice, kbuf, packetsz);
+		data->transmitted = 0;
 		sx127x_setopmode(data, SX127X_OPMODE_TX, false); //Data transmission is initiated by sending TX mode request.
 		//sx127x_setopmode(data, SX127X_OPMODE_TX, true); //Data transmission is initiated by sending TX mode request.
 		mutex_unlock(&data->mutex);
