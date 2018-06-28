@@ -388,13 +388,17 @@ static int sx127x_fifo_writepkt(struct spi_device *spi, void *buffer, u8 len){
 	u8 addr = SX127X_WRITEADDR(SX127X_REGADDR(SX127X_REG_FIFO));
 	struct spi_transfer fifotransfers[2];
 	int ret;
-
+	int i;
 	memset(fifotransfers, 0, sizeof(fifotransfers));
 
 	fifotransfers[0].tx_buf = &addr;
 	fifotransfers[0].len = 1;
 	fifotransfers[1].tx_buf = buffer;
 	fifotransfers[1].len = len;
+	for(i=0;i<len;i++) {
+//		printk("write: @%02X %02X\n", addr, *(u8 *)buffer++);
+		dev_info(&spi->dev, "write: @%02x %02x\n", addr, *(u8 *)buffer++);
+	}
 
 	ret = sx127x_reg_write(spi, SX127X_REG_LORA_FIFOTXBASEADDR, 0);
 	ret = sx127x_reg_write(spi, SX127X_REG_LORA_FIFOADDRPTR, 0);
@@ -1003,6 +1007,7 @@ static long sx127x_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 	struct sx127x *data = filp->private_data;
 	int ret;
 	enum sx127x_ioctl_cmd ioctlcmd = cmd;
+	u8 config1;
 //	printk("\nInside sx127x.c: sx127x_dev_ioctl()!\n\n");
 	mutex_lock(&data->mutex);
 	switch(ioctlcmd){
@@ -1042,6 +1047,9 @@ static long sx127x_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 		case SX127X_IOCTL_CMD_GETLORASYNCWORD:
 			ret = 0;
 			break;
+		case SX127X_IOCTL_CMD_GETIMPLICITHEADMODE:
+			sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG1, &config1);
+			ret = 0;
                 case SX127X_IOCTL_CMD_IRQOUTON:
                         ret = sx127x_irqout_on();
                         break;
