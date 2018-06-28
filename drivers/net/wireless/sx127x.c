@@ -710,7 +710,7 @@ static int sx127x_setsf(struct sx127x *data, unsigned sf){
 
 	// set the low data rate bit
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG3, &r);
-	r |= SX127X_REG_LORA_MODEMCONFIG3_LOWDATARATEOPTIMIZE;
+//	r |= SX127X_REG_LORA_MODEMCONFIG3_LOWDATARATEOPTIMIZE;
 	sx127x_reg_write(data->spidevice, SX127X_REG_LORA_MODEMCONFIG3, r);
 	return 0;
 }
