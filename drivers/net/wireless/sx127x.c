@@ -1145,10 +1145,13 @@ static int sx127x_probe(struct spi_device *spi){
 	int ret = 0;
 	struct sx127x *data;
 	u8 version;
-	int irq;
+	int irq_err;
 	int id;
 	unsigned minor;
-	struct device_node *np;
+    struct device_node *np;
+    const u32 *property;
+    int len;
+
 
     // allocate all of the crap we need
 	data = kmalloc(sizeof(*data), GFP_KERNEL);
@@ -1198,59 +1201,24 @@ static int sx127x_probe(struct spi_device *spi){
 	}
 
 	// get the irq
-//	writel(INTERRUPT_PORT, __io_address(REG_PORT_FER_CLR));
-//	writel(INTERRUPT_PORT, __io_address(REG_PORT_DIR_CLR));
-//	writel(0x00000101 | readl(__io_address(REG_PINT_ASSIGN)), __io_address(REG_PINT_ASSIGN)); //default: 0x00000101
-//	irq = INTERRUPT_NUM;
-////	printk("\ndevm_request_irq(&spi->dev, %d, ...) = %d\n\n", irq, devm_request_irq(&spi->dev, irq, sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
-//	printk("\nrequest_threaded_irq(%d, ...) = %d\n\n", irq, request_threaded_irq(irq, hard_isr, sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
-/*        np = of_find_node_by_name(NULL, "spi_1"); //https://elinux.org/Device_Tree_Mysteries np = of_find_node_by_name(NULL, "node_xxx");
-        printk("\ndevice_node(spi_1) = %p\n\n", np);
-	id = of_alias_get_id(np, "spi_1");
-	if (id < 0)
-		printk("Can't spi_1 id\n");
-	else
-		printk("id(spi_1) = %d\nspi_1->child->name = %s\n", id, np->child->name);*/
-        np = of_find_node_by_name(NULL, "spi"); //https://elinux.org/Device_Tree_Mysteries np = of_find_node_by_name(NULL, "node_xxx");
-        printk("\ndevice_node(spi) = %p\n\n", np);
-        id = of_alias_get_id(np, "spi");
-        if (id < 0)   
-                printk("Can't spi id\n");
-        else
-                printk("id(spi) = %d\n \
-			spi->child->name = %s\n \
-			spi->child->1stproperty->name = %s\n \
-			spi->child->2ndproperty->name = %s\n \
-                        spi->child->3rdproperty->name = %s\n \
-                        spi->child->4thproperty->name = %s\n \
-                        spi->child->5thproperty->name = %s\n \
-                        spi->child->nextproperty->name = %s\n" \
-			, id, np->child->name \
-			, np->child->properties->name \
-			, np->child->properties->next->name \
-                        , np->child->properties->next->next->name \
-                        , np->child->properties->next->next->next->name \
-                        , np->child->properties->next->next->next->next->name \
-                        , np->child->properties->next->next->next->next->next->name \
-		);
-	printk("\nspi->dev.of_node = %p\n\n", spi->dev.of_node);
-	printk("\nspi->dev.of_node->name = %s\n\n", spi->dev.of_node->name);
-        printk("\nspi->dev.of_node->parent->name = %s\n\n", spi->dev.of_node->parent->name);
-	irq = irq_of_parse_and_map(spi->dev.of_node->parent, 0);  // -> linux kernel boot: devm_request_irq(0, ...) = -22
-	printk("\ndevm_request_irq(parent_irq=%d, ...) = %d\n\n", irq, devm_request_irq(&spi->dev, irq, sx127x_irq, 0, SX127X_DRIVERNAME, data));
-	irq = irq_of_parse_and_map(spi->dev.of_node, 0);  // -> linux kernel boot: devm_request_irq(0, ...) = -22
-        printk("\ndevm_request_irq(irq=%d, ...) = %d\n\n", irq, devm_request_irq(&spi->dev, irq, sx127x_irq, 0, SX127X_DRIVERNAME, data));
-//	irq = irq_of_parse_and_map(spi->dev.of_node->parent, 0);
-// sc57x-gen6.dts line 106: interrupts = <0 105 0>; -> linux kernel boot: adi-spi3 3102f000.spi: registered ADI SPI controller spi1 ... BUT LATER ... genirq: Flags mismatch irq 25. 00000000 (sx127x) vs. 00000000 (SPI ERROR) + devm_request_irq(25, ...) = -16
-// sc57x-gen6.dts line 106: interrupts = <0 51 0>;  -> linux kernel boot: adi-spi3 3102f000.spi: can not request spi error irq + adi-spi3: probe of 3102f000.spi failed with error -22
-//	printk("\ngpio_to_irq(GPIO_PF11=91(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PF11=%d, ...) = %d\n\n", gpio_to_irq(GPIO_PF11), devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PF11), sx127x_irq, 0, SX127X_DRIVERNAME, data));
-//	printk("\ngpio_to_irq(GPIO_PF11=91(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PF11=%d, ...) = %d\n\n", gpio_to_irq(GPIO_PF11), devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PF11), sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
-//	printk("\ngpio_to_irq(GPIO_PB5 =21(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PB5 =%d, ...) = %d\n\n", gpio_to_irq(GPIO_PB5),  devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PB5),  sx127x_irq, 0, SX127X_DRIVERNAME, data));
-	printk("\ngpio_to_irq(GPIO_PB5 =21(from gpio-sc57x.h))\ndevm_request_irq(GPIO_PB5 =%d, ...) = %d\n\n", gpio_to_irq(GPIO_PB5),  devm_request_irq(&spi->dev, gpio_to_irq(GPIO_PB5),  sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
-	if (!irq) {
+    np = of_find_node_by_name(NULL, "spi"); //https://elinux.org/Device_Tree_Mysteries np = of_find_node_by_name(NULL, "node_xxx");
+    printk("\ndevice_node(spi) = %p\n\n", np);
+    id = of_alias_get_id(np, "spi");
+    if (id < 0)   
+            printk("Can't spi id\n");
+
+    property = of_get_property(np->child, "irq-gpio", &len);
+
+    printk(KERN_INFO "(I) len=%d\n", len);
+    printk(KERN_INFO "(I) reg[0]=0x%08lX\n", (unsigned long) property[0]);
+    printk(KERN_INFO "(I) reg[1]=0x%08lX\n", (unsigned long) property[1]);
+    printk(KERN_INFO "(I) reg[2]=0x%08lX\n", (unsigned long) property[2]);
+
+    printk("\ngpio_to_irq(GPIO_PB5 =21(from gpio-sc57x.h))\ndevm_request_irq(... , gpio_to_irq(property[1]>>24) =%d, ...) = %d\n\n", gpio_to_irq(property[1]>>24),  irq_err=devm_request_irq(&spi->dev, gpio_to_irq(property[1]>>24),  sx127x_irq, IRQF_TRIGGER_RISING, SX127X_DRIVERNAME, data));
+	if (irq_err) {
 		dev_err(&spi->dev, "No irq in platform data\n");
-/*		ret = -EINVAL;
-		goto err_irq;*/
+		ret = -EINVAL;
+		goto err_irq;
 	}
 
 	// create the frontend device and stash it in the spi device
@@ -1285,7 +1253,7 @@ static int sx127x_probe(struct spi_device *spi){
 
 	err_createdevice:
 		mutex_unlock(&device_list_lock);
-//	err_irq:
+	err_irq:
 	err_chipid:
 	err_allocoutfifo:
 		kfree(data);

@@ -116,8 +116,7 @@
 				/*spi-max-frequency = <10000000>;*/
 				spi-max-frequency = <5000000>;
 				reg = <42>;
-/*                interrupts = <0 51 0>;*/ /*PINT4(IRQ20)*/
-                interrupts = <0 47 0>; /*PINT0(IRQ16)*/
+                irq-gpio = <0 21 0>; /*PINT0(IRQ16) = GPIO_PB5=21(gpio-sc57x.h)*/
 			};
 		};
 
