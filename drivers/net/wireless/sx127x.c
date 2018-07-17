@@ -1180,7 +1180,7 @@ static int sx127x_probe(struct spi_device *spi){
 
 	// get the rev from the chip and check it's what we expect
 	sx127x_reg_read(spi, SX127X_REG_VERSION, &version);
-	if(version != 0x12){
+	if( (version != 0x12) && (version != 0x22) ){
 		dev_err(&spi->dev, "unknown chip version %x\n", version);
 		ret = -EINVAL;
 		goto err_chipid;
