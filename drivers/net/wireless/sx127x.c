@@ -273,6 +273,8 @@ static const char* opmodestr[] = {"sleep", "standby", "fstx", "tx", "fsrx", "rx"
 static unsigned bwmap[] = { 7800, 10400, 15600, 20800, 31250, 41700, 62500, 125000, 250000, 500000 };
 static const char* paoutput[] = {"rfo", "pa_boost"};
 
+static u8 version;
+
 struct sx127x {
 	struct device *chardevice;
 	struct work_struct irq_work;
@@ -688,14 +690,22 @@ static ssize_t sx127x_sf_show(struct device *dev, struct device_attribute *attr,
 #define RxPayloadCrcOn 0x04
 
 static int sx127x_setsf(struct sx127x *data, unsigned sf){
-	u8 r;
+	u8 r, r1;
 	dev_info(data->chardevice, "setting spreading factor to %u\n", sf);
 
-	// set the spreading factor
-	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG2, &r);
-	r &= ~SX127X_REG_LORA_MODEMCONFIG2_SPREADINGFACTOR;
-	r |= sf << SX127X_REG_LORA_MODEMCONFIG2_SPREADINGFACTOR_SHIFT;
-	sx127x_reg_write(data->spidevice, SX127X_REG_LORA_MODEMCONFIG2, r | RxPayloadCrcOn);
+    // set the spreading factor
+    sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG2, &r);
+    r &= ~SX127X_REG_LORA_MODEMCONFIG2_SPREADINGFACTOR;
+    r |= sf << SX127X_REG_LORA_MODEMCONFIG2_SPREADINGFACTOR_SHIFT;
+    sx127x_reg_write(data->spidevice, SX127X_REG_LORA_MODEMCONFIG2, r);
+    // RxPayloadCrcOn only
+    if(version == 0x22) { // SX1272
+        sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG1, &r1);
+        sx127x_reg_write(data->spidevice, SX127X_REG_LORA_MODEMCONFIG1, r1 | (RxPayloadCrcOn >> 1));
+    }
+    else { // SX1276 and derivates
+        sx127x_reg_write(data->spidevice, SX127X_REG_LORA_MODEMCONFIG2, r | RxPayloadCrcOn);
+    }
 
 	// set the detection optimization magic number depending on the spreading factor
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_DETECTOPTIMIZATION, &r);
@@ -1144,7 +1154,6 @@ static void sx127x_irq_work_handler(struct work_struct *work){
 static int sx127x_probe(struct spi_device *spi){
 	int ret = 0;
 	struct sx127x *data;
-	u8 version;
 	int irq_err;
 	int id;
 	unsigned minor;
