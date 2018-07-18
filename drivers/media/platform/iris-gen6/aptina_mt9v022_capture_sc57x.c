@@ -886,15 +886,15 @@ static int aptina_mt9v022_s_fmt_vid_cap(struct file *file, void *priv,
 							DMA2D |
 							DMATOVEN |
 							WNR |
-							WDSIZE_32 |
+							WDSIZE_256 |
 							PSIZE_32 |
 							NDSIZE_2 |
 							DMAFLOW_LIST |
 							DMAEN;
-	aptina_mt9v022_dev->dma_cfg_template.x_count  = aptina_mt9v022_dev->fmt.width / 2;
+	aptina_mt9v022_dev->dma_cfg_template.x_count  = aptina_mt9v022_dev->fmt.width / 16;
 	aptina_mt9v022_dev->dma_cfg_template.y_count  = aptina_mt9v022_dev->fmt.height;
-	aptina_mt9v022_dev->dma_cfg_template.x_modify =	aptina_mt9v022_dev->pixel_depth_bytes * 2;
-	aptina_mt9v022_dev->dma_cfg_template.y_modify =	aptina_mt9v022_dev->pixel_depth_bytes * 2;
+	aptina_mt9v022_dev->dma_cfg_template.x_modify =	aptina_mt9v022_dev->pixel_depth_bytes * 16;
+	aptina_mt9v022_dev->dma_cfg_template.y_modify =	aptina_mt9v022_dev->pixel_depth_bytes * 16;
 
 	if (aptina_mt9v022_dev->dma_pool) {
 		dma_pool_destroy(aptina_mt9v022_dev->dma_pool);
