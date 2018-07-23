@@ -152,6 +152,10 @@ struct aptina_mt9v022_device {
 	spinlock_t lock;
 	/* used to access capture device */
 	struct mutex mutex;
+	/* buffer that is currently filled by DMA and will finish next */
+	struct imager_buffer * nextBufferToFinish;
+	/* buffers that form a loop that keeps the DMA from overwriting buffers after dequeing them */
+	struct imager_buffer * loop_buffer_a, * loop_buffer_b, * loop_buffer_c;
 };
 
 static const struct imager_format aptina_mt9v022_formats[] = {
