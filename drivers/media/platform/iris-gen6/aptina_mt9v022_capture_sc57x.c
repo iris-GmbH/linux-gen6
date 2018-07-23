@@ -549,7 +549,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 	struct ppi_if *ppi = dev_id;
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = ppi->priv;
 	int dmaStatus;
-	dma_addr_t lastDmaDescriptor;
+	dma_addr_t lastDmaDescriptor, currDmaDescriptor;
 	struct list_head* iterator;
 
 	spin_lock(&aptina_mt9v022_dev->lock);
@@ -563,29 +563,42 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 				== aptina_mt9v022_dev->dma_queue.next->next) {
 		} else {
 			/* publish all buffers that are done */
-			int completedCnt = 0;
+			int completedCnt = 0, countAsCompleted = 1, dma_queue_length = 0;
 			lastDmaDescriptor = (dma_addr_t) get_dma_prev_desc_ptr(aptina_mt9v022_dev->dma_channel);
-			lastDmaDescriptor &= ~1; // the lowest bit masks when a decriptor fetch was invalid
+			lastDmaDescriptor &= ~0x0F;
+			currDmaDescriptor = (dma_addr_t) get_dma_curr_desc_ptr(aptina_mt9v022_dev->dma_channel);
+			currDmaDescriptor &= ~0x0F;
+			// count the buffers that might be completed and remember the buffer of the next DMA operation
 			list_for_each(iterator, &aptina_mt9v022_dev->dma_queue)
 			{
 				struct imager_buffer *buf = list_entry(iterator, struct imager_buffer, list);
+				dma_queue_length++;
+				completedCnt += countAsCompleted;
 				if (buf->desc_dma_addr == lastDmaDescriptor) {
-					++completedCnt;
-					break;
+					countAsCompleted = 0;
+				}
+				if (buf->desc_dma_addr == currDmaDescriptor) {
+					aptina_mt9v022_dev->nextBufferToFinish = buf;
 				}
 			}
-			if (0 == completedCnt) {
-
-			} else {
-				struct imager_buffer* buf;
+			// keep at least three buffers here
+			completedCnt = (dma_queue_length - completedCnt < 3) ? dma_queue_length - 3 : completedCnt;
+			dma_queue_length -= 1;
+			if (completedCnt > 0) {
 				struct vb2_buffer *vb;
-				while (completedCnt--) {
-					if (&aptina_mt9v022_dev->dma_queue
-							== aptina_mt9v022_dev->dma_queue.next->next) {
+				list_for_each(iterator, &aptina_mt9v022_dev->dma_queue)
+				{
+					struct imager_buffer * buf;
+					if (!(dma_queue_length-- && completedCnt)) {
 						break;
 					}
-					buf = list_entry(aptina_mt9v022_dev->dma_queue.next,
-							struct imager_buffer, list);
+					buf = list_entry(iterator, struct imager_buffer, list);
+					// skip buffer if it is part of the loop
+					if (buf == aptina_mt9v022_dev->loop_buffer_a
+						|| buf == aptina_mt9v022_dev->loop_buffer_b
+						|| buf == aptina_mt9v022_dev->loop_buffer_c) {
+						continue;
+					}
 					vb = &buf->vb.vb2_buf;
 					vb->timestamp = ktime_get_ns(); // this has been changed from type struct timeval to -> u64 type
 					if (ppi->err) {
@@ -594,6 +607,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 						vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 					}
 					list_del_init(&buf->list);
+					completedCnt--;
 				}
 			}
 		}
