@@ -87,7 +87,7 @@ static struct epc660 *to_epc660(const struct i2c_client *client)
 	return container_of(i2c_get_clientdata(client), struct epc660, subdev);
 }
 
-static u8 reg_read_byte(struct i2c_client *client, const u8 reg)
+static int reg_read_byte(struct i2c_client *client, const u8 reg)
 {
 	return i2c_smbus_read_byte_data(client, reg);
 }
