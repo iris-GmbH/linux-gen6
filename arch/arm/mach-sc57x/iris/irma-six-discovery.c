@@ -25,10 +25,9 @@ static int __init irma_six_disco_init(void)
 
 	// RESET
 	writel(0x00000010, __io_address(REG_PORTB_DATA_CLR));
-	udelay(50);
+	usleep_range(50,70);
 	writel(0x00000010, __io_address(REG_PORTB_DATA_SET));
-
-	mdelay(500);
+	msleep(10);
 #endif
 	return 0;
 }
