@@ -36,4 +36,11 @@ config IRIS_IRMA_SIX_TMU
 	help
 	  Driver that provides the processor temperature on sc57x platform (via tmu).
 
+config IRIS_IRMA_SIX_HWREVISION
+	bool "HW-Revision Pins"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Driver that provides the HW-Revision Pins (DAI Pin0..Pin4).
+
 endmenu
