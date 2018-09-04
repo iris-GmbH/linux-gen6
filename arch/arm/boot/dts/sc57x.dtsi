@@ -261,7 +261,7 @@
 			interrupt-parent = <&gic>;
 			interrupts = <0 135 0>;
 			interrupt-names = "macirq";
-			snps,reset-gpio = <&gpa 5 0>;
+			/* snps,reset-gpio = <&gpa 5 0>; not supported */
 			snps,reset-active-low;
 			snps,reset-delays-us = <0 10000 10000>;
 			snps,fixed-burst;
