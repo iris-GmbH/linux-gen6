@@ -143,31 +143,35 @@
 
 				partition@0 {
 					label = "uboot (spi)";
-					reg = <0x00000 0x200000>;               /* 2MB */
+					reg = <0x00000 0x180000>; /* 1.5MB */
 				};
-				partition@1 {					
-					label = "kernel 1. (spi)";		
-					reg = <0x200000 0x4F0000>;		/* 5MB */
-				};						/* kernel+devtree */		
-				partition@2 {					
+				partition@1 {
+					label = "config";
+					reg = <0x180000 0x080000>; /* 0.5MB minimal mtd-size*/
+				};
+				partition@2 {
+					label = "kernel 1. (spi)";
+					reg = <0x200000 0x4F0000>; /* 5MB (kernel+devtree) */
+				};
+				partition@3 {					
 					label = "device tree 1. (spi)";
 					reg = <0x6F0000 0x10000>;              
 				};
-				partition@3 {
-					label = "root file system 1. (spi)";
-					reg = <0x700000 0xA00000>;              /* 10MB */
-				};
 				partition@4 {
+					label = "root file system 1. (spi)";
+					reg = <0x700000 0xA00000>; /* 10MB */
+				};
+				partition@5 {
 					label = "kernel 2. (spi)";
-					reg = <0x1100000 0x4F0000>;      	/* 5MB */       
-				};						/* kernel+devtree */
-				partition@5 {					
+					reg = <0x1100000 0x4F0000>; /* 5MB (kernel+devtree) */
+				};
+				partition@6 {					
 					label = "device tree 2. (spi)";
 					reg = <0x15F0000 0x10000>;
-				};	
-				partition@6 {
+				};
+				partition@7 {
 					label = "root file system 2. (spi)";
-					reg = <0x1600000 0xA00000>;              /* 10MB */
+					reg = <0x1600000 0xA00000>; /* 10MB */
 				};
 			};
 		};
