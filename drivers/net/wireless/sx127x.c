@@ -307,8 +307,6 @@ static int sx127x_reg_read(struct spi_device *spi, u16 reg, u8* result){
 	int ret = spi_write_then_read(spi,
 			&addr, 1,
 			result, 1);
-//	printk("\nInside sx127x.c: sx127x_reg_read()!\n\n");
-	dev_info(&spi->dev, "read: @%02x %02x\n", addr, *result);
 	return ret;
 }
 
@@ -327,22 +325,17 @@ static int sx127x_reg_read24(struct spi_device *spi, u16 reg, u32* result){
 			&addr, 1,
 			buf, 3);
 	*result = (buf[0] << 16) | (buf[1] << 8) | buf[0];
-	dev_info(&spi->dev, "read: @%02x %06x\n", addr, *result);
+//	dev_info(&spi->dev, "read: @%02x %06x\n", addr, *result);
 	return ret;
 }
 
 static int sx127x_reg_write(struct spi_device *spi, u16 reg, u8 value){
-	u8 addr = SX127X_REGADDR(reg), buff[2];//, readback;
+	u8 addr = SX127X_REGADDR(reg), buff[2];
 	int ret;
-//	printk("\nInside sx127x.c: sx127x_reg_write()!\n\n");
 	buff[0] = SX127X_WRITEADDR(addr);
 	buff[1] = value;
-	dev_info(&spi->dev, "write: @%02x %02x\n", addr, value);
+//	dev_info(&spi->dev, "write: @%02x %02x\n", addr, value);
 	ret = spi_write(spi, buff, 2);
-//	ret = sx127x_reg_read(spi, reg, &readback);
-//	if(readback != value){
-//		dev_warn(&spi->dev, "read back does not match\n");
-//	}
 	return ret;
 }
 
@@ -361,7 +354,8 @@ static int sx127x_reg_write24(struct spi_device *spi, u16 reg, u32 value){
 static int sx127x_fifo_readpkt(struct spi_device *spi, void *buffer, u8 *len){
 	u8 addr = SX127X_REG_FIFO, pktstart, rxbytes, off, fifoaddr;
 	size_t maxtransfer = spi_max_transfer_size(spi);
-	int ret;
+	int ret, i;
+    unsigned char *buf;
 	unsigned readlen;
 	ret = sx127x_reg_read(spi, SX127X_REG_LORA_RXCURRENTADDR, &pktstart);
 	ret = sx127x_reg_read(spi, SX127X_REG_LORA_RXNBBYTES, &rxbytes);
@@ -376,6 +370,14 @@ static int sx127x_fifo_readpkt(struct spi_device *spi, void *buffer, u8 *len){
 		ret = spi_write_then_read(spi,
 				&addr, 1,
 				buffer + off, readlen);
+        buf = (unsigned char*)(buffer+off);
+        for(i=0;i<readlen;i++) {
+            dev_info(&spi->dev, "read: @%02x %02x %c\n", fifoaddr+off+i, buf[i], buf[i]);
+        }
+        for(i=0;i<readlen;i++) {
+            printk("%c", buf[i]);
+        }
+        printk("\n");
 		if(ret){
 			break;
 		}
@@ -390,22 +392,21 @@ static int sx127x_fifo_writepkt(struct spi_device *spi, void *buffer, u8 len){
 	u8 addr = SX127X_WRITEADDR(SX127X_REGADDR(SX127X_REG_FIFO));
 	struct spi_transfer fifotransfers[2];
 	int ret;
-	int i;
+//	int i;
 	memset(fifotransfers, 0, sizeof(fifotransfers));
 
 	fifotransfers[0].tx_buf = &addr;
 	fifotransfers[0].len = 1;
 	fifotransfers[1].tx_buf = buffer;
 	fifotransfers[1].len = len;
-	for(i=0;i<len;i++) {
-//		printk("write: @%02X %02X\n", addr, *(u8 *)buffer++);
+/*	for(i=0;i<len;i++) {
 		dev_info(&spi->dev, "write: @%02x %02x\n", addr, *(u8 *)buffer++);
-	}
+	}*/
 
 	ret = sx127x_reg_write(spi, SX127X_REG_LORA_FIFOTXBASEADDR, 0);
 	ret = sx127x_reg_write(spi, SX127X_REG_LORA_FIFOADDRPTR, 0);
 
-	dev_info(&spi->dev, "fifo write: %d\n", len);
+//	dev_info(&spi->dev, "fifo write: %d\n", len);
 	spi_sync_transfer(spi, fifotransfers, ARRAY_SIZE(fifotransfers));
 
 	ret = sx127x_reg_write(spi, SX127X_REG_LORA_PAYLOADLENGTH, len);
@@ -558,7 +559,7 @@ static int sx127x_setopmode(struct sx127x *data, enum sx127x_opmode mode, bool r
 		if(retain){
 					data->opmode = mode;
 		}
-		dev_warn(data->chardevice, "setting opmode to %s\n", opmodestr[mode]);
+//		dev_warn(data->chardevice, "setting opmode to %s\n", opmodestr[mode]);
 		sx127x_reg_read(data->spidevice, SX127X_REG_DIOMAPPING1, &diomapping1);
 		diomapping1 &= ~SX127X_REG_DIOMAPPING1_DIO0;
 		switch(mode){
@@ -577,7 +578,7 @@ static int sx127x_setopmode(struct sx127x *data, enum sx127x_opmode mode, bool r
 			sx127x_toggletxrxen(data, false);
 			break;
 		default:
-			dev_warn(data->chardevice, "disabling rx and tx\n");
+//			dev_warn(data->chardevice, "disabling rx and tx\n");
 			gpiod_set_value(data->gpio_rxen, 0);
 			gpiod_set_value(data->gpio_txen, 0);
 			break;
@@ -831,7 +832,6 @@ static ssize_t sx127x_paoutput_show(struct device *dev, struct device_attribute 
 }
 
 static int sx127x_setpaoutput(struct sx127x *data, enum sx127x_pa pa){
-	//int ret = 0;
 	u8 paconfig;
 	sx127x_reg_read(data->spidevice, SX127X_REG_PACONFIG, &paconfig);
 	switch(pa){
@@ -961,31 +961,22 @@ static ssize_t sx127x_dev_write(struct file *filp, const char __user *buf, size_
 	struct sx127x *data = filp->private_data;
 	size_t packetsz, offset, maxpkt = 256;
 	u8 kbuf[256];
-/*	int i;*/
-	dev_info(&data->spidevice->dev, "char device write; %d\n", count);
+    unsigned long numofbytes_notbeingcopied = 0;
+//	dev_info(&data->spidevice->dev, "char device write; %d\n", count);
 	sx127x_setopmode(data, SX127X_OPMODE_STANDBY, true); //put into Stand-by mode
-//	sx127x_setlorasyncword(data, 0x34); //Static configuration registers can only be accessed in Sleep mode, Stand-by mode or FSTX mode.
 	for(offset = 0; offset < count; offset += maxpkt){
 		packetsz = min((count - offset), maxpkt);
 		mutex_lock(&data->mutex);
-/*		printk("\ncount = %d\n\n", (u32)count);
-                printk("\npacketsz = %d\n\n", (u32)packetsz);
-		printk("\ncopy from user = %ld\n\n", copy_from_user(kbuf, buf + offset, packetsz));
-		for (i=0; i < packetsz; i++) {
-			printk("%c", kbuf[i]);
-		}
-		printk("\nfifo write pkt = %d\n\n", sx127x_fifo_writepkt(data->spidevice, kbuf, packetsz));
-		data->transmitted = 0;
-		printk("\nREG_PINT0_PINSTATE = 0x%08X\n\n", readl(__io_address(REG_PINT0_PINSTATE)));
-		printk("\nREG_PINT0_REQ = 0x%08X\n\n", readl(__io_address(REG_PINT0_REQ)));
-		printk("\nREG_PINT0_LATCH = 0x%08X\n\n", readl(__io_address(REG_PINT0_LATCH)));*/
+        numofbytes_notbeingcopied += copy_from_user(kbuf, buf + offset, packetsz);
 		sx127x_fifo_writepkt(data->spidevice, kbuf, packetsz);
 		data->transmitted = 0;
 		sx127x_setopmode(data, SX127X_OPMODE_TX, false); //Data transmission is initiated by sending TX mode request.
-		//sx127x_setopmode(data, SX127X_OPMODE_TX, true); //Data transmission is initiated by sending TX mode request.
 		mutex_unlock(&data->mutex);
 		wait_event_interruptible_timeout(data->writewq, data->transmitted, 60 * HZ); //Upon completion the TxDone interrupt is issued and the radio returns to Stand-by mode.
 	}
+    if (numofbytes_notbeingcopied > 0) {
+        printk("\nnumofbytes_notbeingcopied = %d\n\n", (u32)numofbytes_notbeingcopied);
+    }
 	return count;
 }
 
@@ -1000,17 +991,17 @@ static int sx127x_dev_release(struct inode *inode, struct file *filp){
 }
 
 static int sx127x_irqout_on(void){
-        writel(GPO1_PORT, __io_address(REG_PORTF_DATA_SET));
-        writel(GPO3_PORT, __io_address(REG_PORTB_DATA_SET));
+    writel(GPO1_PORT, __io_address(REG_PORTF_DATA_SET));
+    writel(GPO3_PORT, __io_address(REG_PORTB_DATA_SET));
 
-        return 0;
+    return 0;
 }
 
 static int sx127x_irqout_off(void){
-        writel(GPO1_PORT, __io_address(REG_PORTF_DATA_CLR));
-        writel(GPO3_PORT, __io_address(REG_PORTB_DATA_CLR));
+    writel(GPO1_PORT, __io_address(REG_PORTF_DATA_CLR));
+    writel(GPO3_PORT, __io_address(REG_PORTB_DATA_CLR));
 
-        return 0;
+    return 0;
 }
  
 static long sx127x_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg){
@@ -1018,7 +1009,7 @@ static long sx127x_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 	int ret;
 	enum sx127x_ioctl_cmd ioctlcmd = cmd;
 	u8 config1;
-//	printk("\nInside sx127x.c: sx127x_dev_ioctl()!\n\n");
+	u8 result;
 	mutex_lock(&data->mutex);
 	switch(ioctlcmd){
 		case SX127X_IOCTL_CMD_SETMODULATION:
@@ -1060,12 +1051,19 @@ static long sx127x_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 		case SX127X_IOCTL_CMD_GETIMPLICITHEADMODE:
 			sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG1, &config1);
 			ret = 0;
-                case SX127X_IOCTL_CMD_IRQOUTON:
-                        ret = sx127x_irqout_on();
-                        break;
-                case SX127X_IOCTL_CMD_IRQOUTOFF:
-                        ret = sx127x_irqout_off();
-                        break;
+        case SX127X_IOCTL_CMD_IRQOUTON:
+            ret = sx127x_irqout_on();
+            break;
+        case SX127X_IOCTL_CMD_IRQOUTOFF:
+            ret = sx127x_irqout_off();
+            break;
+		case SX127X_IOCTL_CMD_WRITEREGISTER:
+			ret = sx127x_reg_write(data->spidevice, SX127X_LORAREG((u8)arg), (u8)(arg >> 16));
+			break;
+		case SX127X_IOCTL_CMD_READREGISTER:
+            sx127x_reg_read(data->spidevice, SX127X_LORAREG((u8)arg), &result);
+			ret = result;
+			break;
 		default:
 			ret = -EINVAL;
 			break;
@@ -1089,18 +1087,12 @@ static irqreturn_t sx127x_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-/*static irqreturn_t hard_isr(int irq, void *dev_id){
-	return IRQ_WAKE_THREAD;
-}*/
-
 static void sx127x_irq_work_handler(struct work_struct *work){
 	struct sx127x *data = container_of(work, struct sx127x, irq_work);
-//static irqreturn_t sx127x_irq(int irq, void *dev_id) {
-//        struct sx127x *data = dev_id;
 	u8 irqflags, buf[128], len, snr, rssi;
 	u32 fei;
 	struct sx127x_pkt pkt;
-	dev_warn(&data->spidevice->dev, "IN TASKLET sx127x_irq_work_handler()\n");
+//	dev_info(&data->spidevice->dev, "IN TASKLET sx127x_irq_work_handler()\n");
 	mutex_lock(&data->mutex);
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_IRQFLAGS, &irqflags);
 	if(irqflags & SX127X_REG_LORA_IRQFLAGS_RXDONE){
@@ -1126,7 +1118,7 @@ static void sx127x_irq_work_handler(struct work_struct *work){
 		if(data->gpio_txen){
 			gpiod_set_value(data->gpio_txen, 0);
 		}
-		dev_warn(data->chardevice, "transmitted packet\n");
+//		dev_warn(data->chardevice, "transmitted packet\n");
 		/* after tx the chip goes back to standby so restore the user selected mode if it wasn't standby */
 		if(data->opmode != SX127X_OPMODE_STANDBY){
 			dev_info(data->chardevice, "restoring opmode\n");
@@ -1148,7 +1140,6 @@ static void sx127x_irq_work_handler(struct work_struct *work){
 	}
 	sx127x_reg_write(data->spidevice, SX127X_REG_LORA_IRQFLAGS, 0xff);
 	mutex_unlock(&data->mutex);
-//        return IRQ_HANDLED;
 }
 
 static int sx127x_probe(struct spi_device *spi){
