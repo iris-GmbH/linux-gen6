@@ -416,7 +416,7 @@ static int aptina_mt9v022_start_streaming(struct vb2_queue *vq, unsigned int cou
 			      EPPI_CTL_SYNC2   |
 			      EPPI_CTL_POLC3   |
 			      EPPI_CTL_DMAFINEN );
-	params.int_mask	   = 0x3c00;
+	params.int_mask	   = 0xfc;
 	params.hdelay	   = 0;
 	params.vdelay	   = 0;
 	params.line	   = params.width;
