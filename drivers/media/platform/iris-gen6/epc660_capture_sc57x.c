@@ -469,7 +469,7 @@ static int epc660_start_streaming(struct vb2_queue *vq, unsigned int count)
 			      EPPI_CTL_POLC0	   |  /* sample on falling DCLK */
 			      EPPI_CTL_PACKEN	   |  /* assemble two incomming 16Bit words into one 32Bit word (reduces RAM-load a lot) */
 			      EPPI_CTL_SIGNEXT);
-	params.int_mask	   = 0x3c00;
+	params.int_mask	   = 0xfc;
 	params.hdelay	   = 0;
 	params.vdelay	   = 0;
 	params.line	   = params.width;

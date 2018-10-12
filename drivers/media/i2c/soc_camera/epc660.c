@@ -186,8 +186,6 @@ static int epc660_send_i2c_sequence(struct i2c_client *client,
 			goto fail;
 		}
 		i += len;
-
-		udelay(100); // How long do we have to wait?
 	}
 
 	return 0;
@@ -204,7 +202,6 @@ static int epc660_device_init(struct i2c_client *client)
 		printk(KERN_ERR "Failed to reset the device!\n");
 		goto fail;
 	}
-	udelay(350); // How long do we have to wait?
 
 	printk(KERN_INFO "EPC660 I2C initialization ");
 	ret = epc660_send_i2c_sequence(client, epc660_init_sequence);
