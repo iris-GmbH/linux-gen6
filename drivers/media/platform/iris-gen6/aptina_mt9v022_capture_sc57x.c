@@ -152,6 +152,10 @@ struct aptina_mt9v022_device {
 	spinlock_t lock;
 	/* used to access capture device */
 	struct mutex mutex;
+	/* buffer that is currently filled by DMA and will finish next */
+	struct imager_buffer * nextBufferToFinish;
+	/* buffers that form a loop that keeps the DMA from overwriting buffers after dequeing them */
+	struct imager_buffer * loop_buffer_a, * loop_buffer_b, * loop_buffer_c;
 };
 
 static const struct imager_format aptina_mt9v022_formats[] = {
@@ -368,10 +372,46 @@ static void aptina_mt9v022_buffer_queue(struct vb2_buffer *vb)
 	spin_lock_irqsave(&aptina_mt9v022_dev->lock, flags);
 	// setup the dma descriptor
 	if (!list_empty(&aptina_mt9v022_dev->dma_queue)) {
-		struct imager_buffer* lastBuffer;
-		lastBuffer = list_last_entry(&aptina_mt9v022_dev->dma_queue,
-							struct imager_buffer, list);
-		lastBuffer->dma_desc->next_desc_addr = buf->desc_dma_addr;
+		struct imager_buffer *nextbuf_a, *nextbuf_b;
+		int dma_queue_length = 0;
+
+		if (aptina_mt9v022_dev->nextBufferToFinish) {
+			// DMA is running, get length of queue
+			struct list_head * iterator;
+			list_for_each(iterator, &aptina_mt9v022_dev->dma_queue) {
+				dma_queue_length++;
+			}
+		}
+		if (dma_queue_length == 3) {
+			// DMA is in "loop-mode" (1-2-3-1-2-3-1-...)
+			// find "2" (nextbuf_a) and "3" (nextbuf_b)
+			nextbuf_a = aptina_mt9v022_dev->nextBufferToFinish;
+			do {
+				nextbuf_a = list_next_entry(nextbuf_a, list);
+			} while (&nextbuf_a->list == &aptina_mt9v022_dev->dma_queue);
+			nextbuf_b = nextbuf_a;
+			do {
+				nextbuf_b = list_next_entry(nextbuf_b, list);
+			} while (&nextbuf_b->list == &aptina_mt9v022_dev->dma_queue);
+			// Rewire "new", "2" and "3" as a loop so that "1" is free after it finishes
+			nextbuf_b->dma_desc->next_desc_addr = buf->desc_dma_addr;
+			nextbuf_a->dma_desc->next_desc_addr = nextbuf_b->desc_dma_addr;
+			buf->dma_desc->next_desc_addr = nextbuf_a->desc_dma_addr;
+		} else {
+			// not in "loop-mode", just rewire the loop to a-b-new-a-b-...
+			nextbuf_a = list_last_entry(&aptina_mt9v022_dev->dma_queue, struct imager_buffer, list);
+			nextbuf_b = list_prev_entry(nextbuf_a, list);
+			nextbuf_a->dma_desc->next_desc_addr = buf->desc_dma_addr;
+			buf->dma_desc->next_desc_addr = nextbuf_b->desc_dma_addr;
+		}
+		aptina_mt9v022_dev->loop_buffer_a = buf;
+		aptina_mt9v022_dev->loop_buffer_b = nextbuf_a;
+		aptina_mt9v022_dev->loop_buffer_c = nextbuf_b;
+	} else {
+		aptina_mt9v022_dev->loop_buffer_a = 0;
+		aptina_mt9v022_dev->loop_buffer_b = 0;
+		aptina_mt9v022_dev->loop_buffer_c = 0;
+		aptina_mt9v022_dev->nextBufferToFinish = 0;
 	}
 	list_add_tail(&buf->list, &aptina_mt9v022_dev->dma_queue);
 	spin_unlock_irqrestore(&aptina_mt9v022_dev->lock, flags);
@@ -509,7 +549,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 	struct ppi_if *ppi = dev_id;
 	struct aptina_mt9v022_device *aptina_mt9v022_dev = ppi->priv;
 	int dmaStatus;
-	dma_addr_t lastDmaDescriptor;
+	dma_addr_t lastDmaDescriptor, currDmaDescriptor;
 	struct list_head* iterator;
 
 	spin_lock(&aptina_mt9v022_dev->lock);
@@ -523,29 +563,42 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 				== aptina_mt9v022_dev->dma_queue.next->next) {
 		} else {
 			/* publish all buffers that are done */
-			int completedCnt = 0;
+			int completedCnt = 0, countAsCompleted = 1, dma_queue_length = 0;
 			lastDmaDescriptor = (dma_addr_t) get_dma_prev_desc_ptr(aptina_mt9v022_dev->dma_channel);
-			lastDmaDescriptor &= ~1; // the lowest bit masks when a decriptor fetch was invalid
+			lastDmaDescriptor &= ~0x0F;
+			currDmaDescriptor = (dma_addr_t) get_dma_curr_desc_ptr(aptina_mt9v022_dev->dma_channel);
+			currDmaDescriptor &= ~0x0F;
+			// count the buffers that might be completed and remember the buffer of the next DMA operation
 			list_for_each(iterator, &aptina_mt9v022_dev->dma_queue)
 			{
 				struct imager_buffer *buf = list_entry(iterator, struct imager_buffer, list);
+				dma_queue_length++;
+				completedCnt += countAsCompleted;
 				if (buf->desc_dma_addr == lastDmaDescriptor) {
-					++completedCnt;
-					break;
+					countAsCompleted = 0;
+				}
+				if (buf->desc_dma_addr == currDmaDescriptor) {
+					aptina_mt9v022_dev->nextBufferToFinish = buf;
 				}
 			}
-			if (0 == completedCnt) {
-
-			} else {
-				struct imager_buffer* buf;
+			// keep at least three buffers here
+			completedCnt = (dma_queue_length - completedCnt < 3) ? dma_queue_length - 3 : completedCnt;
+			dma_queue_length -= 1;
+			if (completedCnt > 0) {
 				struct vb2_buffer *vb;
-				while (completedCnt--) {
-					if (&aptina_mt9v022_dev->dma_queue
-							== aptina_mt9v022_dev->dma_queue.next->next) {
+				list_for_each(iterator, &aptina_mt9v022_dev->dma_queue)
+				{
+					struct imager_buffer * buf;
+					if (!(dma_queue_length-- && completedCnt)) {
 						break;
 					}
-					buf = list_entry(aptina_mt9v022_dev->dma_queue.next,
-							struct imager_buffer, list);
+					buf = list_entry(iterator, struct imager_buffer, list);
+					// skip buffer if it is part of the loop
+					if (buf == aptina_mt9v022_dev->loop_buffer_a
+						|| buf == aptina_mt9v022_dev->loop_buffer_b
+						|| buf == aptina_mt9v022_dev->loop_buffer_c) {
+						continue;
+					}
 					vb = &buf->vb.vb2_buf;
 					vb->timestamp = ktime_get_ns(); // this has been changed from type struct timeval to -> u64 type
 					if (ppi->err) {
@@ -554,6 +607,7 @@ static irqreturn_t aptina_mt9v022_isr(int irq, void *dev_id)
 						vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 					}
 					list_del_init(&buf->list);
+					completedCnt--;
 				}
 			}
 		}
@@ -886,15 +940,15 @@ static int aptina_mt9v022_s_fmt_vid_cap(struct file *file, void *priv,
 							DMA2D |
 							DMATOVEN |
 							WNR |
-							WDSIZE_32 |
+							WDSIZE_256 |
 							PSIZE_32 |
 							NDSIZE_2 |
 							DMAFLOW_LIST |
 							DMAEN;
-	aptina_mt9v022_dev->dma_cfg_template.x_count  = aptina_mt9v022_dev->fmt.width / 2;
+	aptina_mt9v022_dev->dma_cfg_template.x_count  = aptina_mt9v022_dev->fmt.width / 16;
 	aptina_mt9v022_dev->dma_cfg_template.y_count  = aptina_mt9v022_dev->fmt.height;
-	aptina_mt9v022_dev->dma_cfg_template.x_modify =	aptina_mt9v022_dev->pixel_depth_bytes * 2;
-	aptina_mt9v022_dev->dma_cfg_template.y_modify =	aptina_mt9v022_dev->pixel_depth_bytes * 2;
+	aptina_mt9v022_dev->dma_cfg_template.x_modify =	aptina_mt9v022_dev->pixel_depth_bytes * 16;
+	aptina_mt9v022_dev->dma_cfg_template.y_modify =	aptina_mt9v022_dev->pixel_depth_bytes * 16;
 
 	if (aptina_mt9v022_dev->dma_pool) {
 		dma_pool_destroy(aptina_mt9v022_dev->dma_pool);
@@ -1132,7 +1186,7 @@ static int aptina_mt9v022_probe(struct platform_device *pdev)
 	q->ops 				= &aptina_mt9v022_video_qops;
 	q->mem_ops 			= &vb2_dma_contig_memops;
 	q->timestamp_flags 		= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-	q->min_buffers_needed 		= 1;					
+	q->min_buffers_needed 		= 4;
 	q->lock 			= &aptina_mt9v022_dev->mutex;
 	q->dev = &pdev->dev;							
 
