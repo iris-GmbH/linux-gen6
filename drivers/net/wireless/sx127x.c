@@ -98,11 +98,17 @@
 #define SX127X_REG_LORA_MODEMCONFIG1_BW									(BIT(7) | BIT(6) | BIT(5) | BIT(4))
 #define SX127X_REG_LORA_MODEMCONFIG1_BW_SHIFT							4
 #define SX127X_REG_LORA_MODEMCONFIG1_BW_MAX								9
+#define SX1272_REG_LORA_MODEMCONFIG1_BW									(BIT(7) | BIT(6))
+#define SX1272_REG_LORA_MODEMCONFIG1_BW_SHIFT							6
+#define SX1272_REG_LORA_MODEMCONFIG1_BW_MAX								3
 #define SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE							(BIT(3) | BIT(2) | BIT(1))
 #define SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE_SHIFT					1
+#define SX1272_REG_LORA_MODEMCONFIG1_CODINGRATE							(BIT(5) | BIT(4) | BIT(3))
+#define SX1272_REG_LORA_MODEMCONFIG1_CODINGRATE_SHIFT					3
 #define SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE_MIN						1
 #define SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE_MAX						6
 #define SX127X_REG_LORA_MODEMCONFIG1_IMPLICITHEADERMODEON				BIT(0)
+#define SX1272_REG_LORA_MODEMCONFIG1_IMPLICITHEADERMODEON				BIT(2)
 
 #define SX127X_REG_FSKOOK_FEILSB										SX127X_FSKOOKREG(0x1e)
 
@@ -561,7 +567,7 @@ static int sx127x_setopmode(struct sx127x *data, enum sx127x_opmode mode, bool r
 		}
 //		dev_warn(data->chardevice, "setting opmode to %s\n", opmodestr[mode]);
 		sx127x_reg_read(data->spidevice, SX127X_REG_DIOMAPPING1, &diomapping1);
-		diomapping1 &= ~SX127X_REG_DIOMAPPING1_DIO0;
+		diomapping1 &= ~(SX127X_REG_DIOMAPPING1_DIO0);
 		switch(mode){
 		case SX127X_OPMODE_CAD:
 			diomapping1 |= SX127X_REG_DIOMAPPING1_DIO0_CADDONE;
@@ -750,12 +756,23 @@ static ssize_t sx127x_bw_show(struct device *dev, struct device_attribute *attr,
 
 	mutex_lock(&data->mutex);
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG1, &config1);
-	bw = config1 >> SX127X_REG_LORA_MODEMCONFIG1_BW_SHIFT;
-	if(bw > SX127X_REG_LORA_MODEMCONFIG1_BW_MAX){
-		ret = sprintf(buf, "invalid\n");
+	if(version == 0x22) { // SX1272
+		bw = config1 >> SX1272_REG_LORA_MODEMCONFIG1_BW_SHIFT;
+		if(bw > SX1272_REG_LORA_MODEMCONFIG1_BW_MAX){
+			ret = sprintf(buf, "invalid\n");
+		}
+		else {
+			ret = sprintf(buf, "%d\n", bwmap[bw]);
+		}
 	}
-	else {
-		ret = sprintf(buf, "%d\n", bwmap[bw]);
+	else { // SX1276 and derivates
+		bw = config1 >> SX127X_REG_LORA_MODEMCONFIG1_BW_SHIFT;
+		if(bw > SX127X_REG_LORA_MODEMCONFIG1_BW_MAX){
+			ret = sprintf(buf, "invalid\n");
+		}
+		else {
+			ret = sprintf(buf, "%d\n", bwmap[bw]);
+		}
 	}
 	mutex_unlock(&data->mutex);
 	return ret;
@@ -778,7 +795,12 @@ static ssize_t sx127x_codingrate_show(struct device *dev, struct device_attribut
 
 	mutex_lock(&data->mutex);
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG1, &config1);
-	cr = (config1 & SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE) >> SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE_SHIFT;
+	if(version == 0x22) { // SX1272
+		cr = (config1 & SX1272_REG_LORA_MODEMCONFIG1_CODINGRATE) >> SX1272_REG_LORA_MODEMCONFIG1_CODINGRATE_SHIFT;
+	}
+	else { // SX1276 and derivates
+		cr = (config1 & SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE) >> SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE_SHIFT;
+	}
 	if(cr < SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE_MIN ||
 			cr > SX127X_REG_LORA_MODEMCONFIG1_CODINGRATE_MAX){
 		ret = sprintf(buf, "invalid\n");
@@ -806,7 +828,12 @@ static ssize_t sx127x_implicitheadermodeon_show(struct device *dev, struct devic
 
 	mutex_lock(&data->mutex);
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_MODEMCONFIG1, &config1);
-	hdrmodeon = config1 & SX127X_REG_LORA_MODEMCONFIG1_IMPLICITHEADERMODEON;
+	if(version == 0x22) { // SX1272
+		hdrmodeon = config1 & SX1272_REG_LORA_MODEMCONFIG1_IMPLICITHEADERMODEON;
+	}
+	else { // SX1276 and derivates
+		hdrmodeon = config1 & SX127X_REG_LORA_MODEMCONFIG1_IMPLICITHEADERMODEON;
+	}
 	mutex_unlock(&data->mutex);
     return sprintf(buf, "%d\n", hdrmodeon);
 }
