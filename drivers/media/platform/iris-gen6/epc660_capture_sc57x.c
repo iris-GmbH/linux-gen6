@@ -33,6 +33,8 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 
+#include <linux/gpio/consumer.h>
+
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -973,10 +975,41 @@ static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 	.vidioc_log_status       = epc660_log_status,
 };
 
+
+static int epc660_open(struct file* filp) {
+	int ret;
+	struct epc660_device *epc660_dev = video_drvdata(filp);
+	if (!epc660_dev) {
+		return -EINVAL;
+	}
+
+	ret = v4l2_subdev_call(epc660_dev->sd, core, load_fw);
+	if (ret) {
+		return ret;
+	}
+	ret = v4l2_fh_open(filp);
+	return ret;
+}
+static int epc660_release(struct file* filp) {
+	int ret;
+	struct epc660_device *epc660_dev = video_drvdata(filp);
+	if (!epc660_dev) {
+		return -EINVAL;
+	}
+
+	ret = vb2_fop_release(filp);
+	if (ret) {
+		return ret;
+	}
+	// make the device enter reset
+	ret = v4l2_subdev_call(epc660_dev->sd, core, reset, 1);
+	return ret;
+}
+
 static struct v4l2_file_operations epc660_fops = {
 	.owner = THIS_MODULE,
-	.open = v4l2_fh_open,
-	.release = vb2_fop_release,
+	.open = epc660_open,
+	.release = epc660_release,
 	.unlocked_ioctl = video_ioctl2,
 	.mmap = vb2_fop_mmap,
 #ifndef CONFIG_MMU
@@ -1044,6 +1077,7 @@ static int epc660_probe(struct platform_device *pdev)
 	struct imager_route *route;
 	struct of_device_id const* match;
 	struct device *dev = &pdev->dev;
+	struct gpio_desc *gpio;
 	int ret;
 
 	match = of_match_device(cap_match, &pdev->dev);
@@ -1170,7 +1204,12 @@ static int epc660_probe(struct platform_device *pdev)
 	epc660_dev->cfg.board_info.addr = 0x22;
 	epc660_dev->cfg.board_info.platform_data = NULL;
 
-
+	gpio = gpiod_get(dev, "nrst", GPIOD_OUT_HIGH);
+	if (IS_ERR(gpio)) {
+		v4l2_err(&epc660_dev->v4l2_dev, "Unable to get nrst gpio\n");
+		goto err_free_handler;
+	}
+	epc660_dev->cfg.board_info.platform_data = gpio;
 
 	epc660_dev->sd = v4l2_i2c_new_subdev_board(&epc660_dev->v4l2_dev,
 						 i2c_adap,
