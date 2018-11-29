@@ -115,6 +115,7 @@
 #define SX127X_REG_LORA_MODEMCONFIG2									SX127X_LORAREG(0x1e)
 #define SX127X_REG_LORA_MODEMCONFIG2_SPREADINGFACTOR					(BIT(7) | BIT(6) | BIT(5) | BIT(4))
 #define SX127X_REG_LORA_MODEMCONFIG2_SPREADINGFACTOR_SHIFT				4
+#define SX127X_REG_LORA_MODEMCONFIG2_SYMBTIMEOUTMSB						(BIT(1) | BIT(0))
 
 #define SX127X_REG_FSKOOK_PREAMBLEDETECT								SX127X_FSKOOKREG(0x1f)
 #define SX127X_REG_LORA_SYMBTIMEOUTLSB									SX127X_LORAREG(0x1f)
@@ -179,6 +180,7 @@
 #define SX127X_REG_DIOMAPPING1_DIO0_RXDONE								0
 #define SX127X_REG_DIOMAPPING1_DIO0_TXDONE								(BIT(6))
 #define SX127X_REG_DIOMAPPING1_DIO0_CADDONE								(BIT(7))
+#define SX127X_REG_DIOMAPPING1_DIO1										(BIT(5) | BIT(4))
 
 #define SX127X_REG_DIOMAPPING2											0x41
 #define SX127X_REG_VERSION												0x42
@@ -380,10 +382,6 @@ static int sx127x_fifo_readpkt(struct spi_device *spi, void *buffer, u8 *len){
         for(i=0;i<readlen;i++) {
             dev_info(&spi->dev, "read: @%02x %02x %c\n", fifoaddr+off+i, buf[i], buf[i]);
         }
-        for(i=0;i<readlen;i++) {
-            printk("%c", buf[i]);
-        }
-        printk("\n");
 		if(ret){
 			break;
 		}
@@ -397,25 +395,16 @@ static int sx127x_fifo_readpkt(struct spi_device *spi, void *buffer, u8 *len){
 static int sx127x_fifo_writepkt(struct spi_device *spi, void *buffer, u8 len){
 	u8 addr = SX127X_WRITEADDR(SX127X_REGADDR(SX127X_REG_FIFO));
 	struct spi_transfer fifotransfers[2];
-	int ret;
-//	int i;
+	int ret = 0;
 	memset(fifotransfers, 0, sizeof(fifotransfers));
 
 	fifotransfers[0].tx_buf = &addr;
 	fifotransfers[0].len = 1;
 	fifotransfers[1].tx_buf = buffer;
 	fifotransfers[1].len = len;
-/*	for(i=0;i<len;i++) {
-		dev_info(&spi->dev, "write: @%02x %02x\n", addr, *(u8 *)buffer++);
-	}*/
-
-	ret = sx127x_reg_write(spi, SX127X_REG_LORA_FIFOTXBASEADDR, 0);
-	ret = sx127x_reg_write(spi, SX127X_REG_LORA_FIFOADDRPTR, 0);
 
 //	dev_info(&spi->dev, "fifo write: %d\n", len);
 	spi_sync_transfer(spi, fifotransfers, ARRAY_SIZE(fifotransfers));
-
-	ret = sx127x_reg_write(spi, SX127X_REG_LORA_PAYLOADLENGTH, len);
 
 	return ret;
 }
@@ -580,6 +569,7 @@ static int sx127x_setopmode(struct sx127x *data, enum sx127x_opmode mode, bool r
 		case SX127X_OPMODE_RX:
 		case SX127X_OPMODE_RXCONTINUOS:
 		case SX127X_OPMODE_RXSINGLE:
+			diomapping1 &= ~(SX127X_REG_DIOMAPPING1_DIO1);
 			diomapping1 |= SX127X_REG_DIOMAPPING1_DIO0_RXDONE;
 			sx127x_toggletxrxen(data, false);
 			break;
@@ -594,6 +584,7 @@ static int sx127x_setopmode(struct sx127x *data, enum sx127x_opmode mode, bool r
 			mode -= 1;
 		}
 		opmode |= mode;
+		dev_info(data->chardevice, "sx127x_setopmode { opmode: 0x%02X }\n", (unsigned) opmode);
 		sx127x_reg_write(data->spidevice, SX127X_REG_DIOMAPPING1, diomapping1);
 		sx127x_reg_write(data->spidevice, SX127X_REG_OPMODE, opmode);
 	}
@@ -990,16 +981,16 @@ static ssize_t sx127x_dev_write(struct file *filp, const char __user *buf, size_
 	u8 kbuf[256];
     unsigned long numofbytes_notbeingcopied = 0;
 //	dev_info(&data->spidevice->dev, "char device write; %d\n", count);
-	sx127x_setopmode(data, SX127X_OPMODE_STANDBY, true); //put into Stand-by mode
+//	sx127x_setopmode(data, SX127X_OPMODE_STANDBY, true); //put into Stand-by mode
 	for(offset = 0; offset < count; offset += maxpkt){
 		packetsz = min((count - offset), maxpkt);
 		mutex_lock(&data->mutex);
         numofbytes_notbeingcopied += copy_from_user(kbuf, buf + offset, packetsz);
 		sx127x_fifo_writepkt(data->spidevice, kbuf, packetsz);
 		data->transmitted = 0;
-		sx127x_setopmode(data, SX127X_OPMODE_TX, false); //Data transmission is initiated by sending TX mode request.
+//		sx127x_setopmode(data, SX127X_OPMODE_TX, false); //Data transmission is initiated by sending TX mode request.
 		mutex_unlock(&data->mutex);
-		wait_event_interruptible_timeout(data->writewq, data->transmitted, 60 * HZ); //Upon completion the TxDone interrupt is issued and the radio returns to Stand-by mode.
+//		wait_event_interruptible_timeout(data->writewq, data->transmitted, 60 * HZ); //Upon completion the TxDone interrupt is issued and the radio returns to Stand-by mode.
 	}
     if (numofbytes_notbeingcopied > 0) {
         printk("\nnumofbytes_notbeingcopied = %d\n\n", (u32)numofbytes_notbeingcopied);
@@ -1116,10 +1107,10 @@ static irqreturn_t sx127x_irq(int irq, void *dev_id)
 
 static void sx127x_irq_work_handler(struct work_struct *work){
 	struct sx127x *data = container_of(work, struct sx127x, irq_work);
-	u8 irqflags, buf[128], len, snr, rssi;
+	u8 irqflags, buf[128], len, snr, rssi;//, irqmaskflags
 	u32 fei;
 	struct sx127x_pkt pkt;
-//	dev_info(&data->spidevice->dev, "IN TASKLET sx127x_irq_work_handler()\n");
+	dev_info(&data->spidevice->dev, "IN TASKLET sx127x_irq_work_handler()\n");
 	mutex_lock(&data->mutex);
 	sx127x_reg_read(data->spidevice, SX127X_REG_LORA_IRQFLAGS, &irqflags);
 	if(irqflags & SX127X_REG_LORA_IRQFLAGS_RXDONE){
@@ -1127,6 +1118,11 @@ static void sx127x_irq_work_handler(struct work_struct *work){
 		memset(&pkt, 0, sizeof(pkt));
 
 		sx127x_fifo_readpkt(data->spidevice, buf, &len);
+		/* after rx the chip goes back to standby so restore the user selected mode if it wasn't standby */
+		if(data->opmode != SX127X_OPMODE_STANDBY){
+			dev_info(data->chardevice, "Rx restoring opmode\n");
+			sx127x_setopmode(data, data->opmode, false);
+		}
 		sx127x_reg_read(data->spidevice, SX127X_REG_LORA_PKTSNRVALUE, &snr);
 		sx127x_reg_read(data->spidevice, SX127X_REG_LORA_PKTRSSIVALUE, &rssi);
 		sx127x_reg_read24(data->spidevice, SX127X_REG_LORA_FEIMSB, &fei);
@@ -1145,10 +1141,10 @@ static void sx127x_irq_work_handler(struct work_struct *work){
 		if(data->gpio_txen){
 			gpiod_set_value(data->gpio_txen, 0);
 		}
-//		dev_warn(data->chardevice, "transmitted packet\n");
+		dev_warn(data->chardevice, "transmitted packet\n");
 		/* after tx the chip goes back to standby so restore the user selected mode if it wasn't standby */
 		if(data->opmode != SX127X_OPMODE_STANDBY){
-			dev_info(data->chardevice, "restoring opmode\n");
+			dev_info(data->chardevice, "Tx restoring opmode\n");
 			sx127x_setopmode(data, data->opmode, false);
 		}
 		data->transmitted = 1;
