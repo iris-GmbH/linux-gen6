@@ -16,8 +16,8 @@
 
 #define CMD_CORE_START         _IO('b', 0)
 #define CMD_CORE_STOP          _IO('b', 1)
-#define VALID_CORE_MIN         1
-#define VALID_CORE_MAX         2
+#define CMD_SET_SVECT1         _IO('m', 17)
+#define CMD_SET_SVECT2         _IO('m', 18)
 
 void adi_core_start(unsigned int coreid)
 {
@@ -76,24 +76,35 @@ void adi_core_stop(unsigned int coreid)
 	writel(1 << coreid, __io_address(REG_RCU0_CRSTAT));
 }
 
+void adi_set_svect(unsigned int core_id, unsigned int svect)
+{
+	if (svect && (core_id == 1))
+		writel(svect, __io_address(REG_RCU0_SVECT1));
+	else if (svect && (core_id == 2))
+		writel(svect, __io_address(REG_RCU0_SVECT2));
+}
+
 static long core_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 		int ret = 0;
 
-		if (arg < VALID_CORE_MIN || arg > VALID_CORE_MAX)
+		switch (cmd) {
+		case CMD_SET_SVECT1:
+			adi_set_svect(1, arg);
+			break;
+		case CMD_SET_SVECT2:
+			adi_set_svect(2, arg);
+			break;
+		case CMD_CORE_START:
+			adi_core_start(arg);
+			break;
+		case CMD_CORE_STOP:
+			adi_core_stop(arg);
+			break;
+		default:
 			ret = -EINVAL;
-		else
-			switch (cmd) {
-			case CMD_CORE_START:
-				adi_core_start(arg);
-				break;
-			case CMD_CORE_STOP:
-				adi_core_stop(arg);
-				break;
-			default:
-				ret = -EINVAL;
-				break;
-			}
+			break;
+		}
 
 		return ret;
 }

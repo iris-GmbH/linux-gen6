@@ -487,6 +487,7 @@ dtb-$(CONFIG_ARCH_SHMOBILE_MULTI) += \
 	r8a7794-alt.dtb \
 dtb-$(CONFIG_ARCH_SC58X) += sc589-ezkit.dtb \
 	sc584-ezkit.dtb \
+	sc589-mini.dtb \
 dtb-$(CONFIG_ARCH_SC57X) += sc573-ezkit.dtb \
 dtb-$(CONFIG_ARCH_SOCFPGA) += \
 	socfpga_arria5_socdk.dtb \

@@ -170,6 +170,21 @@ static int m25p80_erase(struct spi_nor *nor, loff_t offset)
 	return 0;
 }
 
+static void m25p80_reset(struct m25p *flash)
+{
+	if ((&flash->spi_nor)->addr_width > 3) {
+		/* exit 4-byte address mode: 0xe9 */
+		flash->command[0] = SPINOR_OP_EX4B;
+		spi_write(flash->spi, flash->command, 1);
+		/* enable reset */
+		flash->command[0] = 0x66;
+		spi_write(flash->spi, flash->command, 1);
+		/* do reset */
+		flash->command[0] = 0x99;
+		spi_write(flash->spi, flash->command, 1);
+	}
+}
+
 /*
  * board specific setup should have ensured the SPI clock used here
  * matches what the READ command supports, at least until this driver
@@ -242,8 +257,20 @@ static int m25p_remove(struct spi_device *spi)
 {
 	struct m25p	*flash = spi_get_drvdata(spi);
 
+	m25p80_reset(flash);
+
 	/* Clean up MTD stuff. */
 	return mtd_device_unregister(&flash->mtd);
+}
+
+static void m25p_shutdown(struct spi_device *spi)
+{
+	struct m25p *flash = spi_get_drvdata(spi);
+
+	m25p80_reset(flash);
+
+	/* Clean up MTD stuff. */
+	mtd_device_unregister(&flash->mtd);
 }
 
 /*
@@ -303,6 +330,7 @@ static struct spi_driver m25p80_driver = {
 	.id_table	= m25p_ids,
 	.probe	= m25p_probe,
 	.remove	= m25p_remove,
+	.shutdown = m25p_shutdown,
 
 	/* REVISIT: many of these chips have deep power-down modes, which
 	 * should clearly be entered on suspend() to minimize power use.

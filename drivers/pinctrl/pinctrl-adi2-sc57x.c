@@ -14,7 +14,7 @@ static const struct pinctrl_pin_desc adi_pads[] = {
 	PINCTRL_PIN(0, "PA0"),
 	PINCTRL_PIN(1, "PA1"),
 	PINCTRL_PIN(2, "PA2"),
-	PINCTRL_PIN(3, "PG3"),
+	PINCTRL_PIN(3, "PA3"),
 	PINCTRL_PIN(4, "PA4"),
 	PINCTRL_PIN(5, "PA5"),
 	PINCTRL_PIN(6, "PA6"),

@@ -846,6 +846,7 @@ static void __init do_initcall_level(int level)
 		   level, level,
 		   &repair_env_string);
 
+	printk(KERN_ERR "%s level %d\n", __func__, level);
 	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
 		do_one_initcall(*fn);
 }

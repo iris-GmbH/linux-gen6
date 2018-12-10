@@ -9,6 +9,9 @@ choice
 
 config	MACH_SC573_EZKIT
 	bool "ADI sc573 EZKIT board"
+	help
+	  Say 'Y' here if you want your kernel to run on the ADI
+	  SC573-EZKIT board.
 
 endchoice
 

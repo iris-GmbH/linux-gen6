@@ -297,6 +297,8 @@ static int adi_rtc_probe(struct platform_device *pdev)
 	struct resource *res;
 	struct rtc_time tm;
 	int ret;
+	unsigned long timeout;
+	u16 pwdn_stat, sec_stat;
 
 	/* Allocate memory for RTC struct */
 	rtc = devm_kzalloc(dev, sizeof(*rtc), GFP_KERNEL);
@@ -333,11 +335,24 @@ static int adi_rtc_probe(struct platform_device *pdev)
 
 	writel((readl(rtc->regs_base + RTC_INIT) & ~RTC_INIT_PWDN) |
 		rtc->cal, rtc->regs_base + RTC_INIT);
-	while (readl(rtc->regs_base + RTC_INITSTAT) & RTC_INITSTAT_PWDN)
-		continue;
-	while (!(readl(rtc->regs_base + RTC_STAT) & RTC_STAT_SEC))
-		continue;
 
+	timeout = jiffies + HZ;
+	do {
+		pwdn_stat = readl(rtc->regs_base + RTC_INITSTAT) & RTC_INITSTAT_PWDN;
+	} while ((pwdn_stat == 1) && time_before(jiffies, timeout));
+	if (time_after_eq(jiffies, timeout)) {
+		dev_err(&pdev->dev, "Clear RTC PWDN timeout\n");
+		return -EPERM;
+	}
+
+	timeout = jiffies + HZ;
+	do {
+		sec_stat = readl(rtc->regs_base + RTC_STAT) & RTC_STAT_SEC;
+	} while ((sec_stat == 0) && time_before(jiffies, timeout));
+	if (time_after_eq(jiffies, timeout)) {
+		dev_err(&pdev->dev, "Wait RTC SEC timeout\n");
+		return -EPERM;
+	}
 	platform_set_drvdata(pdev, rtc);
 
 	rtc->rtc_dev = devm_rtc_device_register(dev, pdev->name, &adi_rtc_ops,

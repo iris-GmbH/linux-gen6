@@ -23,6 +23,7 @@ obj-$(CONFIG_SC58X_PCIE)        += sc58x_pcie.o
 obj-$(CONFIG_BFIN_EPPI)          += bfin_eppi.o
 obj-$(CONFIG_BFIN_SIMPLE_TIMER)	+= bfin_simple_timer.o
 obj-$(CONFIG_BFIN_CRC)		+= bfin_crc.o
+obj-$(CONFIG_BUTTON_LED)		+= button_led.o
 obj-$(CONFIG_BFIN_SPORT)	+= bfin_sport.o
 obj-$(CONFIG_BFIN_LINKPORT)	+= bfin_lp.o
 
