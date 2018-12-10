@@ -470,7 +470,7 @@
 			interrupt-names = "mc", "dma";
 			spu_securep_id = <109>;
 
-			mode = <3>;
+			mode = <3>; /* OTG */
 			mentor,multipoint = <1>;
 			mentor,num-eps = <16>;
 			mentor,ram-bits = <12>;

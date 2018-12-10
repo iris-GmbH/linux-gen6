@@ -287,6 +287,11 @@ config DP83867_PHY
 	---help---
 	  Currently supports the DP83867 PHY.
 
+config DP83867_PHY
+	tristate "Texas Instruments DP83867 Gigabit PHY
+	---help---
+	  Currently supports the DP83867 PHY.
+
 config FIXED_PHY
 	tristate "MDIO Bus/PHY emulation with fixed speed/link PHYs"
 	depends on PHYLIB
