@@ -16,8 +16,8 @@
 
 #define CMD_CORE_START         _IO('b', 0)
 #define CMD_CORE_STOP          _IO('b', 1)
-#define CMD_CORE_SET_VSTART_1  _IO('b', 2)
-#define CMD_CORE_SET_VSTART_2  _IO('b', 3)
+#define CMD_SET_SVECT1         _IO('m', 17)
+#define CMD_SET_SVECT2         _IO('m', 18)
 
 #define VALID_CORE_MIN         1
 #define VALID_CORE_MAX         2
@@ -83,9 +83,9 @@ static long adi_core_start(unsigned int coreid)
  */
 static long core_set_svector(unsigned int coreid, unsigned long addr)
 {
-	if (1 == coreid) {
+	if (addr && (1 == coreid)) {
 		writel(addr, __io_address(REG_RCU0_SVECT1));
-	} else if (2 == coreid) {
+	} else if (addr && (2 == coreid)) {
 		writel(addr, __io_address(REG_RCU0_SVECT2));
 	} else {
 		return -EINVAL;
@@ -104,10 +104,10 @@ static long core_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case CMD_CORE_STOP:
 		ret = adi_core_stop(arg);
 		break;
-	case CMD_CORE_SET_VSTART_1:
+	case CMD_SET_SVECT1:
 		ret = core_set_svector(1, arg);
 		break;
-	case CMD_CORE_SET_VSTART_2:
+	case CMD_SET_SVECT2:
 		ret = core_set_svector(2, arg);
 		break;
 	default:

@@ -132,17 +132,28 @@ static void musb_conn_timer_handler(unsigned long _musb)
 
 static irqreturn_t adi_musb_interrupt(int irq, void *__hci)
 {
+	u8 devctl;
 	unsigned long flags;
 	irqreturn_t retval = IRQ_NONE;
 	struct musb *musb = __hci;
 	struct device *dev = musb->controller;
+	struct platform_device *parent = to_platform_device(dev->parent);
 	struct adi_musb_glue *glue = dev_get_drvdata(dev->parent);
+	struct musb_hdrc_platform_data *plat = dev_get_platdata(dev);
 
 	spin_lock_irqsave(&musb->lock, flags);
 
 	musb->int_usb = musb_readb(musb->mregs, MUSB_INTRUSB);
 	musb->int_tx = musb_readw(musb->mregs, MUSB_INTRTX);
 	musb->int_rx = musb_readw(musb->mregs, MUSB_INTRRX);
+
+	if (musb->int_usb & MUSB_INTR_VBUSERROR) {
+		dev_warn(&parent->dev, "VBUS error recovery\n");
+		musb->int_usb &= ~MUSB_INTR_VBUSERROR;
+		devctl = musb_readw(musb->mregs, MUSB_DEVCTL);
+		devctl |= MUSB_DEVCTL_SESSION;
+		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+	}
 	if (musb->int_usb || musb->int_tx || musb->int_rx) {
 		musb_writeb(musb->mregs, MUSB_INTRUSB, musb->int_usb);
 		musb_writew(musb->mregs, MUSB_INTRTX, musb->int_tx);
@@ -150,12 +161,14 @@ static irqreturn_t adi_musb_interrupt(int irq, void *__hci)
 		retval = musb_interrupt(musb);
 	}
 
+	if (plat->mode == MUSB_OTG) {
 	/* Start sampling ID pin, when plug is removed from MUSB */
-	if ((musb->xceiv->otg->state == OTG_STATE_B_IDLE
-	     || musb->xceiv->otg->state == OTG_STATE_A_WAIT_BCON) ||
-	    (musb->int_usb & MUSB_INTR_DISCONNECT && is_host_active(musb))) {
-		mod_timer(&glue->musb_conn_timer, jiffies + TIMER_DELAY);
-		musb->a_wait_bcon = TIMER_DELAY;
+		if ((musb->xceiv->otg->state == OTG_STATE_B_IDLE
+			|| musb->xceiv->otg->state == OTG_STATE_A_WAIT_BCON) ||
+			(musb->int_usb & MUSB_INTR_DISCONNECT && is_host_active(musb))) {
+			mod_timer(&glue->musb_conn_timer, jiffies + TIMER_DELAY);
+			musb->a_wait_bcon = TIMER_DELAY;
+		}
 	}
 
 	if (musb->int_usb & MUSB_INTR_DISCONNECT && is_host_active(musb))
@@ -166,16 +179,8 @@ static irqreturn_t adi_musb_interrupt(int irq, void *__hci)
 	return retval;
 }
 
-static void adi_musb_reg_init(struct musb *musb, int class)
+static void adi_musb_reg_init(struct musb *musb)
 {
-#if defined(CONFIG_USB_MUSB_HOST)
-	if (class == 1 || class == 3)
-		musb_writeb(musb->ctrl_base, REG_USB_ID_CTL, 0x1);
-#endif
-
-	if (class == 2)
-		musb_writeb(musb->ctrl_base, REG_USB_ID_CTL, 0x3);
-
 	musb_writel(musb->ctrl_base, REG_USB_PLL_OSC, 20 << 1);
 	musb_writeb(musb->ctrl_base, REG_USB_VBUS_CTL, 0x0);
 	musb_writeb(musb->ctrl_base, REG_USB_PHY_CTL, 0x80);
@@ -185,7 +190,7 @@ static void adi_musb_reg_init(struct musb *musb, int class)
 
 static int adi_musb_init(struct musb *musb)
 {
-	int spu_securep_id = 0, class = 0;
+	int spu_securep_id = 0;
 	struct device *dev = musb->controller;
 	struct platform_device *parent = to_platform_device(dev->parent);
 	struct device_node *node = parent->dev.of_node;
@@ -206,12 +211,10 @@ static int adi_musb_init(struct musb *musb)
 		return -EPROBE_DEFER;
 	}
 
-	class = get_int_prop(node, "mode");
-
 	musb->isr = adi_musb_interrupt;
 	setup_timer(&glue->musb_conn_timer,
 		    musb_conn_timer_handler, (unsigned long)musb);
-	adi_musb_reg_init(musb, class);
+	adi_musb_reg_init(musb);
 
 	return 0;
 }
@@ -223,9 +226,32 @@ static int adi_musb_exit(struct musb *musb)
 	return 0;
 }
 
+static int adi_musb_set_mode(struct musb *musb, u8 musb_mode)
+{
+	struct device *dev = musb->controller;
+	struct platform_device *parent = to_platform_device(dev->parent);
+
+	switch (musb_mode) {
+	case MUSB_HOST:
+		musb_writeb(musb->ctrl_base, REG_USB_ID_CTL, 0x1);
+		break;
+	case MUSB_PERIPHERAL:
+		musb_writeb(musb->ctrl_base, REG_USB_ID_CTL, 0x3);
+		break;
+	case MUSB_OTG:
+		musb_writeb(musb->ctrl_base, REG_USB_ID_CTL, 0x0);
+		break;
+	default:
+		dev_err(&parent->dev, "Trying to set unsupported mode %u\n",
+				musb_mode);
+	}
+	return 0;
+}
+
 static const struct musb_platform_ops adi_musb_ops = {
 	.init = adi_musb_init,
 	.exit = adi_musb_exit,
+	.set_mode = adi_musb_set_mode,
 };
 
 static u64 musb_dmamask = DMA_BIT_MASK(32);
@@ -259,6 +285,7 @@ static int adi_musb_probe(struct platform_device *pdev)
 	struct platform_device *musb;
 	struct adi_musb_glue *glue;
 	struct musb_hdrc_config *config;
+	int class = 0;
 
 	int ret = -ENOMEM;
 
@@ -305,13 +332,16 @@ static int adi_musb_probe(struct platform_device *pdev)
 	config->dyn_fifo = get_int_prop(pdev->dev.of_node, "mentor,dyn-fifo");
 	config->ram_bits = get_int_prop(pdev->dev.of_node, "mentor,ram-bits");
 
-#if defined(CONFIG_USB_MUSB_DUAL_ROLE)
-	pdata.mode  = MUSB_OTG;
-#elif defined(CONFIG_USB_MUSB_HOST)
-	pdata.mode  = MUSB_HOST;
+	class = get_int_prop(pdev->dev.of_node, "mode");
+	if (class == MUSB_OTG) {
+#if defined(CONFIG_USB_MUSB_HOST)
+		class = MUSB_HOST;
 #elif defined(CONFIG_USB_MUSB_GADGET)
-	pdata.mode  = MUSB_PERIPHERAL;
+		class = MUSB_PERIPHERAL;
 #endif
+	}
+	pdata.mode = class;
+
 	pdata.power = get_int_prop(pdev->dev.of_node, "mentor,power")/2;
 	pdata.config = config;
 	pdata.platform_ops = &adi_musb_ops;

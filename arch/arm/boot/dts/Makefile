@@ -781,7 +781,8 @@ dtb-$(CONFIG_ARCH_S5PV210) += \
 	s5pv210-smdkv210.dtb \
 	s5pv210-torbreck.dtb
 dtb-$(CONFIG_ARCH_SC58X) += sc589-ezkit.dtb \
-	sc584-ezkit.dtb 
+	sc584-ezkit.dtb \
+	sc589-mini.dtb \
 dtb-$(CONFIG_MACH_SC573_EZKIT) += sc573-ezkit.dtb 
 dtb-$(CONFIG_MACH_SC572_GEN6) += sc572-gen6.dtb
 dtb-$(CONFIG_MACH_SC573_GEN6) += sc573-gen6.dtb

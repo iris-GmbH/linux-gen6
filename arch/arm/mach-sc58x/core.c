@@ -429,7 +429,16 @@ void __init sc58x_init(void)
 	of_platform_populate(NULL, sc58x_of_bus_ids,
 				sc58x_auxdata_lookup, NULL);
 #endif
-
+#if defined(CONFIG_MACH_SC589_MINI) && !defined(CONFIG_DP83867_PHY)
+	/* select RMII interface */
+	if (IS_BUILTIN(CONFIG_PHYLIB)) {
+		writel((readl(__io_address(REG_PADS0_PCFG0)) & (~(0x00000008))),
+				__io_address(REG_PADS0_PCFG0));
+		writel((readl(__io_address(REG_PADS0_PCFG0)) | 0x4),
+				__io_address(REG_PADS0_PCFG0));
+	}
+#else
+	/* select RGMII interface */
 	if (IS_BUILTIN(CONFIG_PHYLIB))
 		writel((readl(__io_address(REG_PADS0_PCFG0)) | 0xc),
 				__io_address(REG_PADS0_PCFG0));
@@ -441,6 +450,7 @@ void __init sc58x_init(void)
 	if (IS_BUILTIN(CONFIG_PHYLIB))
 		phy_register_fixup_for_uid(0x20005c90, 0xffffffff,
 				sc58x_phy1_fixup);
+#endif
 	platform_add_devices(ezkit_devices, ARRAY_SIZE(ezkit_devices));
 #ifdef CONFIG_ICC
 	platform_ipi_init();

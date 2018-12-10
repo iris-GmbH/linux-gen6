@@ -159,6 +159,7 @@
 			interrupt-parent = <&gic>;
 			interrupts = <0 77 0>,
 				     <0 78 0>;
+			clock-div = <2>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&lp0_default>;
 		};
@@ -168,6 +169,7 @@
 			interrupt-parent = <&gic>;
 			interrupts = <0 79 0>,
 				     <0 80 0>;
+			clock-div = <2>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&lp1_default>;
 		};

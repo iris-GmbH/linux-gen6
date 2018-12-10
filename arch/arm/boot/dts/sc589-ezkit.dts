@@ -211,6 +211,7 @@
 			interrupt-parent = <&gic>;
 			interrupts = <0 77 0>,
 				     <0 78 0>;
+			clock-div = <1>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&lp0_default>;
 		};
@@ -220,6 +221,7 @@
 			interrupt-parent = <&gic>;
 			interrupts = <0 79 0>,
 				     <0 80 0>;
+			clock-div = <1>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&lp1_default>;
 		};
@@ -397,7 +399,7 @@
 			interrupt-names = "mc", "dma";
 			spu_securep_id = <154>;
 
-			mode = <2>;
+			mode = <2>; /* Device */
 			mentor,multipoint = <1>;
 			mentor,num-eps = <16>;
 			mentor,ram-bits = <12>;

@@ -59,6 +59,17 @@ config SC58X_PCIE
 	  To compile this driver as a module, choose M here: the module
 	  will be called sc58x_pcie.
 
+config BUTTON_LED
+	tristate "Button interrupt trigger LED driver"
+	depends on ARCH_SC58X
+	default n
+	help
+	  This is a hardware driver for SC58x. It is added to trigger LED
+	  when press a specified button.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called button_led.
+
 config BFIN_SIMPLE_TIMER
 	tristate "Blackfin General Purpose Timers char device interface"
 	select BFIN_GPTIMERS

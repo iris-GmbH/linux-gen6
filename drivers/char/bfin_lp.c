@@ -70,7 +70,7 @@
 #define LP_TX_SHADOW_OFF 0x18
 #define LP_RX_SHADOW_OFF 0x1C
 
-#define LP_DIV 0
+#define LP_DIV_DEFAULT 2
 
 struct bfin_linkport {
 	struct list_head lp_dev;
@@ -91,6 +91,7 @@ struct bfin_lp_dev {
 	int linkport_num;
 	int dma_chan;
 	int status;
+	int lp_div;
 	int irq;
 	int irq_disabled;
 	int status_irq;
@@ -246,7 +247,7 @@ static int bfin_lp_open(struct inode *inode, struct file *filp)
 	spin_unlock_irqrestore(&dev->lock, flags);
 
 
-	writel(LP_DIV, dev->reg_base + LP_DIV_OFF);
+	writel(dev->lp_div, dev->reg_base + LP_DIV_OFF);
 	writel(0xFF, dev->reg_base + LP_STAT_OFF);
 	writel(0, dev->reg_base + LP_CTL_OFF);
 
@@ -321,7 +322,7 @@ static ssize_t bfin_lp_write(struct file *filp, const char *buf, size_t count, l
 
 	ret = kfifo_from_user(&dev->lpfifo, buf, count, &copied);
 
-	writel(LP_DIV, dev->reg_base + LP_DIV_OFF);
+	writel(dev->lp_div, dev->reg_base + LP_DIV_OFF);
 
 	bfin_lp_config_channel(dev, 1);
 
@@ -520,6 +521,11 @@ static int __init bfin_linkport_init(void)
 		if (np) {
 			printk("find dt node %s\n", np->name);
 			dev->of_node = of_node_get(np);
+			ret = of_property_read_u32(dev->of_node, "clock-div",
+						&lp_dev_info[i].lp_div);
+			if (ret)
+				lp_dev_info[i].lp_div = LP_DIV_DEFAULT;
+			printk("linkport clock div: %d\n", lp_dev_info[i].lp_div);
 			lp_dev_info[i].irq = irq_of_parse_and_map(dev->of_node, 0);
 			if (lp_dev_info[i].irq <= 0)
 				panic("Can't parse IRQ");
