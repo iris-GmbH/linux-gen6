@@ -1,0 +1,18 @@
+* BUTTON INTERRUPT TRIGGER LED DRIVER
+
+Required properties:
+- compatible : Should be "adi,button-led"
+- button_gpio : Should contain the gpio number of a specified button.
+- led_gpio : Should contain the gpio number of a specified led.
+
+
+Supported chips:
+sc58x
+
+Examples:
+
+button0: button@0 {
+	compatible = "adi,button-led";
+	button_gpio = <80>;
+	led_gpio = <49>;
+};

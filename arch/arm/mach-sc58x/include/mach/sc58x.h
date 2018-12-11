@@ -164,7 +164,8 @@
 #define REG_RCU0_SISTAT                 0x3108B014         /* RCU0 System Interface Status Register */
 #define REG_RCU0_BCODE                  0x3108B01C         /* RCU0 Boot Code Register */
 #define REG_RCU0_MSG_SET                0x3108B064         /* RCU0 Message Set Bits Register */
-
+#define REG_RCU0_SVECT1                 0x3108B024         /* Software Vector Register 1 */
+#define REG_RCU0_SVECT2                 0x3108B028         /* Software Vector Register 2 */
 
 /* =========================
         SPU0
