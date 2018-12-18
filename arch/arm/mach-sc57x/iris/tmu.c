@@ -5,13 +5,16 @@
 #include <asm/io.h> /* ioremap */
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
-#include <mach/irqs.h>
 #include <mach/sc57x.h>
 #include "tmu.h"
 
-#define DEV_NAME	"tmu"
 
 //#define EnableIR
+#ifdef EnableIR
+#include <mach/irqs.h>
+#endif
+
+#define DEV_NAME	"tmu"
 
 static dev_t tmu_dev_number;
 static struct cdev *tmu_object;
@@ -110,8 +113,8 @@ static irqreturn_t tmu_isr(int p_irq, void *p_data){
 
 static int tmu_probe_device(struct platform_device *pdev)
 {
-	struct device *dev = &pdev->dev;
 #ifdef EnableIR
+	struct device *dev = &pdev->dev;
 	int ret, irq;
 #endif
 	if( (regTmuBaseAddress = ioremap(REG_TMU0_BASE_ADDRESS, SZ_4 *13))==NULL) //base address
@@ -146,15 +149,15 @@ static int tmu_probe_device(struct platform_device *pdev)
 }
 
 static int tmu_remove_device(struct platform_device *pdev){
+#ifdef EnableIR
 	struct device *dev = &pdev->dev;
 	int irq;
-	iounmap(regTmuBaseAddress);
-#ifdef EnableIR
 	irq = platform_get_irq(pdev, 0);
 	free_irq(irq,dev);
 	irq = platform_get_irq(pdev, 1);
 	free_irq(irq,dev);
 #endif
+	iounmap(regTmuBaseAddress);
 	return 0;
 }
 
