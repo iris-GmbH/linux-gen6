@@ -66,7 +66,6 @@ void printTmuRegisters(void){
 }
 
 static int tmu_open( struct inode *device_file, struct file *entity){
-	pr_info("TMU OPEN\n");
 	setGain(0);
 	setOffset(0);
 	setAVG(1);
@@ -75,14 +74,12 @@ static int tmu_open( struct inode *device_file, struct file *entity){
 }
 
 static int tmu_close( struct inode *device_file, struct file *entity){
-	pr_info("TMU CLOSE\n");
 	writel( (0x0 & TMU0_CTL_MASK), regTmuBaseAddress); //power down tmu driver
 	return 0;
 }
 
 static ssize_t tmu_read(struct file *entity, char __user *user,
 	size_t count, loff_t *offset){
-
 	//printTmuRegisters();
 	if(count != sizeof(temperatureQ7_8))
 		return -EINVAL; //other sizes are not valid
@@ -117,9 +114,6 @@ static int tmu_probe_device(struct platform_device *pdev)
 #ifdef EnableIR
 	int ret, irq;
 #endif
-	pr_info("tmu_probe_device( %p )\n", dev);
-//	pr_info("pdev->id: %d\n", pdev->id );
-
 	if( (regTmuBaseAddress = ioremap(REG_TMU0_BASE_ADDRESS, SZ_4 *13))==NULL) //base address
 		return -1;
 #ifdef EnableIR
@@ -154,8 +148,6 @@ static int tmu_probe_device(struct platform_device *pdev)
 static int tmu_remove_device(struct platform_device *pdev){
 	struct device *dev = &pdev->dev;
 	int irq;
-	pr_info("tmu_remove_device( %p )\n", dev);
-//	pr_info("pdev->id: %d\n", pdev->id );
 	iounmap(regTmuBaseAddress);
 #ifdef EnableIR
 	irq = platform_get_irq(pdev, 0);
@@ -201,7 +193,6 @@ static struct platform_driver tmu_driver = {
 };
 
 static int __init tmu_init(void){
-	pr_info("tmu_init()\n");
 	strcpy( tmu_pdi.name, "tmudev" );
 	tmu_driver.id_table = &tmu_pdi;
 	if (platform_driver_register(&tmu_driver)!=0) {
@@ -245,6 +236,6 @@ static void __exit tmu_exit(void){
 
 module_init( tmu_init );
 module_exit( tmu_exit );
-MODULE_DESCRIPTION("Driver that provides the processor temperature (via tmu).");
+MODULE_DESCRIPTION("Driver that provides the processor temperature (via Thermal Monitoring Unit).");
 MODULE_AUTHOR("Michael Glembotzki <Michael.Glembotzki@irisgmbh.de>");
 MODULE_LICENSE("GPL v2");
