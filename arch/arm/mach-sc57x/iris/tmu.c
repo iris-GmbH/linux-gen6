@@ -21,7 +21,7 @@ static struct cdev *tmu_object;
 static struct class *tmu_class;
 static struct platform_device_id tmu_pdi;
 static void __iomem *regTmuBaseAddress; //REG_TMU0_CTL
-static uint16_t temperatureQ7_8;
+static int16_t temperatureQ7_8;
 
 //static struct file_operations tmu_fops;
 static DECLARE_COMPLETION( dev_obj_is_free );
@@ -87,8 +87,8 @@ static ssize_t tmu_read(struct file *entity, char __user *user,
 	if(count != sizeof(temperatureQ7_8))
 		return -EINVAL; //other sizes are not valid
 
-	temperatureQ7_8 = (uint16_t) readl(regTmuBaseAddress + SZ_4*REGP_TMU0_TEMP) & 0xFFFF; // return value in Q7.8 format
-	if(put_user(temperatureQ7_8, (uint16_t*)user)){
+	temperatureQ7_8 = (int16_t) readl(regTmuBaseAddress + SZ_4*REGP_TMU0_TEMP) & 0xFFFF; // return value in Q7.8 format
+	if(put_user(temperatureQ7_8, (int16_t*)user)){
 		printk( "tmu_read: put_user failed\n");
 		return -EFAULT;
 	}
