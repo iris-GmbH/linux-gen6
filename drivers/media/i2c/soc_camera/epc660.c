@@ -25,6 +25,7 @@
 
 #include <asm/uaccess.h>
 
+#include <linux/gpio/consumer.h>
 
 /*
  * epc660 i2c address 0x20
@@ -73,6 +74,7 @@ struct epc660 {
 	struct v4l2_clk *clk;
 	const struct epc660_datafmt *fmt;
 	const struct epc660_datafmt *fmts;
+	struct gpio_desc* nrst_gpio;
 	int num_fmts;
 	u8  ic_version;
 	u8  customer_id;
@@ -180,46 +182,13 @@ static int epc660_send_i2c_sequence(struct i2c_client *client,
 		ret = i2c_master_send(client, seq+i, len);
 		if (ret < 0) {
 			printk(KERN_ERR
-			      "Failed to send I2C sequence "
+			      "EPC660 Failed to send I2C sequence "
 				  "with length 0x%02x at offset %04x\n",
 		          len, i);
 			goto fail;
 		}
 		i += len;
 	}
-
-	return 0;
-fail:
-	return ret;
-}
-
-static int epc660_device_init(struct i2c_client *client)
-{
-	int ret;
-	/* Reset the imager */
-	ret = reg_write_byte(client, 0x00, 0x06);
-	if (ret < 0) {
-		printk(KERN_ERR "Failed to reset the device!\n");
-		goto fail;
-	}
-
-	printk(KERN_INFO "EPC660 I2C initialization ");
-	ret = epc660_send_i2c_sequence(client, epc660_init_sequence);
-	if (ret < 0) {
-		goto fail;
-	};
-	// TODO check success
-	printk(KERN_INFO " done.\n");
-
-
-	printk(KERN_INFO "Programming EPC660 sequencer ");
-	ret = epc660_send_i2c_sequence(client, epc660_003_Seq_Prog_8MHz_Default_8);
-	if (ret < 0) {
-		goto fail;
-	};
-	// TODO check success
-	printk(KERN_INFO " done.\n");
-
 
 	return 0;
 fail:
@@ -371,13 +340,19 @@ static int epc660_s_register(struct v4l2_subdev *sd,
 }
 #endif
 
+static long epc660_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void* arg);
+static int epc660_reset(struct v4l2_subdev *sd, u32 val);
+static int epc660_load_fw(struct v4l2_subdev *sd);
+
 #define EPC_660_IOCTL_CMD_SET_REGISTER 129
 #define EPC_660_IOCTL_CMD_GET_REGISTER 130
+#define EPC_660_IOCTL_CMD_RESET 131
 struct epc_660_reg_params {
 	u32 regNo;   /* the register (address) */
 	u32 content; /* what to write into the register */
 	u32 size;    /* the size of the register in bytes */
-} ;
+};
+
 static long epc660_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void* arg)
 {
 	struct i2c_client *client;
@@ -419,9 +394,56 @@ static long epc660_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void* arg)
 				return -EACCES;
 			}
 			break;
+		case EPC_660_IOCTL_CMD_RESET:
+			epc660_reset(sd, 0);
+			break;
 		default:
 			break;
 	}
+	return 0;
+}
+
+static int epc660_reset(struct v4l2_subdev *sd, u32 val) {
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct epc660 *epc660 = to_epc660(client);
+
+	dev_info(&client->dev, "EPC660 reset %d\n", val);
+
+	gpiod_direction_output(epc660->nrst_gpio, val);
+	usleep_range(7000, 20000);
+
+	return 0;
+}
+
+static int epc660_load_fw(struct v4l2_subdev *sd) {
+	int ret;
+	struct i2c_client *client;
+
+	client = v4l2_get_subdevdata(sd);
+	if (!client) {
+		return -ERESTART;
+	}
+
+	/* leave reset */
+	ret = epc660_reset(sd, 0);
+	ret = epc660_reset(sd, 1);
+	if (ret) {
+		return ret;
+	}
+
+	printk(KERN_INFO "EPC660 initialization ");
+	ret = epc660_send_i2c_sequence(client, epc660_init_sequence);
+	if (ret < 0) {
+		return ret;
+	};
+	printk(KERN_INFO "EPC660 initialization done.\n");
+	printk(KERN_INFO "EPC660 sequencer programming");
+	ret = epc660_send_i2c_sequence(client, epc660_003_Seq_Prog_8MHz_Default_8);
+	if (ret < 0) {
+		return ret;
+	};
+	printk(KERN_INFO "EPC660 sequencer programming done.\n");
+
 	return 0;
 }
 
@@ -438,6 +460,7 @@ static int epc660_video_probe(struct i2c_client *client)
 	/* Read out the chip version register */
 	ret = reg_read_byte(client, EPC660_REG_IC_VERSION);
 	if (ret < 0) {
+		dev_err(&client->dev, "EPC660: cannot read reg ic version\n");
 		goto ei2c;
 	};
 	epc660->ic_version = (u8)(ret & 0xff);
@@ -459,6 +482,7 @@ static int epc660_video_probe(struct i2c_client *client)
 
 	ret = reg_read_byte(client, EPC660_REG_CUSTOMER_ID);
 	if (ret < 0) {
+		dev_err(&client->dev, "EPC660: cannot read reg customer id\n");
 		goto ei2c;
 	};
 	ret = 0;
@@ -474,7 +498,7 @@ static int epc660_video_probe(struct i2c_client *client)
 	ret |= epc660_eeprom_read_byte(client, EPC660_REG_PART_VERSION,
 					&epc660->part_version);
 	if (ret < 0) {
-		printk(KERN_ERR "Failed to read the manufacturer properties!\n");
+		dev_err(&client->dev, "Failed to read the manufacturer properties!\n");
 		goto ei2c;
 	};
 
@@ -492,10 +516,6 @@ static int epc660_video_probe(struct i2c_client *client)
 		   (int)(epc660->chip_id),
 		   (int)(epc660->part_type),
 		   (int)(epc660->part_version));
-
-	ret = epc660_device_init(client);
-	if (ret < 0)
-		goto ei2c;
 
 	/* Init the formats table */
 	epc660->fmts = epc660_monochrome_fmts;
@@ -530,7 +550,9 @@ static struct v4l2_subdev_core_ops epc660_subdev_core_ops = {
 	.g_register	= epc660_g_register,
 	.s_register	= epc660_s_register,
 #endif
-	.ioctl      = epc660_ioctl,
+	.ioctl        = epc660_ioctl,
+	.load_fw      = epc660_load_fw,
+	.reset        = epc660_reset,
 };
 
 static struct v4l2_subdev_video_ops epc660_subdev_video_ops = {
@@ -591,6 +613,19 @@ static int epc660_probe(struct i2c_client *client,
 
 	epc660->clk = 0;
 
+	epc660->nrst_gpio = (struct gpio_desc*)client->dev.platform_data;
+	if (IS_ERR(epc660->nrst_gpio)) {
+		dev_err(&client->dev, "need to specify an nrst gpio! %d %s\n", (int)(epc660->nrst_gpio), client->dev.init_name);
+		return -EINVAL;
+	}
+
+	ret = epc660_reset(&epc660->subdev, 0);
+	ret = epc660_reset(&epc660->subdev, 1);
+	if (ret < 0) {
+		dev_err(&client->dev, "cannot reset the epc660 sensor%d\n", ret);
+		return ret;
+	}
+
 	ret = epc660_video_probe(client);
 	if (ret)
 		v4l2_ctrl_handler_free(&epc660->hdl);
@@ -601,6 +636,8 @@ static int epc660_probe(struct i2c_client *client,
 static int epc660_remove(struct i2c_client *client)
 {
 	struct epc660 *epc660 = to_epc660(client);
+
+	gpiod_put(epc660->nrst_gpio);
 
 	v4l2_device_unregister_subdev(&epc660->subdev);
 	v4l2_ctrl_handler_free(&epc660->hdl);
