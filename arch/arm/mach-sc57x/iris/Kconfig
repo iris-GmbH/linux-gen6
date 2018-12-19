@@ -8,13 +8,6 @@ config IRIS_CUSTOM_DRIVERS
 menu "Iris Custom Drivers"
 	depends on IRIS_CUSTOM_DRIVERS
 
-config IRIS_IRMA_SIX_HARDWARE_DISCOVERY
-	bool "Driver for hardware discovery for Iris irma-six platform"
-	default n
-	depends on ARCH_SC57X && OF && VIDEO_IRIS_GEN6_EPC660_CAPTURE
-	help
-	  A driver that can do additional device initialization and device population on irma-six devices.
-
 config IRIS_IRMA_SIX_HADC
 	bool "HADC (Housekeeping AD Converter)"
 	default y
