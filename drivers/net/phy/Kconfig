@@ -288,7 +288,7 @@ config DP83867_PHY
 	  Currently supports the DP83867 PHY.
 
 config DP83867_PHY
-	tristate "Texas Instruments DP83867 Gigabit PHY
+	tristate "Texas Instruments DP83867 Gigabit PHY"
 	---help---
 	  Currently supports the DP83867 PHY.
 
