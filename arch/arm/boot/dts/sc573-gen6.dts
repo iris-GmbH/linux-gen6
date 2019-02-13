@@ -254,6 +254,8 @@
 			pinctrl-0 = <&ppi0_8b>;
 			pinctrl-1 = <&ppi0_10b>;
 			pinctrl-2 = <&ppi0_12b>;
+			
+			nrst-gpios = <&gpb 4 0>;
 		};
 	};
 };

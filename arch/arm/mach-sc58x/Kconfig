@@ -3,16 +3,27 @@ menu "sc58x platform type"
 
 choice
 	prompt "ADI sc58x Eval board"
-	default MACH_SC589
 	help
 	  This select the sc58x eval board type.
 
-config	MACH_SC589
-	bool "ADI sc589 board"
+config	MACH_SC589_EZKIT
+	bool "ADI sc589-ezkit board"
 	select MIGHT_HAVE_PCI
+	help
+	  Say 'Y' here if you want your kernel to run on the ADI
+	  SC589-EZKIT board.
 
-config	MACH_SC584
-	bool "ADI sc584 board"
+config	MACH_SC584_EZKIT
+	bool "ADI sc584-ezkit board"
+	help
+	  Say 'Y' here if you want your kernel to run on the ADI
+	  SC584-EZKIT board.
+
+config	MACH_SC589_MINI
+	bool "ADI sc589-mini board"
+	help
+	  Say 'Y' here if you want your kernel to run on the ADI
+	  SC589-MINI board.
 
 endchoice
 
