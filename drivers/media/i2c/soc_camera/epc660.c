@@ -458,6 +458,9 @@ static int epc660_video_probe(struct i2c_client *client)
 {
 	struct epc660 *epc660 = to_epc660(client);
 	int ret;
+	
+	/* dummy read */
+	reg_read_byte(client, EPC660_IC_TYPE);
 
 	/* Read out the chip version register */
 	ret = reg_read_byte(client, EPC660_REG_IC_VERSION);
