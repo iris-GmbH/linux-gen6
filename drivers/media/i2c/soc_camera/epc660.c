@@ -413,7 +413,7 @@ static int epc660_reset(struct v4l2_subdev *sd, u32 val) {
 	else
         dev_info(&client->dev, "EPC660 reset %d\n", val);
 
-	usleep_range(7000, 20000);
+	usleep_range(15000, 20000);
 	return ret;
 }
 
