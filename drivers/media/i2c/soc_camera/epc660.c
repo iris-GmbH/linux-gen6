@@ -406,13 +406,19 @@ static long epc660_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void* arg)
 static int epc660_reset(struct v4l2_subdev *sd, u32 val) {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct epc660 *epc660 = to_epc660(client);
+    int ret = gpiod_direction_output(epc660->nrst_gpio, val);
 
-	dev_info(&client->dev, "EPC660 reset %d\n", val);
-
-	gpiod_direction_output(epc660->nrst_gpio, val);
-	usleep_range(7000, 20000);
-
-	return 0;
+	if (ret < 0) {
+	    dev_err(&client->dev, "EPC660: cannot set nrst_gpio to %d\n", val);
+	} else {
+		dev_info(&client->dev, "EPC660 reset %d\n", val);
+		if(val == 0) {
+			udelay(1);
+		} else {
+			usleep_range(7000, 10000);
+		}
+	}
+	return ret;
 }
 
 static int epc660_load_fw(struct v4l2_subdev *sd) {
@@ -456,6 +462,9 @@ static int epc660_video_probe(struct i2c_client *client)
 {
 	struct epc660 *epc660 = to_epc660(client);
 	int ret;
+	
+	/* dummy read */
+	reg_read_byte(client, EPC660_IC_TYPE);
 
 	/* Read out the chip version register */
 	ret = reg_read_byte(client, EPC660_REG_IC_VERSION);
