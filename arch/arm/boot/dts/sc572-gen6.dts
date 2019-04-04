@@ -34,28 +34,30 @@
 			reg = <0x80000000 0x1000000>;
 			reg-names = "cont_memory";
 		};
+
+		cont_memory_dma: ddr_res_dma@0x80000000 {
+			compatible = "iris,gen6-cont-dma-memory";
+			reg = <0x81000000 0x1000000>;
+			reg-names = "cont_memory_dma";
+		};
 		
 		sram_mem_dma: sram_res_dma@0x20001000 {
 			compatible = "iris,gen6-cont-dma-memory";
-			reg = <0x20001000 0x000a0000>;
+			reg = <0x20001000 0x000FE000>;
 			reg-names = "sram_mem_dma";
 		};
-		sram_mem: sram_res@0x200A1000 {
-			compatible = "iris,gen6-cont-memory";
-			reg = <0x200a1000 0x0005F000>;
-			reg-names = "sram_mem";
-		};
+
 	};
 
 	scb {
 		cont_memory_dma {
 			compatible = "iris,gen6-cont-dma-memory";
-			memory-region = <&sram_mem_dma>;
+			memory-region = <&sram_mem_dma &cont_memory_dma>;
 		};
 
 		cont_memory {
 			compatible = "iris,gen6-cont-memory";
-			memory-region = <&cont_memory &sram_mem>;
+			memory-region = <&cont_memory>;
 		};
 
 /*		
