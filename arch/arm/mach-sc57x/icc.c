@@ -11,7 +11,7 @@
 void platform_send_ipi_cpu(unsigned int cpu, int irq)
 {
 	BUG_ON(cpu > 2);
-	writel(cpu + TRGM_SOFT0, __io_address(REG_TRU0_MTR));
+	writel(cpu + TRGM_SOFT1, __io_address(REG_TRU0_MTR));
 }
 
 void platform_send_ipi(cpumask_t callmap, int irq)
@@ -43,8 +43,9 @@ void platform_res_manage_free_irq(uint16_t subid)
 
 void platform_ipi_init(void)
 {
-	writel(TRGM_SOFT0, __io_address(REG_TRU0_SSR71));
-	writel(TRGM_SOFT1, __io_address(REG_TRU0_SSR75));
-	writel(TRGM_SOFT2, __io_address(REG_TRU0_SSR79));
+	writel(TRGM_SOFT0, __io_address(REG_TRU0_SSR68)); // left sharc -> arm
+	writel(TRGM_SOFT1, __io_address(REG_TRU0_SSR69)); // right sharc -> arm
+	writel(TRGM_SOFT2, __io_address(REG_TRU0_SSR72)); // arm -> left sharc
+	writel(TRGM_SOFT3, __io_address(REG_TRU0_SSR76)); // arm -> right sharc
 	writel(1, __io_address(REG_TRU0_GCTL));
 }
