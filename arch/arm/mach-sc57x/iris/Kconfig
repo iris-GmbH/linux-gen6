@@ -22,6 +22,13 @@ config IRIS_IRMA_SIX_MEM_HELPER
 	help
 	  Memory Helper Driver that allows mmapping of a reserved contiguous memory region at the beginning of RAM to the userspace devices. Supports multiple contiguous regions to map the beginning of the RAM as well as the non-icc-part of the L2.
 
+config IRIS_IRMA_SIX_SHARC
+	bool "synchronize to SHARC cores"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Driver that provides synchronized read and write access to the SHARC cores. It also allows polling.
+
 config IRIS_IRMA_SIX_TMU
 	bool "TMU (Thermal monitoring unit)"
 	default y
