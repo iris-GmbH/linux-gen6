@@ -60,6 +60,14 @@
 			memory-region = <&cont_memory>;
 		};
 
+		left_sharc: left_sharc@0x20000000 {
+			compatible = "iris,left_sharc";
+			reg = <0x20000000 0x0800>;
+			coreid = <1>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 203 1>;
+		};
+
 /*		
 		uart2: uart@0x31003800 {
 			compatible = "arm,adi-uart4";
@@ -208,14 +216,6 @@
 			};
 		};
 
-		icc@0 {
-			compatible = "adi,icc";
-			reg = <0x20000000 0x1000>;
-			interrupt-parent = <&gic>;
-			interrupts = <0 206 1>;
-			peerinfo = <1 71>, <2 72>;
-		};
-		
 		video_decoder_aptina: cap_aptina {
 			compatible = "iris,gen6-aptina_mt9v022";
 			card-name = "mt9v022";
