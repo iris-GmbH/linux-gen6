@@ -18,4 +18,7 @@
 #define invalidate_dcache_range(start, end) __sync_cache_range_r((void *)start, end - start)
 #define flush_dcache_range(start, end) __sync_cache_range_w((void *)start, end - start)
 #define blackfin_core_id()	0
+
+void platform_send_ipi_cpu(unsigned int cpu, int irq);
+
 #endif
