@@ -2,7 +2,6 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
-#include <linux/ioctl.h>
 #include <linux/irq.h>
 #include <linux/irqflags.h>
 #include <linux/miscdevice.h>
@@ -15,7 +14,6 @@
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
-#include <linux/uaccess.h>
 #include <mach/icc.h>
 
 #define DRV_NAME "sharc"
@@ -186,11 +184,6 @@ static const struct file_operations sharc_fops = { .owner = THIS_MODULE,
 						   .read = read,
 						   .write = write,
 						   .poll = poll };
-
-struct sharcDescriptor {
-	char *name;
-	u8 core_id;
-};
 
 static int sharc_remove(struct platform_device *pdev);
 static int sharc_probe(struct platform_device *pdev);
