@@ -36,12 +36,13 @@ struct ioctl_info {
 
 static int cont_mem_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	struct list_head* position;
-	struct cont_mem_dev_data* dd = NULL;
+	struct list_head *position;
+	struct cont_mem_dev_data *dd = NULL;
 	size_t size = vma->vm_end - vma->vm_start;
 
-	list_for_each (position , &dev_datas) {
-		struct cont_mem_dev_data* dev_d = list_entry(position, struct cont_mem_dev_data, list);
+	list_for_each (position, &dev_datas) {
+		struct cont_mem_dev_data *dev_d =
+			list_entry(position, struct cont_mem_dev_data, list);
 		if (MINOR(file->f_inode->i_rdev) == dev_d->misc_device.minor) {
 			dd = dev_d;
 			break;
@@ -59,42 +60,45 @@ static int cont_mem_mmap(struct file *file, struct vm_area_struct *vma)
 
 	if (dd->mode == MODE_DEFAULT) {
 		if (remap_pfn_range(vma, vma->vm_start,
-			dd->r.start >> PAGE_SHIFT, size, pgprot_dmacoherent(PAGE_SHARED)))
-		{
-		     printk("remap page range failed\n");
-		     return -ENXIO;
+				    dd->r.start >> PAGE_SHIFT, size,
+				    pgprot_dmacoherent(PAGE_SHARED))) {
+			printk("remap page range failed\n");
+			return -ENXIO;
 		}
 	} else if (dd->mode == MODE_DMA) {
 		if (remap_pfn_range(vma, vma->vm_start,
-			dd->r.start >> PAGE_SHIFT, size, PAGE_SHARED))
-		{
-		     printk("remap page range failed\n");
-		     return -ENXIO;
+				    dd->r.start >> PAGE_SHIFT, size,
+				    PAGE_SHARED)) {
+			printk("remap page range failed\n");
+			return -ENXIO;
 		}
 	}
 	return 0;
 }
 
-static long cont_mem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+static long cont_mem_ioctl(struct file *filp, unsigned int cmd,
+			   unsigned long arg)
 {
 	int ret = 0;
 	switch (cmd) {
 	case 0: /* get memory region base and size */
 	{
-		struct list_head* position;
-		list_for_each (position , &dev_datas) {
-			struct cont_mem_dev_data* dd = NULL;
-			dd = list_entry(position, struct cont_mem_dev_data, list);
-			if (dd->misc_device.minor == MINOR(filp->f_inode->i_rdev)) {
+		struct list_head *position;
+		list_for_each (position, &dev_datas) {
+			struct cont_mem_dev_data *dd = NULL;
+			dd = list_entry(position, struct cont_mem_dev_data,
+					list);
+			if (dd->misc_device.minor ==
+			    MINOR(filp->f_inode->i_rdev)) {
 				struct ioctl_info info;
 				info.baseAddr = dd->r.start;
 				info.size = resource_size(&dd->r);
-				ret = copy_to_user((void*)arg, &(info), sizeof(info));
+				ret = copy_to_user((void *)arg, &(info),
+						   sizeof(info));
 				break;
 			}
 		}
-	}
-	break;
+	} break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -111,16 +115,23 @@ static const struct file_operations cont_memory_fops = {
 static int cont_mem_remove(struct platform_device *pdev);
 static int cont_mem_probe(struct platform_device *pdev);
 static const struct of_device_id cap_match[] = {
-	{ .compatible = "iris,gen6-cont-memory", .data = (void *) MODE_DEFAULT, },
-	{ .compatible = "iris,gen6-cont-dma-memory", .data = (void *) MODE_DMA, },
+	{
+		.compatible = "iris,gen6-cont-memory",
+		.data = (void *)MODE_DEFAULT,
+	},
+	{
+		.compatible = "iris,gen6-cont-dma-memory",
+		.data = (void *)MODE_DMA,
+	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, cap_match);
 static struct platform_driver cont_mem_driver = {
-	.driver = {
-		.name  = DRV_NAME,
-		.of_match_table = cap_match,
-	},
+	.driver =
+		{
+			.name = DRV_NAME,
+			.of_match_table = cap_match,
+		},
 	.probe = cont_mem_probe,
 	.remove = cont_mem_remove,
 };
@@ -130,7 +141,7 @@ static int cont_mem_probe(struct platform_device *pdev)
 {
 	const struct of_device_id *match;
 	struct device *dev = &pdev->dev;
-	struct device_node* np;
+	struct device_node *np;
 	enum MEMORY_MODE mem_mode;
 	int ret = 0;
 	int num_regions = 0;
@@ -141,12 +152,13 @@ static int cont_mem_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	mem_mode = (enum MEMORY_MODE) match->data;
+	mem_mode = (enum MEMORY_MODE)match->data;
 
 	while (1) {
 		int subRet = 0;
-		struct cont_mem_dev_data* dd;
-		np = of_parse_phandle(dev->of_node, "memory-region", num_regions);
+		struct cont_mem_dev_data *dd;
+		np = of_parse_phandle(dev->of_node, "memory-region",
+				      num_regions);
 		++num_regions;
 		if (!np) {
 			break;
@@ -165,15 +177,18 @@ static int cont_mem_probe(struct platform_device *pdev)
 		INIT_LIST_HEAD(&dd->list);
 		dd->misc_device.name = dd->r.name;
 		dd->misc_device.minor = MISC_DYNAMIC_MINOR;
-		dd->misc_device.fops  = &cont_memory_fops;
+		dd->misc_device.fops = &cont_memory_fops;
 		subRet = misc_register(&dd->misc_device);
 		if (subRet) {
 			devm_kfree(&pdev->dev, dd);
-			dev_err(dev, "cannot register misc device for region: %s %d\n", dd->r.name, subRet);
+			dev_err(dev,
+				"cannot register misc device for region: %s %d\n",
+				dd->r.name, subRet);
 			continue;
 		}
 		list_add_tail(&dd->list, &dev_datas);
-		dev_info(dev, "reserved memory %s@0x%X-0x%X", dd->r.name, dd->r.start, dd->r.end);
+		dev_info(dev, "reserved memory %s@0x%X-0x%X", dd->r.name,
+			 dd->r.start, dd->r.end);
 	}
 	return ret;
 }
@@ -181,8 +196,8 @@ static int cont_mem_probe(struct platform_device *pdev)
 static int cont_mem_remove(struct platform_device *pdev)
 {
 	struct list_head *position, *q;
-	list_for_each_safe(position, q, &dev_datas) {
-		struct cont_mem_dev_data* dd = NULL;
+	list_for_each_safe (position, q, &dev_datas) {
+		struct cont_mem_dev_data *dd = NULL;
 		dd = list_entry(position, struct cont_mem_dev_data, list);
 		list_del(position);
 		devm_kfree(&pdev->dev, dd);
@@ -190,6 +205,7 @@ static int cont_mem_remove(struct platform_device *pdev)
 	return 0;
 }
 
-MODULE_DESCRIPTION("Driver that provides mmapped contiguous memory regions into userspace");
+MODULE_DESCRIPTION(
+	"Driver that provides mmapped contiguous memory regions into userspace");
 MODULE_AUTHOR("Lutz Freitag <Lutz.Freitag@irisgmbh.de>");
 MODULE_LICENSE("GPL v2");
