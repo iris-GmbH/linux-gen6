@@ -13,12 +13,18 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
-#define DRV_NAME        "gen6_cont_nocached_memory"
+#define DRV_NAME "gen6_memory"
+
+enum MEMORY_MODE {
+	MODE_DEFAULT = 0,
+	MODE_DMA = 1,
+};
 
 struct cont_mem_dev_data {
 	struct list_head list;
 	struct resource r;
 	struct miscdevice misc_device;
+	enum MEMORY_MODE mode;
 };
 
 static struct list_head dev_datas = LIST_HEAD_INIT(dev_datas);
@@ -27,7 +33,6 @@ struct ioctl_info {
 	unsigned long baseAddr;
 	unsigned long size;
 };
-
 
 static int cont_mem_mmap(struct file *file, struct vm_area_struct *vma)
 {
@@ -52,12 +57,20 @@ static int cont_mem_mmap(struct file *file, struct vm_area_struct *vma)
 		return -ENOMEM;
 	}
 
-	if (remap_pfn_range(vma, vma->vm_start,
-			dd->r.start >> PAGE_SHIFT,
-			size, pgprot_dmacoherent(PAGE_SHARED)))
-	{
-	     printk("remap page range failed\n");
-	     return -ENXIO;
+	if (dd->mode == MODE_DEFAULT) {
+		if (remap_pfn_range(vma, vma->vm_start,
+			dd->r.start >> PAGE_SHIFT, size, pgprot_dmacoherent(PAGE_SHARED)))
+		{
+		     printk("remap page range failed\n");
+		     return -ENXIO;
+		}
+	} else if (dd->mode == MODE_DMA) {
+		if (remap_pfn_range(vma, vma->vm_start,
+			dd->r.start >> PAGE_SHIFT, size, PAGE_SHARED))
+		{
+		     printk("remap page range failed\n");
+		     return -ENXIO;
+		}
 	}
 	return 0;
 }
@@ -66,7 +79,7 @@ static long cont_mem_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 {
 	int ret = 0;
 	switch (cmd) {
-	case 0:
+	case 0: /* get memory region base and size */
 	{
 		struct list_head* position;
 		list_for_each (position , &dev_datas) {
@@ -98,7 +111,9 @@ static const struct file_operations cont_memory_fops = {
 static int cont_mem_remove(struct platform_device *pdev);
 static int cont_mem_probe(struct platform_device *pdev);
 static const struct of_device_id cap_match[] = {
-	{ .compatible = "iris,gen6-cont-dma-memory", }, {},
+	{ .compatible = "iris,gen6-cont-memory", .data = (void *) MODE_DEFAULT, },
+	{ .compatible = "iris,gen6-cont-dma-memory", .data = (void *) MODE_DMA, },
+	{},
 };
 MODULE_DEVICE_TABLE(of, cap_match);
 static struct platform_driver cont_mem_driver = {
@@ -113,15 +128,21 @@ module_platform_driver(cont_mem_driver);
 
 static int cont_mem_probe(struct platform_device *pdev)
 {
+	const struct of_device_id *match;
 	struct device *dev = &pdev->dev;
 	struct device_node* np;
-	int ret;
+	enum MEMORY_MODE mem_mode;
+	int ret = 0;
 	int num_regions = 0;
 
-	if (!of_match_device(cap_match, &pdev->dev)) {
+	match = of_match_device(cap_match, &pdev->dev);
+	if (!match) {
 		dev_err(dev, "failed to matching of_match node\n");
 		return -ENODEV;
 	}
+
+	mem_mode = (enum MEMORY_MODE) match->data;
+
 	while (1) {
 		int subRet = 0;
 		struct cont_mem_dev_data* dd;
@@ -135,6 +156,7 @@ static int cont_mem_probe(struct platform_device *pdev)
 			dev_err(dev, "cannot allocate device data\n");
 			return -ENOMEM;
 		}
+		dd->mode = mem_mode;
 		subRet = of_address_to_resource(np, 0, &dd->r);
 		if (subRet) {
 			devm_kfree(&pdev->dev, dd);
@@ -168,6 +190,6 @@ static int cont_mem_remove(struct platform_device *pdev)
 	return 0;
 }
 
-MODULE_DESCRIPTION("Driver that provides mmapped contiguous nocached memory regions into userspace");
+MODULE_DESCRIPTION("Driver that provides mmapped contiguous memory regions into userspace");
 MODULE_AUTHOR("Lutz Freitag <Lutz.Freitag@irisgmbh.de>");
 MODULE_LICENSE("GPL v2");
