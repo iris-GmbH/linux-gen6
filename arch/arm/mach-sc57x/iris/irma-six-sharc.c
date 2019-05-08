@@ -2,7 +2,6 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
-#include <linux/ioctl.h>
 #include <linux/irq.h>
 #include <linux/irqflags.h>
 #include <linux/miscdevice.h>
@@ -15,7 +14,6 @@
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
-#include <linux/uaccess.h>
 #include <mach/icc.h>
 
 #define DRV_NAME "sharc"
@@ -187,11 +185,6 @@ static const struct file_operations sharc_fops = { .owner = THIS_MODULE,
 						   .write = write,
 						   .poll = poll };
 
-struct sharcDescriptor {
-	char *name;
-	u8 core_id;
-};
-
 static int sharc_remove(struct platform_device *pdev);
 static int sharc_probe(struct platform_device *pdev);
 
@@ -238,12 +231,15 @@ static int sharc_probe(struct platform_device *pdev)
 	init_waitqueue_head(&sharcDevice->poll_waitqueue);
 
 	of_id = of_match_node(cap_match, dev->of_node);
-	if (!of_id)
+	if (!of_id) {
+		devm_kfree(dev, sharcDevice);
 		return -EINVAL;
+	}
 
 	of_property_coreid = of_get_property(dev->of_node, "coreid", NULL);
 	if (!of_property_coreid) {
 		dev_err(dev, "Missing `coreid` property in device tree\n");
+		devm_kfree(dev, sharcDevice);
 		return -ENOENT;
 	}
 
@@ -261,12 +257,14 @@ static int sharc_probe(struct platform_device *pdev)
 	if (devm_request_irq(dev, sharcDevice->irq, sharc_core_irq,
 			     sharcDevice->irq_type, dev->of_node->name, dev)) {
 		dev_err(dev, "unable to attach sharc IRQ\n");
+		devm_kfree(dev, sharcDevice);
 		return -EBUSY;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res == NULL) {
 		dev_err(dev, "Cannot get IORESOURCE_MEM\n");
+		devm_kfree(dev, sharcDevice);
 		return -ENOENT;
 	}
 	sharcDevice->memSize = resource_size(res);
@@ -274,6 +272,7 @@ static int sharc_probe(struct platform_device *pdev)
 						    sharcDevice->memSize);
 	if (!sharcDevice->membase) {
 		dev_err(dev, "Cannot map shared memory\n");
+		devm_kfree(dev, sharcDevice);
 		return -ENOENT;
 	}
 
@@ -284,6 +283,7 @@ static int sharc_probe(struct platform_device *pdev)
 
 	if (0 != ret) {
 		dev_err(dev, "cannot register sharc_misc device\n");
+		devm_kfree(dev, sharcDevice);
 		return ret;
 	}
 
@@ -300,6 +300,7 @@ static int sharc_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct driverInfo *sharcDevice = dev_get_drvdata(dev);
 	free_irq(sharcDevice->irq, dev);
+	misc_deregister(&sharcDevice->misc_device);
 	return 0;
 }
 
