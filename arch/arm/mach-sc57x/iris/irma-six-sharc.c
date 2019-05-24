@@ -220,7 +220,7 @@ static int sharc_probe(struct platform_device *pdev)
 	}
 
 	/* Prepare our private structure */
-	sharcDevice = devm_kzalloc(dev, sizeof(struct driverInfo), GFP_ATOMIC);
+	sharcDevice = devm_kzalloc(dev, sizeof(struct driverInfo), GFP_KERNEL);
 	if (!sharcDevice) {
 		dev_err(dev, "Can't allocate private structure\n");
 		return -ENODEV;
