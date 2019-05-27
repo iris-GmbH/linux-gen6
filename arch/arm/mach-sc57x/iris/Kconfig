@@ -15,7 +15,7 @@ config IRIS_IRMA_SIX_HADC
 	help
 	  Driver for Housekeeping AD Converter (HADC) on sc57x platform. A driver that can get HADC0 values via ioctls.
 
-config IRIS_IRMA_SIX_MEM_HELPER
+config IRIS_GEN6_MEM_HELPER
 	bool "Memory Helper Driver"
 	default y
 	depends on ARCH_SC57X
