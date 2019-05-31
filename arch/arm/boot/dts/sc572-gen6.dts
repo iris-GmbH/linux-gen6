@@ -87,10 +87,6 @@
 		};
 */
 
-		gptimer3: gptimer@0x310180C0 {
-			compatible = "adi,sc57x-timer,aptina-clk";
-		};
-
 /*		spi_0: spi@0x3102E000 {
 			#address-cells = <1>;
 			#size-cells = <0>;
