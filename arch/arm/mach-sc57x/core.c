@@ -205,6 +205,20 @@ static int __init spu_init(void)
 }
 arch_initcall(spu_init);
 
+void __init setup_clock(struct sc57x_gptimer *timer, u_long freq)
+{
+	int id = timer->id;
+	uint32_t period = (uint32_t) get_sclk()/freq;
+	uint32_t pwidth = (period >> 1);
+	disable_gptimers(1 << id);
+	set_gptimer_config(timer, TIMER_MODE_PWM_CONT | TIMER_PULSE_HI | TIMER_IRQ_PER);
+	set_gptimer_period(timer, period);
+	set_gptimer_pwidth(timer, pwidth);
+	pr_info("Setup clock-%d to %luMHz, (sclk: %luMHz, period: %u, pwidth: %u)\n",
+		id, freq/1000000, get_sclk()/1000000, period, pwidth);
+	enable_gptimers(1 << id);
+}
+
 void __init setup_gptimer(struct sc57x_gptimer *timer)
 {
 	int id = timer->id;

@@ -20,4 +20,6 @@ extern void sc57x_timer_init(void);
 extern struct sc57x_gptimer *sc57x_timer_of_init(struct device_node *node);
 extern void sc57x_restart(enum reboot_mode, const char *);
 extern void sc57x_clock_init(void);
+extern void __init setup_clock(struct sc57x_gptimer *timer, u_long freq);
+
 #endif
