@@ -33,8 +33,6 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 
-#include <linux/gpio/consumer.h>
-
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -1077,7 +1075,6 @@ static int epc660_probe(struct platform_device *pdev)
 	struct imager_route *route;
 	struct of_device_id const* match;
 	struct device *dev = &pdev->dev;
-	struct gpio_desc *gpio;
 	int ret;
 
 	match = of_match_device(cap_match, &pdev->dev);
@@ -1204,12 +1201,7 @@ static int epc660_probe(struct platform_device *pdev)
 	epc660_dev->cfg.board_info.addr = 0x22;
 	epc660_dev->cfg.board_info.platform_data = NULL;
 
-	gpio = gpiod_get(dev, "nrst", GPIOD_OUT_HIGH);
-	if (IS_ERR(gpio)) {
-		v4l2_err(&epc660_dev->v4l2_dev, "Unable to get nrst gpio\n");
-		goto err_free_handler;
-	}
-	epc660_dev->cfg.board_info.platform_data = gpio;
+	epc660_dev->cfg.board_info.platform_data = pdev;
 
 	epc660_dev->sd = v4l2_i2c_new_subdev_board(&epc660_dev->v4l2_dev,
 						 i2c_adap,

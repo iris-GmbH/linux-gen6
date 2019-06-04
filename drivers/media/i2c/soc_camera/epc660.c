@@ -25,6 +25,7 @@
 
 #include <asm/uaccess.h>
 
+#include <linux/platform_device.h>
 #include <linux/gpio/consumer.h>
 
 /*
@@ -594,6 +595,7 @@ static int epc660_probe(struct i2c_client *client,
 	struct epc660 *epc660;
 	struct i2c_adapter *adapter = to_i2c_adapter(client->dev.parent);
 	int ret;
+	struct platform_device *v4l_pdev = (struct platform_device *)client->dev.platform_data;
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_WORD_DATA)) {
 		dev_warn(&adapter->dev,
@@ -621,11 +623,12 @@ static int epc660_probe(struct i2c_client *client,
 	epc660->rect.height	= EPC660_MAX_HEIGHT;
 
 	epc660->clk = 0;
-
-	epc660->nrst_gpio = (struct gpio_desc*)client->dev.platform_data;
+	
+	epc660->nrst_gpio = devm_gpiod_get(&v4l_pdev->dev, "nrst", GPIOD_OUT_LOW);
 	if (IS_ERR(epc660->nrst_gpio)) {
-		dev_err(&client->dev, "need to specify an nrst gpio! %d %s\n", (int)(epc660->nrst_gpio), client->dev.init_name);
-		return -EINVAL;
+		dev_err(&client->dev, "failed to get nrst-gpios: err=%ld\n",
+					PTR_ERR(epc660->nrst_gpio));
+		return PTR_ERR(epc660->nrst_gpio);
 	}
 
 	ret = epc660_reset(&epc660->subdev, 0);
