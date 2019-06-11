@@ -22,6 +22,12 @@ config IRIS_GEN6_MEM_HELPER
 	help
 	  Memory Helper Driver that allows mmapping of a reserved contiguous memory region at the beginning of RAM to the userspace devices. Supports multiple contiguous regions to map the beginning of the RAM as well as the non-icc-part of the L2.
 
+config IRIS_CACHE_CONTROL
+	bool "Cache Control Driver"
+	default y
+	help
+	  Cache Control driver that provides an ioctl to invalidate and flush any given memory range
+
 config IRIS_IRMA_SIX_SHARC
 	bool "synchronize to SHARC cores"
 	default y
