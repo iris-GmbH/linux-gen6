@@ -68,6 +68,10 @@
 			interrupts = <0 203 1>;
 		};
 
+		cache_flush {
+			compatible = "iris,cachecontrol-flush";
+		};
+
 /*		
 		uart2: uart@0x31003800 {
 			compatible = "arm,adi-uart4";
