@@ -18,7 +18,7 @@
 //#include <sound/sc5xx-dai.h>
 //#include <sound/sc5xx-sru.h>
 
-#include "core.h"
+#include <mach/core.h>
 
 #if IS_ENABLED(CONFIG_SND_SC5XX_SPORT)
 void sru_init(void)

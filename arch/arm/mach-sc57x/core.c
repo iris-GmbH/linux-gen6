@@ -42,8 +42,7 @@
 #include <mach/irqs.h>
 #include <mach/clkdev.h>
 #include <mach/sec.h>
-
-#include "core.h"
+#include <mach/core.h>
 
 #define TIMER_CLOCKSOURCE 1
 #define TIMER_CLOCKEVENT  0
