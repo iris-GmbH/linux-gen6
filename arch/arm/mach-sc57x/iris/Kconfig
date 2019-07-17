@@ -49,4 +49,11 @@ config IRIS_IRMA_SIX_HWREVISION
 	help
 	  Driver that provides the HW-Revision Pins (DAI Pin0..Pin4).
 
+config IMAGER_CLOCK
+	bool "setup imager clock frequency"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Driver that read the imager clock frequency from eeprom and setup the imager clock.
+
 endmenu
