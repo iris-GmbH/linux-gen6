@@ -92,7 +92,7 @@ static ssize_t tmu_read(struct file *entity, char __user *user,
 		printk( "tmu_read: put_user failed\n");
 		return -EFAULT;
 	}
-	return temperatureQ7_8;
+	return sizeof(temperatureQ7_8);
 }
 
 #ifdef EnableIR
