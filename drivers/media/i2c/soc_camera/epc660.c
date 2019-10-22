@@ -188,6 +188,8 @@ static int epc660_send_i2c_sequence(struct i2c_client *client,
 			goto fail;
 		}
 		i += len;
+        // Frontend detection is faulty. The sensor goes into reset if SDA is low for too long.
+        usleep_range(1500, 2000);
 	}
 
 	return 0;
