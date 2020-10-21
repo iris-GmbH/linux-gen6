@@ -183,8 +183,8 @@ static int epc660_send_i2c_sequence(struct i2c_client *client,
 		if (ret < 0) {
 			printk(KERN_ERR
 			      "EPC660 Failed to send I2C sequence "
-				  "with length 0x%02x at offset %04x\n",
-		          len, i);
+				  "with length 0x%02x at offset %04x: error %i\n",
+		          len, i, ret);
 			goto fail;
 		}
 		i += len;
