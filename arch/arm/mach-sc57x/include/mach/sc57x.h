@@ -145,18 +145,20 @@
 /* =========================
         TRU0
    ========================= */
-#define REG_TRU0_SSR71                  0x3108A118         /* TRU0 Slave Select Register */
-#define REG_TRU0_SSR75                  0x3108A128         /* TRU0 Slave Select Register */
-#define REG_TRU0_SSR79                  0x3108A138         /* TRU0 Slave Select Register */
+#define REG_TRU0_SSR68                  0x3108A110         /* TRU0 Slave Select Register */
+#define REG_TRU0_SSR69                  0x3108A114         /* TRU0 Slave Select Register */
+#define REG_TRU0_SSR72                  0x3108A120         /* TRU0 Slave Select Register */
+#define REG_TRU0_SSR76                  0x3108A130         /* TRU0 Slave Select Register */
 #define REG_TRU0_MTR                    0x3108A7E0         /* TRU0 Master Trigger Register */
 #define REG_TRU0_GCTL                   0x3108A7F4         /* TRU0 Global Control Register */
 
 /* ===================================
        Trigger Master Definitions
    =================================== */
-#define TRGM_SOFT0                            70           /* Software-driven Trigger 0 */
-#define TRGM_SOFT1                            71           /* Software-driven Trigger 1 */
-#define TRGM_SOFT2                            72           /* Software-driven Trigger 2 */
+#define TRGM_SOFT0                            67           /* Software-driven Trigger 0 */
+#define TRGM_SOFT1                            68           /* Software-driven Trigger 1 */
+#define TRGM_SOFT2                            69           /* Software-driven Trigger 2 */
+#define TRGM_SOFT3                            70           /* Software-driven Trigger 2 */
 
 /* =========================
         RCU0
@@ -184,6 +186,7 @@
 #define BITM_PADS_PCFG0_EMACPHYISEL     0x00000018         /* Bitmask of selecting PHY Interface RGMII/RMII/MII */
 #define BITP_PADS_PCFG0_EMACPHYISEL     0x3                /* Position of selecting PHY Interface RGMII/RMII/MII */
 #define BITM_PADS_PCFG0_EMACRESET       0x00000004         /* Bitmask of reseting enable for RGMII */
+#define PADS_PCFG_EMACRMII		0x10		   /* Set EMAC to RMII mode */
 
 /* =========================
         LP0
@@ -194,3 +197,67 @@
         LP1
    ========================= */
 #define LP1_CTL                     0x30FFE100 /* LP1 Control Register */
+
+/* =========================
+        EPPI
+   ========================= */
+#define EPPI0_CTL                   0x3102D020 /* EPPI0 Control Register */
+
+/* =========================
+        HADC0
+   ========================= */
+#define HADC0_CTL                   0x31016000
+#define HADC0_CHAN_MSK              0x31016004
+#define HADC0_IMSK                  0x31016008
+#define HADC0_STAT					0x3101600C
+#define HADC0_DATA0                 0x31016010
+#define HADC0_DATA1                 0x31016014
+#define HADC0_DATA2                 0x31016018
+#define HADC0_DATA3                 0x3101601C
+#define HADC0_DATA4                 0x31016020
+#define HADC0_DATA5                 0x31016024
+#define HADC0_DATA6                 0x31016028
+#define HADC0_DATA7                 0x3101602C
+#if 0 //not available
+#define HADC0_DATA8                 0x31016030
+#define HADC0_DATA9                 0x31016034
+#define HADC0_DATA10                0x31016038
+#define HADC0_DATA11                0x3101603C
+#define HADC0_DATA12				0x31016040
+#define HADC0_DATA13                0x31016044
+#define HADC0_DATA14                0x31016048
+#define HADC0_DATA15                0x3101604C
+#endif
+
+/* =========================
+        TMU0 (Thermal monitoring unit)
+   ========================= */
+#define REG_TMU0_BASE_ADDRESS                0x31016800            /*   */
+#define REG_TMU0_CTL                         0x31016800            /*  TMU0 TMU Control Register */
+#define REG_TMU0_TEMP                        0x31016804            /*  TMU0 Temperature Value Register */
+#define REG_TMU0_AVG                         0x31016808            /*  TMU0 Averaging Register */
+#define REG_TMU0_FLT_LIM_HI                  0x3101680C            /*  TMU0 Fault High Limit Register */
+#define REG_TMU0_ALRT_LIM_HI                 0x31016810            /*  TMU0 Alert High Limit Register */
+#define REG_TMU0_FLT_LIM_LO                  0x31016814            /*  TMU0 Fault Low Limit Register */
+#define REG_TMU0_ALRT_LIM_LO                 0x31016818            /*  TMU0 Alert Low Limit Register */
+#define REG_TMU0_STAT                        0x3101681C            /*  TMU0 Status Register */
+#define REG_TMU0_GAIN                        0x31016824            /*  TMU0 Gain Value Register */
+#define REG_TMU0_IMSK                        0x31016828            /*  TMU0 Interrupt Mask Register */
+#define REG_TMU0_OFFSET                      0x3101682C            /*  TMU0 Offset Register */
+#define REG_TMU0_CNV_BLANK                   0x31016834            /*  TMU0 Temperature Conversion Blank Register */
+#define REG_TMU0_REFR_CNTR                   0x31016838            /*  TMU0 Temperature Refresh Counter */
+
+//register position from Base address
+#define REGP_TMU0_CTL                         0
+#define REGP_TMU0_TEMP                        1
+#define REGP_TMU0_AVG                         2
+#define REGP_TMU0_FLT_LIM_HI                  3
+#define REGP_TMU0_ALRT_LIM_HI                 4
+#define REGP_TMU0_FLT_LIM_LO                  5
+#define REGP_TMU0_ALRT_LIM_LO                 6
+#define REGP_TMU0_STAT                        7
+#define REGP_TMU0_GAIN                        8
+#define REGP_TMU0_IMSK                        9
+#define REGP_TMU0_OFFSET                      10
+#define REGP_TMU0_CNV_BLANK                   11
+#define REGP_TMU0_REFR_CNTR                   12
