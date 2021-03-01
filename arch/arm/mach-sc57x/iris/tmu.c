@@ -2,6 +2,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
+#include <linux/mod_devicetable.h>
 #include <asm/io.h> /* ioremap */
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>

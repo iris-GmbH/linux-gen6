@@ -413,7 +413,7 @@ static const struct adi_pin_group adi_pin_groups[] = {
 	ADI_PIN_GROUP("uart1_hwflowgrp", uart1_hwflow_pins, uart1_hwflow_mux),
 	ADI_PIN_GROUP("uart2grp", uart2_pins, uart2_mux),
 	ADI_PIN_GROUP("uart2_hwflowgrp", uart2_hwflow_pins, uart2_hwflow_mux),
-	ADI_PIN_GROUP("eth0grp", eth0_pins, eth0_mux)
+	ADI_PIN_GROUP("eth0grp", eth0_pins, eth0_mux),
 	ADI_PIN_GROUP("eth0rmiigrp", eth0_rmii_pins, eth0_rmii_mux),
 	ADI_PIN_GROUP("eth0ptpgrp", eth0_ptp_pins, eth0_ptp_mux),
 	ADI_PIN_GROUP("spi0grp", spi0_pins, spi0_mux),

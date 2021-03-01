@@ -409,7 +409,7 @@ static void sc57x_init_ethernet(void)
 		pcfg0 = readl(__io_address(REG_PADS0_PCFG0));
 		pcfg0 &= 0xfffdffe0;	// reset all emac settings
 		pcfg0 |= PADS_PCFG_EMACRMII;
-		pcfg0 |= PADS_PCFG_EMACNORESET;
+		pcfg0 |= BITM_PADS_PCFG0_EMACRESET;
 		writel(pcfg0, __io_address(REG_PADS0_PCFG0));
 	}
 }
