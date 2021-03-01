@@ -55,6 +55,8 @@ obj-y					+= stm32/
 
 obj-y                                   += adi/
 
++obj-y                                  += iris-gen6/
+
 obj-y					+= davinci/
 
 obj-$(CONFIG_VIDEO_SH_VOU)		+= sh_vou.o
