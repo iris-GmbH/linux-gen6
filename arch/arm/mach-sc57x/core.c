@@ -400,16 +400,17 @@ static int sc57x_dp83865_fixup(struct phy_device *phydev)
 
 static void sc57x_init_ethernet(void)
 {
-	if (IS_BUILTIN(CONFIG_PHYLIB)) {
-		/* select RGMII as the external PHY interface for EMAC0 */
-		writel((readl(__io_address(REG_PADS0_PCFG0)) &
-		     (~(BITM_PADS_PCFG0_EMACPHYISEL))), __io_address(REG_PADS0_PCFG0));
-		writel((readl(__io_address(REG_PADS0_PCFG0)) |
-		     (1 << BITP_PADS_PCFG0_EMACPHYISEL) | BITM_PADS_PCFG0_EMACRESET),
-		     __io_address(REG_PADS0_PCFG0));
-		/* register a fixup to be run for PHY DP83865 */
-		phy_register_fixup_for_uid(DP83865_PHY_ID, 0xffffffff,
-				sc57x_dp83865_fixup);
+    u64 pcfg0;
+    if (IS_BUILTIN(CONFIG_PHYLIB)) {
+		// De-assert the external reset to enable the PHY
+		writel(0x04, __io_address(REG_RCU0_CTL));
+
+		// Set EMAC0 to RMII
+		pcfg0 = readl(__io_address(REG_PADS0_PCFG0));
+		pcfg0 &= 0xfffdffe0;	// reset all emac settings
+		pcfg0 |= PADS_PCFG_EMACRMII;
+		pcfg0 |= PADS_PCFG_EMACNORESET;
+		writel(pcfg0, __io_address(REG_PADS0_PCFG0));
 	}
 }
 
@@ -434,8 +435,8 @@ void __init sc57x_init(void)
 
 	pr_info("%s: registering device resources\n", __func__);
 
-	sec_init(__io_address(SEC_COMMON_BASE), __io_address(SEC_SCI_BASE),
-			__io_address(SEC_SSI_BASE));
+	/* sec_init(__io_address(SEC_COMMON_BASE), __io_address(SEC_SCI_BASE),
+			__io_address(SEC_SSI_BASE)); */
 #ifdef CONFIG_OF
 	of_platform_populate(NULL, sc57x_of_bus_ids,
 				sc57x_auxdata_lookup, NULL);
@@ -605,7 +606,7 @@ static void __init gptmr_clockevent_init(struct clock_event_device *evt)
 	clockevents_register_device(evt);
 }
 
-static struct sc57x_gptimer *sc57x_timer_of_init(struct device_node *node)
+struct sc57x_gptimer *sc57x_timer_of_init(struct device_node *node)
 {
 	void __iomem *base;
 	int irq;
