@@ -86,7 +86,19 @@ if [ $(words $(UIMAGE_LOADADDR)) -ne 1 ]; then \
 	false; \
 fi
 
-$(obj)/uImage:	$(obj)/zImage FORCE
+$(obj)/Image.gz: $(obj)/Image FORCE
+	$(call if_changed,gzip)
+
+$(obj)/uImage-gzip: $(obj)/Image.gz FORCE
+	@$(check_for_multiple_loadaddr)
+	$(call if_changed,uimage,gzip)
+
+$(obj)/uImage:	$(obj)/Image FORCE
+	@$(check_for_multiple_loadaddr)
+	$(call if_changed,uimage)
+
+$(obj)/uImage-dtb.%: $(obj)/Image-dtb.% FORCE
+	echo $@
 	@$(check_for_multiple_loadaddr)
 	$(call if_changed,uimage)
 
