@@ -885,6 +885,8 @@ dtb-$(CONFIG_ARCH_S5PV210) += \
 	s5pv210-smdkc110.dtb \
 	s5pv210-smdkv210.dtb \
 	s5pv210-torbreck.dtb
+dtb-$(CONFIG_MACH_SC572_GEN6) += sc572-gen6.dtb
+dtb-$(CONFIG_MACH_SC573_GEN6) += sc573-gen6.dtb
 dtb-$(CONFIG_ARCH_SOCFPGA) += \
 	socfpga_arria5_socdk.dtb \
 	socfpga_arria10_socdk_nand.dtb \
