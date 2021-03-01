@@ -13,6 +13,12 @@ config	MACH_SC573_EZKIT
 	  Say 'Y' here if you want your kernel to run on the ADI
 	  SC573-EZKIT board.
 
+config	MACH_SC572_GEN6
+	bool "ADI sc572 on iris Gen6 board"
+
+config	MACH_SC573_GEN6
+	bool "ADI sc573 on iris Gen6 board"
+
 endchoice
 
 config ARCH_SC57X_SLAVECORE_COUNT
@@ -86,3 +92,5 @@ config MACH_SC57X_DT
 	  discovery. Note: This is under development and not all peripherals
 	  can be supported with this machine file
 endmenu
+
+source "arch/arm/mach-sc57x/iris/Kconfig"

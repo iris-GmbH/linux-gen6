@@ -1,0 +1,52 @@
+config IRIS_CUSTOM_DRIVERS
+	bool "Driver for device discovery for Iris irma-six platform"
+	default n
+	help
+	  Custom drivers for devices produced by Iris GmbH.
+
+
+menu "Iris Custom Drivers"
+	depends on IRIS_CUSTOM_DRIVERS
+
+config IRIS_IRMA_SIX_HADC
+	bool "HADC (Housekeeping AD Converter)"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Driver for Housekeeping AD Converter (HADC) on sc57x platform. A driver that can get HADC0 values via ioctls.
+
+config IRIS_GEN6_MEM_HELPER
+	bool "Memory Helper Driver"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Memory Helper Driver that allows mmapping of a reserved contiguous memory region at the beginning of RAM to the userspace devices. Supports multiple contiguous regions to map the beginning of the RAM as well as the non-icc-part of the L2.
+
+config IRIS_CACHE_CONTROL
+	bool "Cache Control Driver"
+	default y
+	help
+	  Cache Control driver that provides an ioctl to invalidate and flush any given memory range
+
+config IRIS_IRMA_SIX_SHARC
+	bool "synchronize to SHARC cores"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Driver that provides synchronized read and write access to the SHARC cores. It also allows polling.
+
+config IRIS_IRMA_SIX_TMU
+	bool "TMU (Thermal monitoring unit)"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Driver that provides the processor temperature on sc57x platform (via tmu).
+
+config IRIS_IRMA_SIX_HWREVISION
+	bool "HW-Revision Pins"
+	default y
+	depends on ARCH_SC57X
+	help
+	  Driver that provides the HW-Revision Pins (DAI Pin0..Pin4).
+
+endmenu
