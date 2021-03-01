@@ -155,6 +155,11 @@ static void adi_twi_handle_interrupt(struct adi_twi_iface *iface,
 			(twi_int_status & MCOMP) && (mast_stat & DNAK))
 			iface->result = 1;
 
+		/* set mode back to STANDARD to leave no trace of the
+		 * failed operation. Registers will be set elsewhere
+		 * (in the transfer setup functions)
+		 */
+		iface->cur_mode = TWI_I2C_MODE_STANDARD;
 		complete(&iface->complete);
 		return;
 	}
