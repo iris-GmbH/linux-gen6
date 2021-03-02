@@ -1,6 +1,8 @@
 /*
  * machine start entries for ADI processor on-chip memory
  *
+ * Copyright 2021 iris GmbH
+ *
  * Copyright 2014 - 2018 Analog Devices Inc.
  *
  * Licensed under the GPL-2 or later.
@@ -217,7 +219,7 @@ DT_MACHINE_START(SC57X_DT, "SC57x-GEN6 (Device Tree Support)")
 	.init_time	= sc57x_timer_init,
 	.init_machine	= sc57x_init,
 	.dt_compat	= sc57x_dt_board_compat,
-	.restart        = sc57x_restart,
+	.restart        = sc57x_ezkit_restart,
 MACHINE_END
 
 #else
