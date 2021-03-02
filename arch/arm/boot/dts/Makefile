@@ -1215,4 +1215,6 @@ dtb-$(CONFIG_ARCH_SC58X) += \
 	sc589-ezkit.dtb \
 	sc584-ezkit.dtb
 dtb-$(CONFIG_ARCH_SC57X) += \
-    sc573-ezkit.dtb
+    sc573-ezkit.dtb \
+    sc572-gen6.dtb \
+    sc573-gen6.dtb

@@ -9,7 +9,7 @@
 
 /dts-v1/;
 
-/include/ "sc57x.dtsi"
+#include "sc57x.dtsi"
 
 / {
 	model = "ADI sc57x-gen6";
@@ -88,15 +88,15 @@
 
 		i2c0: twi@0x31001400 {
 			status = "okay";
-		}
+		};
 
 		i2c1: twi@0x31001500 {
 			status = "okay";
-		}
+		};
 
 		i2c2: twi@0x31001600 {
 			status = "okay";
-		}
+		};
 
 		tmu@0x31016800 {
 			compatible = "adi,sc57x-tmu";
@@ -116,7 +116,7 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&eth0_default>;
 			status = "okay";
-		}
+		};
 
 		spi1: spi@0x3102F000 {
 			#address-cells = <1>;
