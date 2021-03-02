@@ -83,6 +83,9 @@
 		};
 
 		uart0: uart@0x31003000 {
+			pinctrl-names = "default", "hwflow";
+			pinctrl-0 = <&uart0_default>;
+			pinctrl-1 = <&uart0_hwflow>;
 			status = "okay";
 		};
 
