@@ -76,6 +76,9 @@
 		};
 
 		uart0: uart@0x31003000 {
+			pinctrl-names = "default", "hwflow";
+			pinctrl-0 = <&uart0_default>;
+			pinctrl-1 = <&uart0_hwflow>;
 			status = "okay";
 		};
 
@@ -96,7 +99,7 @@
 			reg = <0x31016800 0x3C>; 
 			interrupt-parent = <&gic>;
 			interrupts =	<0 7 0>, /* TMU0_FAULT */
-							<0 8 0>; /* TMU0_ALERT */
+					<0 8 0>; /* TMU0_ALERT */
 		};
 
 		emac0: ethernet@0x3100C000 {
@@ -112,13 +115,6 @@
 		};
 
 		spi1: spi@0x3102F000 {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			compatible = "adi,spi3";
-			reg = <0x3102F000 0xFF>;
-			interrupts = <0 105 0>;
-			num-cs = <128>;
-			dma-channel = <24>, <25>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&spi1_default>;
 			status = "okay";
@@ -133,13 +129,6 @@
 		};
 
 		spi2: spi@0x31044000 {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			compatible = "adi,spi3";
-			reg = <0x31044000 0xFF>;
-			interrupts = <0 71 0>;
-			num-cs = <128>;
-			dma-channel = <26>, <27>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&spi2_quad>;
 			status = "okay";
@@ -180,15 +169,8 @@
 		};
 
 		mmc0: mmc@0x31010000 {
-			compatible = "adi,mmc";
-			#address-cells = <1>;
-			#size-cells = <0>;
-			reg = <0x31010000 0xFF>;
-			interrupts = <0 123 0>;
-			spu_securep_id = <41>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&mmc0_default>;
-			fifo-depth = <1024>;
 			bus-width = <4>;
 			non-removable;
 			no-1-8-v;
@@ -196,16 +178,6 @@
 		};
 
 		pinctrl@0 {
-			uart {
-				uart1_default: uart1@0 {
-					adi,group = "uart1grp";
-					adi,function = "uart1";
-				};
-				uart1_hwflow: uart1@1 {
-					adi,group = "uart1_hwflowgrp";
-					adi,function = "uart1";
-				};
-			};
 			mmc {
 				mmc0_default: mmc0@0 {
 					adi,group = "mmc0f4bgrp";
@@ -219,11 +191,11 @@
 				};
 			};
 			ppi {
-				ppi0_10b: ppi0@3 {
+				ppi0_10b: ppi0@2 {
 					adi,group = "ppi0_10bgrp";
 					adi,function = "ppi0";
 				};
-				ppi0_12b: ppi0@4 {
+				ppi0_12b: ppi0@3 {
 					adi,group = "ppi0_12bgrp";
 					adi,function = "ppi0";
 				};
