@@ -22,9 +22,9 @@ void __init setup_aptina_clock(struct sc57x_gptimer *timer)
 	enable_gptimers(1 << id);
 }
 
-static cycle_t read_aptina_clock(struct clocksource *cs)
+static u64 read_aptina_clock(struct clocksource *cs)
 {
-	return (cycle_t)get_gptimer_count(aptina_clock);
+	return (u64)get_gptimer_count(aptina_clock);
 }
 
 static struct clocksource aptina_gptimer = {
