@@ -64,7 +64,7 @@
 			reg = <0x20000000 0x0800>;
 			coreid = <1>;
 			interrupt-parent = <&gic>;
-			interrupts = <0 203 1>;
+			interrupts = <GIC_SPI 203 IRQ_TYPE_EDGE_RISING>;
 		};
 
 		cache_flush {
@@ -98,8 +98,8 @@
 			compatible = "adi,sc57x-tmu";
 			reg = <0x31016800 0x3C>; 
 			interrupt-parent = <&gic>;
-			interrupts =	<0 7 0>, /* TMU0_FAULT */
-					<0 8 0>; /* TMU0_ALERT */
+			interrupts =	<GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>, /* TMU0_FAULT */
+					<GIC_SPI 8 IRQ_TYPE_LEVEL_HIGH>; /* TMU0_ALERT */
 		};
 
 		emac0: ethernet@0x3100C000 {
@@ -207,7 +207,7 @@
 			card-name = "mt9v022";
 			type = <2>;
 			dma-channel = <28>;
-			interrupts = <0 83 0>;
+			interrupts = <GIC_SPI 83 IRQ_TYPE_LEVEL_HIGH>;
 			reg = <0x3102D000 0xfff>;
 			spu_securep_id = <95>;
 			i2c_bus_id = <0>;
@@ -222,7 +222,7 @@
 			card-name = "epc660";
 			type = <2>;
 			dma-channel = <28>;
-			interrupts = <0 83 0>;
+			interrupts = <GIC_SPI 83 IRQ_TYPE_LEVEL_HIGH>;
 			reg = <0x3102D000 0xfff>;
 			spu_securep_id = <95>;
 			i2c_bus_id = <0>;
