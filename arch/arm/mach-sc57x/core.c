@@ -435,8 +435,8 @@ void __init sc57x_init(void)
 
 	pr_info("%s: registering device resources\n", __func__);
 
-	/* sec_init(__io_address(SEC_COMMON_BASE), __io_address(SEC_SCI_BASE),
-			__io_address(SEC_SSI_BASE)); */
+	sec_init(__io_address(SEC_COMMON_BASE), __io_address(SEC_SCI_BASE),
+			__io_address(SEC_SSI_BASE));
 #ifdef CONFIG_OF
 	of_platform_populate(NULL, sc57x_of_bus_ids,
 				sc57x_auxdata_lookup, NULL);
