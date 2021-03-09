@@ -41,7 +41,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-dma-contig.h>
 #include <media/soc_camera.h>
-#include <media/blackfin/ppi.h>
+#include <media/adi/ppi.h>
 
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
@@ -929,7 +929,7 @@ static int epc660_g_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 
 	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
-	return v4l2_subdev_call(epc660_dev->sd, video, g_parm, a);
+	return v4l2_g_parm_cap(video_devdata(file), epc660_dev->sd, a);
 }
 
 static int epc660_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
@@ -938,7 +938,7 @@ static int epc660_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 
 	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
-	return v4l2_subdev_call(epc660_dev->sd, video, s_parm, a);
+	return v4l2_s_parm_cap(video_devdata(file), epc660_dev->sd, a);
 }
 
 static int epc660_log_status(struct file *file, void *priv)

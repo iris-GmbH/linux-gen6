@@ -39,7 +39,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-dma-contig.h>
 #include <media/soc_camera.h>
-#include <media/blackfin/ppi.h>
+#include <media/adi/ppi.h>
 
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
