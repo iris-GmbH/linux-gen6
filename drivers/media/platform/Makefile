@@ -55,7 +55,7 @@ obj-y					+= stm32/
 
 obj-y                                   += adi/
 
-+obj-y                                  += iris-gen6/
+obj-y                                   += iris-gen6/
 
 obj-y					+= davinci/
 
