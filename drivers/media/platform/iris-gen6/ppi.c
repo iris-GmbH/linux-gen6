@@ -34,7 +34,7 @@
 
 #include <asm/cacheflush.h>
 #include <mach/cpu.h>
-#include <media/blackfin/ppi.h>
+#include <media/adi/ppi.h>
 
 static int ppi_start(struct ppi_if *ppi);
 static int ppi_stop(struct ppi_if *ppi);
@@ -54,7 +54,7 @@ static irqreturn_t ppi_irq_err(int irq, void *dev_id)
 	switch (info->type) {
 	case PPI_TYPE_PPI:
 	{
-		struct bfin_ppi_regs *reg = info->base;
+		struct adi_ppi_regs *reg = info->base;
 		unsigned short status;
 
 		/* register on bf561 is cleared when read 
@@ -70,7 +70,7 @@ static irqreturn_t ppi_irq_err(int irq, void *dev_id)
 	}
 	case PPI_TYPE_EPPI:
 	{
-		struct bfin_eppi_regs *reg = info->base;
+		struct adi_eppi_regs *reg = info->base;
 		unsigned short status;
 
 		status = readw(&reg->status);
@@ -83,7 +83,7 @@ static irqreturn_t ppi_irq_err(int irq, void *dev_id)
 	}
 	case PPI_TYPE_EPPI3:
 	{
-		struct bfin_eppi3_regs *reg = info->base;
+		struct adi_eppi3_regs *reg = info->base;
 		unsigned long stat;
 
 		stat = readl(&reg->stat);
@@ -119,19 +119,19 @@ static int ppi_start(struct ppi_if *ppi)
 	switch (info->type) {
 	case PPI_TYPE_PPI:
 	{
-		struct bfin_ppi_regs *reg = info->base;
+		struct adi_ppi_regs *reg = info->base;
 		writew(ppi->ppi_control, &reg->control);
 		break;
 	}
 	case PPI_TYPE_EPPI:
 	{
-		struct bfin_eppi_regs *reg = info->base;
+		struct adi_eppi_regs *reg = info->base;
 		writel(ppi->ppi_control, &reg->control);
 		break;
 	}
 	case PPI_TYPE_EPPI3:
 	{
-		struct bfin_eppi3_regs *reg = info->base;
+		struct adi_eppi3_regs *reg = info->base;
 		writel(ppi->ppi_control, &reg->ctl);
 		break;
 	}
@@ -152,19 +152,19 @@ static int ppi_stop(struct ppi_if *ppi)
 	switch (info->type) {
 	case PPI_TYPE_PPI:
 	{
-		struct bfin_ppi_regs *reg = info->base;
+		struct adi_ppi_regs *reg = info->base;
 		writew(ppi->ppi_control, &reg->control);
 		break;
 	}
 	case PPI_TYPE_EPPI:
 	{
-		struct bfin_eppi_regs *reg = info->base;
+		struct adi_eppi_regs *reg = info->base;
 		writel(ppi->ppi_control, &reg->control);
 		break;
 	}
 	case PPI_TYPE_EPPI3:
 	{
-		struct bfin_eppi3_regs *reg = info->base;
+		struct adi_eppi3_regs *reg = info->base;
 		writel(ppi->ppi_control, &reg->ctl);
 		break;
 	}
@@ -233,7 +233,7 @@ static int ppi_set_params(struct ppi_if *ppi, struct ppi_params *params)
 	switch (info->type) {
 	case PPI_TYPE_PPI:
 	{
-		struct bfin_ppi_regs *reg = info->base;
+		struct adi_ppi_regs *reg = info->base;
 
 		writew(ppi->ppi_control, &reg->control);
 		writew(samples_per_line - 1, &reg->count);
@@ -242,7 +242,7 @@ static int ppi_set_params(struct ppi_if *ppi, struct ppi_params *params)
 	}
 	case PPI_TYPE_EPPI:
 	{
-		struct bfin_eppi_regs *reg = info->base;
+		struct adi_eppi_regs *reg = info->base;
 
 		writel(ppi->ppi_control, &reg->control);
 		writew(samples_per_line, &reg->line);
@@ -255,7 +255,7 @@ static int ppi_set_params(struct ppi_if *ppi, struct ppi_params *params)
 	}
 	case PPI_TYPE_EPPI3:
 	{
-		struct bfin_eppi3_regs *reg = info->base;
+		struct adi_eppi3_regs *reg = info->base;
 
 		writel(ppi->ppi_control, &reg->ctl);
 		writel(samples_per_line, &reg->line);
