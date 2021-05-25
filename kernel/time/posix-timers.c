@@ -298,9 +298,6 @@ static void common_hrtimer_rearm(struct k_itimer *timr)
 {
 	struct hrtimer *timer = &timr->it.real.timer;
 
-	if (!timr->it_interval)
-		return;
-
 	timr->it_overrun += hrtimer_forward(timer, timer->base->get_time(),
 					    timr->it_interval);
 	hrtimer_restart(timer);
@@ -326,7 +323,7 @@ void posixtimer_rearm(struct siginfo *info)
 	if (!timr)
 		return;
 
-	if (timr->it_requeue_pending == info->si_sys_private) {
+	if (timr->it_interval && timr->it_requeue_pending == info->si_sys_private) {
 		timr->kclock->timer_rearm(timr);
 
 		timr->it_active = 1;
@@ -1175,8 +1172,8 @@ COMPAT_SYSCALL_DEFINE2(clock_adjtime, clockid_t, which_clock,
 
 	err = kc->clock_adj(which_clock, &ktx);
 
-	if (err >= 0)
-		err = compat_put_timex(utp, &ktx);
+	if (err >= 0 && compat_put_timex(utp, &ktx))
+		return -EFAULT;
 
 	return err;
 }
