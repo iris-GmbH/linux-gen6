@@ -700,13 +700,15 @@ err:
 	return ret;
 }
 
+#if 0 /*unused function*/
 static int epc660_querystd(struct file *file, void *priv, v4l2_std_id *std)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
 
 	return v4l2_subdev_call(epc660_dev->sd, video, querystd, std);
 }
-
+#endif
+#if 0 /*unused function*/
 static int epc660_g_std(struct file *file, void *priv, v4l2_std_id *std)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
@@ -714,7 +716,8 @@ static int epc660_g_std(struct file *file, void *priv, v4l2_std_id *std)
 	*std = epc660_dev->std;
 	return 0;
 }
-
+#endif
+#if 0 /*unused function*/
 static int epc660_s_std(struct file *file, void *priv, v4l2_std_id std)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
@@ -730,7 +733,7 @@ static int epc660_s_std(struct file *file, void *priv, v4l2_std_id std)
 	epc660_dev->std = std;
 	return 0;
 }
-
+#endif
 static int epc660_enum_input(struct file *file, void *priv,
 				struct v4l2_input *input)
 {
@@ -750,7 +753,7 @@ static int epc660_enum_input(struct file *file, void *priv,
 		input->status = status;
 	return 0;
 }
-
+#if 0 /*unused function*/
 static int epc660_g_input(struct file *file, void *priv, unsigned int *index)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
@@ -758,7 +761,7 @@ static int epc660_g_input(struct file *file, void *priv, unsigned int *index)
 	*index = epc660_dev->cur_input;
 	return 0;
 }
-
+#endif
 static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
@@ -824,6 +827,7 @@ static int epc660_try_format(struct epc660_device *epc660_dev,
 	return 0;
 }
 
+#if 0 /*unused function*/
 static int epc660_enum_fmt_vid_cap(struct file *file, void  *priv,
 					   struct v4l2_fmtdesc *fmt)
 {
@@ -838,7 +842,8 @@ static int epc660_enum_fmt_vid_cap(struct file *file, void  *priv,
 	fmt->pixelformat = sf[fmt->index].pixelformat;
 	return 0;
 }
-
+#endif
+#if 0 /*unused function*/
 static int epc660_try_fmt_vid_cap(struct file *file, void *priv,
 					struct v4l2_format *fmt)
 {
@@ -847,7 +852,9 @@ static int epc660_try_fmt_vid_cap(struct file *file, void *priv,
 
 	return epc660_try_format(epc660_dev, pixfmt, NULL);
 }
+#endif
 
+/* this function isn't called but necessary for kernel function (v4l2_ioctl_ops) */
 static int epc660_g_fmt_vid_cap(struct file *file, void *priv,
 					struct v4l2_format *fmt)
 {
@@ -910,6 +917,7 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
+#if 0
 static int epc660_querycap(struct file *file, void *priv,
 				   struct v4l2_capability *cap)
 {
@@ -922,7 +930,8 @@ static int epc660_querycap(struct file *file, void *priv,
 	strlcpy(cap->card, epc660_dev->cfg.card_name, sizeof(cap->card));
 	return 0;
 }
-
+#endif
+#if 0 /*unused function*/
 static int epc660_g_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
@@ -931,7 +940,8 @@ static int epc660_g_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 		return -EINVAL;
 	return v4l2_subdev_call(epc660_dev->sd, video, g_parm, a);
 }
-
+#endif
+#if 0 /*unused function*/
 static int epc660_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
@@ -940,7 +950,7 @@ static int epc660_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 		return -EINVAL;
 	return v4l2_subdev_call(epc660_dev->sd, video, s_parm, a);
 }
-
+#endif
 static int epc660_log_status(struct file *file, void *priv)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
@@ -951,27 +961,27 @@ static int epc660_log_status(struct file *file, void *priv)
 
 static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 {
-	.vidioc_querycap         = epc660_querycap,
-	.vidioc_g_fmt_vid_cap    = epc660_g_fmt_vid_cap,
-	.vidioc_enum_fmt_vid_cap = epc660_enum_fmt_vid_cap,
-	.vidioc_s_fmt_vid_cap    = epc660_s_fmt_vid_cap,
-	.vidioc_try_fmt_vid_cap  = epc660_try_fmt_vid_cap,
-	.vidioc_enum_input       = epc660_enum_input,
-	.vidioc_g_input          = epc660_g_input,
-	.vidioc_s_input          = epc660_s_input,
-	.vidioc_querystd         = epc660_querystd,
-	.vidioc_s_std            = epc660_s_std,
-	.vidioc_g_std            = epc660_g_std,
-	.vidioc_reqbufs          = vb2_ioctl_reqbufs,
-	.vidioc_create_bufs      = vb2_ioctl_create_bufs,
-	.vidioc_querybuf         = vb2_ioctl_querybuf,
-	.vidioc_qbuf             = vb2_ioctl_qbuf,
-	.vidioc_dqbuf            = vb2_ioctl_dqbuf,
-	.vidioc_expbuf           = vb2_ioctl_expbuf,
-	.vidioc_streamon         = epc660_streamon,
-	.vidioc_streamoff        = vb2_ioctl_streamoff,
-	.vidioc_g_parm           = epc660_g_parm,
-	.vidioc_s_parm           = epc660_s_parm,
+//	.vidioc_querycap         = epc660_querycap,/* Keine Verwendung */
+	.vidioc_g_fmt_vid_cap    = epc660_g_fmt_vid_cap, /* Keine Verwendung */
+//	.vidioc_enum_fmt_vid_cap = epc660_enum_fmt_vid_cap,/* Keine Verwendung */
+	.vidioc_s_fmt_vid_cap    = epc660_s_fmt_vid_cap, /* Aufruf Start-Phase durch Imager.cpp */
+//	.vidioc_try_fmt_vid_cap  = epc660_try_fmt_vid_cap,/* Keine Verwendung */
+	.vidioc_enum_input       = epc660_enum_input,/* Aufruf Start-Phase durch Imager.cpp */
+//	.vidioc_g_input          = epc660_g_input,/* Keine Verwendung */
+	.vidioc_s_input          = epc660_s_input, /* Aufruf Start-Phase durch Imager.cpp */
+//	.vidioc_querystd         = epc660_querystd,/* Keine Verwendung */
+//	.vidioc_s_std            = epc660_s_std,/* Keine Verwendung */
+//	.vidioc_g_std            = epc660_g_std,/* Keine Verwendung */
+	.vidioc_reqbufs          = vb2_ioctl_reqbufs, /* Aufruf Start-Phase*/
+//	.vidioc_create_bufs      = vb2_ioctl_create_bufs,/* Keine Verwendung */
+	.vidioc_querybuf         = vb2_ioctl_querybuf,/* Kein Aufruf in Imager.cpp, keine Verwendung */
+	.vidioc_qbuf             = vb2_ioctl_qbuf,/* Aufruf in allen drei Phasen */
+	.vidioc_dqbuf            = vb2_ioctl_dqbuf,/* Aufruf in allen drei Phasen */
+//	.vidioc_expbuf           = vb2_ioctl_expbuf,/* Keine Verwendung */
+	.vidioc_streamon         = epc660_streamon, /* Aufruf Start-Phase durch Imager.cpp */
+//	.vidioc_streamoff        = vb2_ioctl_streamoff,/* Keine Verwendung */
+//	.vidioc_g_parm           = epc660_g_parm, /* Keine Verwendung */
+//	.vidioc_s_parm           = epc660_s_parm, /* Keine Verwendung */
 	.vidioc_log_status       = epc660_log_status,
 };
 
