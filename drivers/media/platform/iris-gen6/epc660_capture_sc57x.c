@@ -72,6 +72,7 @@ struct imager_format {
 
 /**
  * @brief Points to memory that is allocated to be reacheable by the dma and holds an array of dma descriptors.
+ * @brief dma_addr_t - Bus address type of allocated DMA buffers
  */ 
 struct imager_dma_desc_list_item {
 	dma_addr_t next_desc_addr;
@@ -163,54 +164,36 @@ struct epc660_device {
 
 /**
  * @brief used to store sensor supported format
+ * @brief corresponding with "static const struct epc660_datafmt epc660_monochrome_fmts[]" in epc660.c @JAHA ToDo: Change this?
  */
 static const struct imager_format epc660_formats[] = {
 	{
-		.desc	     = "12bit Grey Scale",
+		.desc	     = "1DCS_12bpp",
 		.pixelformat = V4L2_PIX_FMT_Y12,
 		.mbus_code   = MEDIA_BUS_FMT_Y12_1X12,
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = 1,
+		.channels    = 1, ///< One picture/plane */
 		.pixel_depth_bytes = 2,
 	},
 	{
-		.desc	     = "2DCS interleaved",
+		.desc	     = "2DCS_12bpp",
 		.pixelformat = v4l2_fourcc('2', 'D', 'C', 'S'),
 		.mbus_code   = MEDIA_BUS_FMT_EPC660_2X12,
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = 2,
+		.channels    = 2, ///< 2 pictures/planes */
 		.pixel_depth_bytes = 4,
 	},
 	{
-		.desc	     = "2DCS + gray interleaved",
-		.pixelformat = v4l2_fourcc('2', 'D', 'C', 'G'),
-		.mbus_code   = MEDIA_BUS_FMT_EPC660_3X12,
-		.bpp	     = 16,
-		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = 3,
-		.pixel_depth_bytes = 8,
-	},
-	{
-		.desc	     = "4DCS interleaved",
+		.desc	     = "4DCS_12bpp",
 		.pixelformat = v4l2_fourcc('4', 'D', 'C', 'S'),
 		.mbus_code   = MEDIA_BUS_FMT_EPC660_4X12,
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = 4,
+		.channels    = 4,   ///< 4 pictures/planes */
 		.pixel_depth_bytes = 8,
 	},
-	{
-		.desc	     = "4DCS + gray interleaved",
-		.pixelformat = v4l2_fourcc('4', 'D', 'C', 'G'),
-		.mbus_code   = MEDIA_BUS_FMT_EPC660_5X12,
-		.bpp	     = 16,
-		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = 5,
-		.pixel_depth_bytes = 16,
-	},
-
 };
 #define MAX_FMTS ARRAY_SIZE(epc660_formats)
 
@@ -320,7 +303,7 @@ static int epc660_queue_setup(struct vb2_queue *vq,
 }
 
 /**
- * @brief template
+ * @brief This function initializes and sets the DMA descriptor list/array for the given vb2-buffer
  * @param *vb - pointer onto allocated buffer
  * @return "0" for OK 
  */
@@ -369,12 +352,12 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 		}
 	}
 	/* copy the descriptor config on the first transfer */
-	buf->dma_desc->cfg |= DESCIDCPY;
+	buf->dma_desc->cfg |= DESCIDCPY; /*<0x02000000>*/
 
 	/* the very last element must be a list element that makes the dma point to the beginning */
 	(dma_desc-1)->next_desc_addr = buf->desc_dma_addr;
 	/* the last transfer shall generate an interrupt */
-	(dma_desc-1)->cfg |= DI_EN_X;
+	(dma_desc-1)->cfg |= DI_EN_X; /*0x00100000*/
 
 	// print the descriptors
 //	dma_desc = buf->dma_desc;
@@ -393,6 +376,11 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	return 0;
 }
 
+/**
+ * @brief This function checks if the given vb2-buffer is correctly dimensioned
+ * @param *vb - pointer onto allocated buffer
+ * @return "0" for OK 
+ */
 static int epc660_buffer_prepare(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
@@ -411,6 +399,11 @@ static int epc660_buffer_prepare(struct vb2_buffer *vb)
 	return 0;
 }
 
+/**
+ * @brief This function adds the given vb2-buffer to the descriptor queue. If the list isn't empty, the last element is added.
+ * @param *vb - pointer onto allocated buffer
+ * @return "0" for OK 
+ */
 static void epc660_buffer_queue(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
@@ -480,12 +473,12 @@ static int epc660_start_streaming(struct vb2_queue *vq, unsigned int count)
 	/* set ppi params */
 	params.width	   = epc660_dev->fmt.width * 2;
 	params.height	   = epc660_dev->fmt.height / 2;
-	params.bpp	   = epc660_dev->bpp;
-	params.dlen 	   = epc660_dev->dlen;
+	params.bpp	       = epc660_dev->bpp; /* 16 */
+	params.dlen 	   = epc660_dev->dlen; /* 12 Bits of the 16 Bits are relevant (data word length)*/
 	params.ppi_control = (EPPI_CTL_DLEN12	   |  /* Data Word Length: 12 bit */
 			      EPPI_CTL_NON656	   |  /* XFRTYPE: Non-ITU656 Mode (GP Mode) */
 			      EPPI_CTL_SYNC2	   |  /* 2 external frame syncs */
-			      EPPI_CTL_FS1LO_FS2LO |  /* FS1 and FS2 are active low */
+			      EPPI_CTL_FS1LO_FS2LO |  /* FS1 and FS2 are active low (FS - frame sync) */
 			      EPPI_CTL_POLC0	   |  /* sample on falling DCLK */
 			      EPPI_CTL_PACKEN	   |  /* assemble two incomming 16Bit words into one 32Bit word (reduces RAM-load a lot) */
 			      EPPI_CTL_SIGNEXT);
@@ -532,15 +525,15 @@ static void epc660_stop_streaming(struct vb2_queue *vq)
 
 static struct vb2_ops epc660_video_qops =
 {
-	.queue_setup            = epc660_queue_setup,
-	.buf_init               = epc660_buffer_init,
-	.buf_prepare            = epc660_buffer_prepare,
-	.buf_cleanup            = epc660_buffer_cleanup,
-	.buf_queue              = epc660_buffer_queue,
-	.wait_prepare           = vb2_ops_wait_prepare,
-	.wait_finish            = vb2_ops_wait_finish,
-	.start_streaming        = epc660_start_streaming,
-	.stop_streaming         = epc660_stop_streaming,
+	.queue_setup            = epc660_queue_setup, /* Call in Startup-Phase */
+	.buf_init               = epc660_buffer_init, /* Call in Startup-Phase */
+	.buf_prepare            = epc660_buffer_prepare,/* Call in all three Phases */
+	.buf_cleanup            = epc660_buffer_cleanup,/* Call in Shutdown-Phase*/
+	.buf_queue              = epc660_buffer_queue, /* Call in all three Phases */
+	.wait_prepare           = vb2_ops_wait_prepare, /* Keine Anwendung */
+	.wait_finish            = vb2_ops_wait_finish, /* Keine Anwendung */
+	.start_streaming        = epc660_start_streaming,/* Call in Startup-Phase */
+	.stop_streaming         = epc660_stop_streaming,/* Call in Shutdown-Phase */
 };
 
 #if 0
@@ -811,7 +804,7 @@ static int epc660_try_format(struct epc660_device *epc660_dev,
 {
 	struct imager_format *sf = epc660_dev->sensor_formats;
 	struct imager_format *fmt = NULL;
-	struct v4l2_subdev_pad_config pad_cfg;
+	struct v4l2_subdev_pad_config pad_cfg;///< see comment in include/media/v4l2-subdev.h
 	struct v4l2_subdev_format format = {
 		.which = V4L2_SUBDEV_FORMAT_TRY,
 	};
