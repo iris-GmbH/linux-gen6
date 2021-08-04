@@ -65,7 +65,7 @@
  * @brief Corresponds with WDSIZE_256 (e.g. with WDSIZE_128, PIXEL_PER_CYCLE is 8)
  */
 #define PIXEL_PER_CYCLE             16
-#define OLD_STUFF                   1
+#define OLD_STUFF                   0
 #define OLD_STUFF_OLD               0
 #define NUMBER_PARTS_IN_DMA_STORAGE 1
 
@@ -326,6 +326,9 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	int i, channel;
 	dma_addr_t start_addr, channelStartAddr, nextDescrDMAAddr;
 	int halfImageSizeBytes, rowSizeBytes;
+    #else
+    int channel;
+    dma_addr_t start_addr, nextDescrDMAAddr;
     #endif /*OLD_STUFF*/
 	struct imager_dma_desc_list_item *dma_desc;
 
@@ -391,6 +394,31 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	(dma_desc-1)->next_desc_addr = buf->desc_dma_addr;
 	/* the last transfer shall generate an interrupt */
 	(dma_desc-1)->cfg |= DI_EN_X; /*0x00100000*/
+
+    #else
+    dmaDescArrCount = epc660_dev->pixel_channels;
+	printk(KERN_INFO "##buffer_init## fmt-width: %d fmt-height: %d pix-dpth: %d\n", epc660_dev->fmt.width, epc660_dev->fmt.height, epc660_dev->pixel_depth_bytes);
+    /* With every call of this function, with a new DMA allocation a new start address is evaluated */
+    start_addr = vb2_dma_contig_plane_dma_addr(vb, 0);
+	dma_desc = buf->dma_desc;
+	nextDescrDMAAddr = buf->desc_dma_addr + sizeof(*dma_desc);
+	for (channel = 0; channel < epc660_dev->pixel_channels; ++channel) {
+        /* ((epc660_dev->bpp + 7) / 8): We want the minimum necessary size of Bytes for a given number of bits.
+        Maximum pixel line length (fmt.width) and the complete line number of one picture (fmt.height): buffer for one channel/plane/picture*/
+    	dma_desc->start_addr = start_addr + channel * ((epc660_dev->bpp + 7) / 8) * epc660_dev->fmt.width * epc660_dev->fmt.height;
+    	printk("##buffer_init##  start_addr %x; channel %d; dma_desc-start_addr: %x; bpp: %d\n", start_addr, channel, dma_desc->start_addr, epc660_dev->bpp );
+		dma_desc->next_desc_addr = nextDescrDMAAddr;
+        dma_desc->cfg = epc660_dev->dma_cfg_template.cfg;
+		++dma_desc;
+    	nextDescrDMAAddr += sizeof(*dma_desc);
+    }
+	/* copy the descriptor config on the first transfer */
+	buf->dma_desc->cfg |= DESCIDCPY; /*<0x02000000>*/
+    /* If channel==1, the next two lines work on the one and only DMA descriptor element and overwrite some for-loop settings*/
+	/* the very last element must be a list element that makes the dma point to the beginning */
+	(dma_desc-1)->next_desc_addr = buf->desc_dma_addr;
+	/* the last transfer shall generate an interrupt */
+	(dma_desc-1)->cfg |= DI_EN_X; /*0x00100000*/
     #endif /* OLD_STUFF */
 
 	// print the descriptors
@@ -451,6 +479,8 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
     #else
 	last_dma_desc_idx = epc660_dev->pixel_channels * NUMBER_PARTS_IN_DMA_STORAGE - 1;
     #endif /* OLD_STUFF_OLD*/
+    #else
+	last_dma_desc_idx = epc660_dev->pixel_channels - 1;
     #endif /*OLD_STUFF*/
     buf->dma_desc[last_dma_desc_idx].next_desc_addr = buf->desc_dma_addr;
 	spin_lock_irqsave(&epc660_dev->lock, flags);
@@ -958,6 +988,9 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
     epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width * (epc660_dev->fmt.height/NUMBER_PARTS_IN_DMA_STORAGE) / PIXEL_PER_CYCLE; ///< The DMA shall throw an interrupt when one line is read into storage
 	epc660_dev->dma_cfg_template.x_modify = epc660_dev->pixel_depth_bytes * PIXEL_PER_CYCLE;// After 32 Bytes = 256 Bit WORDSIZE
 	#endif /*OLD_STUFF_OLD*/
+    #else
+    epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width * (epc660_dev->fmt.height) / PIXEL_PER_CYCLE; ///< The DMA shall throw an interrupt when the whole channel picture is read into storage
+	epc660_dev->dma_cfg_template.x_modify = epc660_dev->pixel_depth_bytes * PIXEL_PER_CYCLE;// After 32 Bytes = 256 Bit WORDSIZE
     #endif /*OLD_STUFF*/
     printk("#### epc660_s_fmt_vid_cap: x_count %ld, x_modify %ld\n", epc660_dev->dma_cfg_template.x_count, epc660_dev->dma_cfg_template.x_modify);
 
@@ -971,6 +1004,8 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
     #else
    	dmaPoolMemorySize = (epc660_dev->pixel_channels * NUMBER_PARTS_IN_DMA_STORAGE) * sizeof(struct imager_dma_desc_list_item);
     #endif /*OLD_STUFF_OLD*/
+    #else
+	dmaPoolMemorySize = (epc660_dev->pixel_channels ) * sizeof(struct imager_dma_desc_list_item);
     #endif /*OLD_STUFF*/
 	epc660_dev->dma_pool = dma_pool_create(CAPTURE_DRV_NAME, epc660_dev->v4l2_dev.dev,  dmaPoolMemorySize, 16, 0);
 	return 0;
