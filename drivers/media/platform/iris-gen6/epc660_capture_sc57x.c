@@ -65,6 +65,7 @@
  * @brief Corresponds with WDSIZE_256 (e.g. with WDSIZE_128, PIXEL_PER_CYCLE is 8)
  */
 #define PIXEL_PER_CYCLE             16
+#define DEBUG                       1
 #define OLD_STUFF                   0
 #define OLD_STUFF_OLD               0
 #define NUMBER_PARTS_IN_DMA_STORAGE 1
@@ -299,6 +300,10 @@ static int epc660_queue_setup(struct vb2_queue *vq,
 {
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vq);
 
+	#if DEBUG
+    printk(KERN_INFO "#### epc660_queue_setup: num_buffers: %d *nbuffers: %d\n", vq->num_buffers, *nbuffers);
+	#endif /*DEBUG*/
+
 	if (vq->num_buffers + *nbuffers < MIN_NUM_BUF)
 		*nbuffers = MIN_NUM_BUF;
 
@@ -332,6 +337,10 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
     #endif /*OLD_STUFF*/
 	struct imager_dma_desc_list_item *dma_desc;
 
+	#if DEBUG
+//	printk(KERN_INFO "#### epc660_buffer_init\n");
+	#endif /*DEBUG*/
+
 	INIT_LIST_HEAD(&buf->list);
 
     /* The DMA-Pool is organized as a list, with each buffer_init a new DMA allocation;
@@ -349,10 +358,12 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	dmaDescArrCount = epc660_dev->pixel_channels * NUMBER_PARTS_IN_DMA_STORAGE;
     #endif /*OLD_STUFF_OLD*/
 
+	printk(KERN_INFO "##buffer_init## pix-chan: %d fmt-height: %d\n", epc660_dev->pixel_channels, epc660_dev->fmt.height);
     /* With every call of this function, with a new DMA allocation a new start address is evaluated */
 	start_addr = vb2_dma_contig_plane_dma_addr(vb, 0);
 	rowSizeBytes       = epc660_dev->fmt.width * epc660_dev->pixel_depth_bytes;
 	halfImageSizeBytes = rowSizeBytes * epc660_dev->fmt.height / 2;
+	printk(KERN_INFO "##buffer_init## fmt-width: %d pix-dpth: %d halfImageSz: %d\n", epc660_dev->fmt.width, epc660_dev->pixel_depth_bytes, halfImageSizeBytes);
 
 	dma_desc = buf->dma_desc;
 	nextDescrDMAAddr = buf->desc_dma_addr + sizeof(*dma_desc);
@@ -397,7 +408,9 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 
     #else
     dmaDescArrCount = epc660_dev->pixel_channels;
+	#if DEBUG
 	printk(KERN_INFO "##buffer_init## fmt-width: %d fmt-height: %d pix-dpth: %d\n", epc660_dev->fmt.width, epc660_dev->fmt.height, epc660_dev->pixel_depth_bytes);
+	#endif /*DEBUG*/
     /* With every call of this function, with a new DMA allocation a new start address is evaluated */
     start_addr = vb2_dma_contig_plane_dma_addr(vb, 0);
 	dma_desc = buf->dma_desc;
@@ -422,19 +435,24 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
     #endif /* OLD_STUFF */
 
 	// print the descriptors
+    #if DEBUG
+    {
+    int i;
 //	dma_desc = buf->dma_desc;
-//	printk("buf->desc_dma_addr %08x\n", buf->desc_dma_addr);
-//	for (i = 0; i < dmaDescArrCount; ++i) {
-//		printk("dma_descriptor %d:"
-//				"\n\t next_desc_addr %x"
-//				"\n\t start_addr %x"
-//				"\n\t cfg %08lx\n",
-//				i,
-//				buf->dma_desc[i].next_desc_addr,
-//				buf->dma_desc[i].start_addr,
-//				buf->dma_desc[i].cfg
-//			);
-//	}
+	printk("buf->desc_dma_addr %08x\n", buf->desc_dma_addr);
+	for (i = 0; i < dmaDescArrCount; ++i) {
+		printk("dma_descriptor %d:"
+				"\n\t next_desc_addr %x"
+				"\n\t start_addr %x"
+				"\n\t cfg %08lx\n",
+				i,
+				buf->dma_desc[i].next_desc_addr,
+				buf->dma_desc[i].start_addr,
+				buf->dma_desc[i].cfg
+			);
+	}
+    }
+	#endif /*DEBUG*/
 	return 0;
 }
 
@@ -448,6 +466,10 @@ static int epc660_buffer_prepare(struct vb2_buffer *vb)
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
 	unsigned long size = epc660_dev->fmt.sizeimage;
+
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_buffer_prepare\n");
+	#endif /*DEBUG*/
 
 	if (vb2_plane_size(vb, 0) < size) {
 		v4l2_err(&epc660_dev->v4l2_dev, "buffer too small (%lu < %lu)\n",
@@ -473,6 +495,10 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
 	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
 	unsigned long flags;
 	int last_dma_desc_idx;
+
+	#if DEBUG
+//	printk(KERN_INFO "#### epc660_buffer_queue\n");
+	#endif /*DEBUG*/
     #if OLD_STUFF 
     #if OLD_STUFF_OLD
 	last_dma_desc_idx = epc660_dev->pixel_channels * epc660_dev->fmt.height - 1;
@@ -483,6 +509,9 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
 	last_dma_desc_idx = epc660_dev->pixel_channels - 1;
     #endif /*OLD_STUFF*/
     buf->dma_desc[last_dma_desc_idx].next_desc_addr = buf->desc_dma_addr;
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_buffer_queue: last_dma_desc_idx: %d desc_dma_addr: %x\n", last_dma_desc_idx, buf->desc_dma_addr);
+	#endif /*DEBUG*/
 	spin_lock_irqsave(&epc660_dev->lock, flags);
 
 	// setup the dma descriptor
@@ -490,9 +519,13 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
 		struct imager_buffer* lastBuffer;
 		lastBuffer = list_last_entry(&epc660_dev->dma_queue, struct imager_buffer, list);
 		lastBuffer->dma_desc[last_dma_desc_idx].next_desc_addr = buf->desc_dma_addr;
+	    #if DEBUG
+    	printk(KERN_INFO "#### epc660_buffer_queue: !list_empty\n");
+    	#endif /*DEBUG*/
 	}
 
 
+	#if DEBUG
 //	{
 //		struct list_head *pos;
 //		int listSize = 0;
@@ -502,7 +535,8 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
 //		}
 //		printk("listsize: %d\n", listSize);
 //	}
-
+	#endif /*DEBUG*/
+    
 	list_add_tail(&buf->list, &epc660_dev->dma_queue);
 
 	spin_unlock_irqrestore(&epc660_dev->lock, flags);
@@ -514,6 +548,10 @@ static void epc660_buffer_cleanup(struct vb2_buffer *vb)
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
 	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
 	unsigned long flags;
+
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_buffer_cleanup\n");
+	#endif /*DEBUG*/
 
 	spin_lock_irqsave(&epc660_dev->lock, flags);
 	list_del_init(&buf->list);
@@ -532,6 +570,10 @@ static int epc660_start_streaming(struct vb2_queue *vq, unsigned int count)
 	struct ppi_if *ppi = epc660_dev->ppi;
 	struct ppi_params params;
 	int ret;
+
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_start_streaming\n");
+	#endif /*DEBUG*/
 
 	/* enable streamon on the sub device */
 	ret = v4l2_subdev_call(epc660_dev->sd, video, s_stream, 1);
@@ -576,6 +618,10 @@ static void epc660_stop_streaming(struct vb2_queue *vq)
 	int ret;
 	unsigned long flags;
 
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_stop_streaming\n");
+	#endif /*DEBUG*/
+
 	spin_lock_irqsave(&epc660_dev->lock, flags);
 	epc660_stop_transfering(epc660_dev);
 
@@ -608,7 +654,7 @@ static struct vb2_ops epc660_video_qops =
 	.stop_streaming         = epc660_stop_streaming,/* Call in Shutdown-Phase */
 };
 
-#if 0
+#if DEBUG
 static void printDMAState(struct epc660_device *epc660_dev)
 {
 	printk("dma config:"
@@ -650,17 +696,26 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 	dma_addr_t lastDmaDescriptor;
 	struct list_head* iterator;
 
+	#if DEBUG
 //	printk("epc660_isr\n");
+//	printk(KERN_INFO "#### epc660_isr\n");
+	#endif /*DEBUG*/
+
 	spin_lock(&epc660_dev->lock);
 
 	dmaStatus = get_dma_curr_irqstat(epc660_dev->dma_channel);
 	clear_dma_irqstat(epc660_dev->dma_channel);
 
+	#if DEBUG
+	printk("## isr ## dmaStatus: 0x%08x\n", dmaStatus);
+	#endif /*DEBUG*/
 	if (dmaStatus & DMA_DONE) {
 		// if there are at least two buffers in the queue we can deque one
 		if (&epc660_dev->dma_queue == epc660_dev->dma_queue.next->next) {
-//			printk("buffer underrun in epc660 capture\n");
+	        #if DEBUG
+			printk("buffer underrun in epc660 capture\n");
 //			epc660_stop_transfering(epc660_dev);
+        	#endif /*DEBUG*/
 		} else {
 			/* publish all buffers that are done */
 			int completedCnt = 0;
@@ -673,14 +728,20 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 					break;
 				}
 			}
-//			printk("lastDmaDescriptor: 0x%08x\n", lastDmaDescriptor);
+           	#if DEBUG
+			printk("lastDmaDescriptor: 0x%08x\n", lastDmaDescriptor);
+           	#endif /*DEBUG*/
 			if (0 == completedCnt) {
 				printk("cannot find any completed buffers!\n");
+            	#if DEBUG
 //				epc660_stop_transfering(epc660_dev);
+            	#endif /*DEBUG*/
 			} else {
 				struct imager_buffer* buf;
 				struct vb2_buffer *vb;
-//				printk("found %d completed buffers\n", completedCnt);
+            	#if DEBUG
+				printk("found %d completed buffers\n", completedCnt);
+            	#endif /*DEBUG*/
 				while (completedCnt--) {
 					if (&epc660_dev->dma_queue == epc660_dev->dma_queue.next->next) {
 						break;
@@ -769,6 +830,10 @@ static int epc660_streamon(struct file *file, void *priv,
 	int ret;
 	struct imager_buffer* buf;
 
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_streamon\n");
+	#endif /*DEBUG*/
+
 	if (vb2_queue_is_busy(epc660_dev->video_dev, file))
 		return -EBUSY;
 
@@ -813,6 +878,9 @@ static int epc660_enum_input(struct file *file, void *priv,
 	int ret;
 	u32 status;
     #endif
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_enum_input\n");
+	#endif /*DEBUG*/
 
 	/* Compare the input value with the value in the driver */
 	if (input->index >= config->num_inputs)
@@ -846,6 +914,9 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
     struct imager_route *route;
 	int ret;
     #endif
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_s_input\n");
+	#endif /*DEBUG*/
 
 	if (vb2_is_busy(vq))
 		return -EBUSY;
@@ -923,6 +994,10 @@ static int epc660_g_fmt_vid_cap(struct file *file, void *priv,
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
 
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_g_fmt_vid_cap\n");
+	#endif /*DEBUG*/
+
 	fmt->fmt.pix = epc660_dev->fmt;
 	return 0;
 }
@@ -944,6 +1019,10 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	struct v4l2_pix_format *pixfmt = &fmt->fmt.pix;
 	int dmaPoolMemorySize;
 	int ret;
+
+	#if DEBUG
+	//printk(KERN_INFO "#### epc660_s_fmt_vid_cap\n");
+	#endif /*DEBUG*/
 
 	if (vb2_is_busy(vq))
 		return -EBUSY;
@@ -992,7 +1071,9 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
     epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width * (epc660_dev->fmt.height) / PIXEL_PER_CYCLE; ///< The DMA shall throw an interrupt when the whole channel picture is read into storage
 	epc660_dev->dma_cfg_template.x_modify = epc660_dev->pixel_depth_bytes * PIXEL_PER_CYCLE;// After 32 Bytes = 256 Bit WORDSIZE
     #endif /*OLD_STUFF*/
+	#if DEBUG
     printk("#### epc660_s_fmt_vid_cap: x_count %ld, x_modify %ld\n", epc660_dev->dma_cfg_template.x_count, epc660_dev->dma_cfg_template.x_modify);
+	#endif /*DEBUG*/
 
 	if (epc660_dev->dma_pool) {
 		dma_pool_destroy(epc660_dev->dma_pool);
@@ -1011,13 +1092,17 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
+#if DEBUG
 static int epc660_log_status(struct file *file, void *priv)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
+	printk(KERN_INFO "#### epc660_log_status\n");
+
 	/* status for sub devices */
 	v4l2_device_call_all(&epc660_dev->v4l2_dev, 0, core, log_status);
 	return 0;
 }
+#endif /*DEBUG*/
 
 static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 {
@@ -1037,6 +1122,10 @@ static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 static int epc660_open(struct file* filp) {
 	int ret;
 	struct epc660_device *epc660_dev = video_drvdata(filp);
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_open\n");
+	#endif /*DEBUG*/
+
 	if (!epc660_dev) {
 		return -EINVAL;
 	}
@@ -1051,6 +1140,10 @@ static int epc660_open(struct file* filp) {
 static int epc660_release(struct file* filp) {
 	int ret;
 	struct epc660_device *epc660_dev = video_drvdata(filp);
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_release\n");
+	#endif /*DEBUG*/
+
 	if (!epc660_dev) {
 		return -EINVAL;
 	}
@@ -1154,6 +1247,10 @@ static int epc660_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct gpio_desc *gpio;
 	int ret;
+
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_probe\n");
+	#endif /*DEBUG*/
 
 	match = of_match_device(cap_match, &pdev->dev);
 	if (!match) {
@@ -1382,6 +1479,10 @@ static int epc660_remove(struct platform_device *pdev)
 	struct v4l2_device *v4l2_dev = platform_get_drvdata(pdev);
 	struct epc660_device *epc660_dev = container_of(v4l2_dev,
 						struct epc660_device, v4l2_dev);
+
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_remove\n");
+	#endif /*DEBUG*/
 
 	epc660_free_sensor_formats(epc660_dev);
 	video_unregister_device(epc660_dev->video_dev);
