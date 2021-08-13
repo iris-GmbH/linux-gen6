@@ -65,7 +65,7 @@
  * @brief Corresponds with WDSIZE_256 (e.g. with WDSIZE_128, PIXEL_PER_CYCLE is 8)
  */
 #define PIXEL_PER_CYCLE             16
-#define DEBUG                       1
+#define DEBUG                       0
 #define OLD_STUFF                   0
 #define OLD_STUFF_OLD               0
 #define NUMBER_PARTS_IN_DMA_STORAGE 1
@@ -1092,17 +1092,17 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-#if DEBUG
 static int epc660_log_status(struct file *file, void *priv)
 {
+#if DEBUG
 	struct epc660_device *epc660_dev = video_drvdata(file);
 	printk(KERN_INFO "#### epc660_log_status\n");
 
 	/* status for sub devices */
 	v4l2_device_call_all(&epc660_dev->v4l2_dev, 0, core, log_status);
+#endif /*DEBUG*/
 	return 0;
 }
-#endif /*DEBUG*/
 
 static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 {
