@@ -69,6 +69,7 @@
 #define OLD_STUFF                   0
 #define OLD_STUFF_OLD               0
 #define NUMBER_PARTS_IN_DMA_STORAGE 1
+#define TRY_FORMAT                  0
 
 struct imager_format {
 	char *desc;
@@ -193,7 +194,7 @@ static const struct imager_format epc660_formats[] = {
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
 		.channels    = 2, ///< 2 pictures/planes */
-		.pixel_depth_bytes = 4,
+		.pixel_depth_bytes = 2,
 	},
 	{
 		.desc	     = "4DCS_12bpp",
@@ -202,7 +203,7 @@ static const struct imager_format epc660_formats[] = {
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
 		.channels    = 4,   ///< 4 pictures/planes */
-		.pixel_depth_bytes = 8,
+		.pixel_depth_bytes = 2,
 	},
 };
 #define MAX_FMTS ARRAY_SIZE(epc660_formats)
@@ -748,6 +749,9 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 					}
 					buf = list_entry(epc660_dev->dma_queue.next,
 							struct imager_buffer, list);
+                	#if DEBUG
+                	printk(KERN_INFO "#### epc660_isr: start_adresse: %x\n", buf->dma_desc[0].start_addr);
+            	    #endif /*DEBUG*/
 					vb = &buf->vb.vb2_buf;
 					vb->timestamp = ktime_get_ns(); // this has been changed from type struct timeval to -> u64 type
 					if (ppi->err) {
@@ -941,6 +945,7 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 	return 0;
 }
 
+#if TRY_FORMAT
 /**
  * @brief This function tries if the format works. Called by epc660_s_fmt_vid_cap. 
  * @param *epc660_dev - Some values extracted for the other two structs
@@ -960,14 +965,19 @@ static int epc660_try_format(struct epc660_device *epc660_dev,
 	};
 	int ret, i;
 
+    /* Searches in the format array of all available formats in the capture driver
+    for that format which was given into driver by application. */
 	for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
 		fmt = &sf[i];
 		if (pixfmt->pixelformat == fmt->pixelformat)
 			break;
 	}
+    /* If the configured format isn't found in list, take the first one 
+    in array as default.*/
 	if (i == epc660_dev->num_sensor_formats)
 		fmt = &sf[0];
 
+    /* These funtions are also called in epc660_s_fmt_vid_cap*/
 	v4l2_fill_mbus_format(&format.format, pixfmt, fmt->mbus_code);
 	ret = v4l2_subdev_call(epc660_dev->sd, pad, set_fmt, &pad_cfg,
 				&format);
@@ -982,11 +992,12 @@ static int epc660_try_format(struct epc660_device *epc660_dev,
 		}
 		*epc660_fmt = *fmt;
 	}
-
+    /* @JAHA ToDo: Set this in epc660_s_fmt_vid_cap as epc660_try_format is only a test function */
 	pixfmt->bytesperline = pixfmt->width * epc660_fmt->pixel_depth_bytes;
 	pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
 	return 0;
 }
+#endif /*TRY_FORMAT*/
 
 /* this function isn't called but necessary for kernel function (v4l2_ioctl_ops) */
 static int epc660_g_fmt_vid_cap(struct file *file, void *priv,
@@ -1011,6 +1022,7 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 				struct v4l2_format *fmt)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
+	struct imager_format *sf = epc660_dev->sensor_formats;
 	struct vb2_queue *vq = &epc660_dev->buffer_queue;
 	struct v4l2_subdev_format format = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
@@ -1018,7 +1030,7 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	struct imager_format epc660_fmt;
 	struct v4l2_pix_format *pixfmt = &fmt->fmt.pix;
 	int dmaPoolMemorySize;
-	int ret;
+	int ret, i;
 
 	#if DEBUG
 	//printk(KERN_INFO "#### epc660_s_fmt_vid_cap\n");
@@ -1027,19 +1039,37 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	if (vb2_is_busy(vq))
 		return -EBUSY;
 
-	/* see if format works */
+    #if TRY_FORMAT
+    /* see if format works */
 	ret = epc660_try_format(epc660_dev, pixfmt, &epc660_fmt);
 	if (ret < 0)
 		return ret;
+    #else /* aus try_format*/
+	/* Searches in the format array of all available formats in the capture driver
+    for that pixelformat which was given into driver by application. */
+	for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
+		epc660_fmt = sf[i];
+		if (pixfmt->pixelformat == epc660_fmt.pixelformat)
+			break;
+	}
+    /* If the configured format isn't found in list, take the first one 
+    in array as default.*/
+	if (i == epc660_dev->num_sensor_formats)
+		epc660_fmt = sf[0];
 
-    /* Fills format.format for usage in v4l2_subdev_call-->set_fmt */
+	pixfmt->bytesperline = pixfmt->width * epc660_fmt.pixel_depth_bytes;
+	pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
+    /* Aus try_format Ende*/
+    #endif /* TRY_FORMAT*/
+
+    /* Fills format.format for usage in v4l2_subdev_call */
 	v4l2_fill_mbus_format(&format.format, pixfmt, epc660_fmt.mbus_code);
     /* Sets the format parameter in the epc660.c I2C- Driver */
 	ret = v4l2_subdev_call(epc660_dev->sd, pad, set_fmt, NULL, &format);
 	if (ret < 0)
 		return ret;
 
-    /* Store the parameter from application into epc660_dev module struct */ 
+    /* Store the parameter of the configured video format (application) into epc660_dev module struct */ 
 	epc660_dev->fmt               = *pixfmt;
 	epc660_dev->bpp               = epc660_fmt.bpp;
 	epc660_dev->dlen              = epc660_fmt.dlen;
@@ -1047,7 +1077,7 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	/* align the pixels to 4 bytes */
 	epc660_dev->pixel_depth_bytes = epc660_fmt.pixel_depth_bytes;
 
-	memset(&epc660_dev->dma_cfg_template, 0, sizeof(epc660_dev->dma_cfg_template));
+    memset(&epc660_dev->dma_cfg_template, 0, sizeof(epc660_dev->dma_cfg_template));
 	epc660_dev->dma_cfg_template.cfg      = RESTART |                       ///< DMA Buffer Clear SYNC <0x00000004>
 						DMATOVEN |                      ///< DMA Trigger Overrun Error Enable <0x01000000>
 						WNR |                           ///< Channel Direction (W/R*) <0x00000002>
