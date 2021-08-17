@@ -420,7 +420,9 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
         /* ((epc660_dev->bpp + 7) / 8): We want the minimum necessary size of Bytes for a given number of bits.
         Maximum pixel line length (fmt.width) and the complete line number of one picture (fmt.height): buffer for one channel/plane/picture*/
     	dma_desc->start_addr = start_addr + channel * ((epc660_dev->bpp + 7) / 8) * epc660_dev->fmt.width * epc660_dev->fmt.height;
-    	printk("##buffer_init##  start_addr %x; channel %d; dma_desc-start_addr: %x; bpp: %d\n", start_addr, channel, dma_desc->start_addr, epc660_dev->bpp );
+    	#if DEBUG
+    	printk("##buffer_init##  start_addr %x; channel %d; dma_desc-start_addr: %x\n", start_addr, channel, dma_desc->start_addr );
+    	#endif /*DEBUG*/
 		dma_desc->next_desc_addr = nextDescrDMAAddr;
         dma_desc->cfg = epc660_dev->dma_cfg_template.cfg;
 		++dma_desc;
@@ -1027,13 +1029,13 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	struct v4l2_subdev_format format = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
-	struct imager_format epc660_fmt;
+	struct imager_format *epc660_fmt;
 	struct v4l2_pix_format *pixfmt = &fmt->fmt.pix;
 	int dmaPoolMemorySize;
 	int ret, i;
 
 	#if DEBUG
-	//printk(KERN_INFO "#### epc660_s_fmt_vid_cap\n");
+	printk(KERN_INFO "#### epc660_s_fmt_vid_cap\n");
 	#endif /*DEBUG*/
 
 	if (vb2_is_busy(vq))
@@ -1048,22 +1050,21 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	/* Searches in the format array of all available formats in the capture driver
     for that pixelformat which was given into driver by application. */
 	for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
-		epc660_fmt = sf[i];
-		if (pixfmt->pixelformat == epc660_fmt.pixelformat)
+		epc660_fmt = &sf[i];
+		if (pixfmt->pixelformat == epc660_fmt->pixelformat)
 			break;
 	}
     /* If the configured format isn't found in list, take the first one 
     in array as default.*/
 	if (i == epc660_dev->num_sensor_formats)
-		epc660_fmt = sf[0];
+		epc660_fmt = &sf[0];
 
-	pixfmt->bytesperline = pixfmt->width * epc660_fmt.pixel_depth_bytes;
+	pixfmt->bytesperline = pixfmt->width * epc660_fmt->pixel_depth_bytes;
 	pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
-    /* Aus try_format Ende*/
     #endif /* TRY_FORMAT*/
 
     /* Fills format.format for usage in v4l2_subdev_call */
-	v4l2_fill_mbus_format(&format.format, pixfmt, epc660_fmt.mbus_code);
+	v4l2_fill_mbus_format(&format.format, pixfmt, epc660_fmt->mbus_code);
     /* Sets the format parameter in the epc660.c I2C- Driver */
 	ret = v4l2_subdev_call(epc660_dev->sd, pad, set_fmt, NULL, &format);
 	if (ret < 0)
@@ -1071,11 +1072,10 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 
     /* Store the parameter of the configured video format (application) into epc660_dev module struct */ 
 	epc660_dev->fmt               = *pixfmt;
-	epc660_dev->bpp               = epc660_fmt.bpp;
-	epc660_dev->dlen              = epc660_fmt.dlen;
-	epc660_dev->pixel_channels    = epc660_fmt.channels;
-	/* align the pixels to 4 bytes */
-	epc660_dev->pixel_depth_bytes = epc660_fmt.pixel_depth_bytes;
+	epc660_dev->bpp               = epc660_fmt->bpp;
+	epc660_dev->dlen              = epc660_fmt->dlen;
+	epc660_dev->pixel_channels    = epc660_fmt->channels;
+	epc660_dev->pixel_depth_bytes = epc660_fmt->pixel_depth_bytes;
 
     memset(&epc660_dev->dma_cfg_template, 0, sizeof(epc660_dev->dma_cfg_template));
 	epc660_dev->dma_cfg_template.cfg      = RESTART |                       ///< DMA Buffer Clear SYNC <0x00000004>
