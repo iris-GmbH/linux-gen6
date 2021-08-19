@@ -66,7 +66,6 @@
  */
 #define PIXEL_PER_CYCLE             16
 #define DEBUG                       0
-#define TRY_FORMAT                  0
 
 struct imager_format {
 	char *desc;
@@ -878,60 +877,6 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 	return 0;
 }
 
-#if TRY_FORMAT
-/**
- * @brief This function tries if the format works. Called by epc660_s_fmt_vid_cap. 
- * @param *epc660_dev - Some values extracted for the other two structs
- * @param *pixfmt - Some values set in the function
- * @param *epc660_fmt - Some values set in the function
- * @return "0" for OK 
- */
-static int epc660_try_format(struct epc660_device *epc660_dev,
-			     struct v4l2_pix_format *pixfmt,
-			     struct imager_format *epc660_fmt)
-{
-	struct imager_format *sf = epc660_dev->sensor_formats;
-	struct imager_format *fmt = NULL;
-	struct v4l2_subdev_pad_config pad_cfg;///< see comment in include/media/v4l2-subdev.h
-	struct v4l2_subdev_format format = {
-		.which = V4L2_SUBDEV_FORMAT_TRY,
-	};
-	int ret, i;
-
-    /* Searches in the format array of all available formats in the capture driver
-    for that format which was given into driver by application. */
-	for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
-		fmt = &sf[i];
-		if (pixfmt->pixelformat == fmt->pixelformat)
-			break;
-	}
-    /* If the configured format isn't found in list, take the first one 
-    in array as default.*/
-	if (i == epc660_dev->num_sensor_formats)
-		fmt = &sf[0];
-
-    /* These funtions are also called in epc660_s_fmt_vid_cap*/
-	v4l2_fill_mbus_format(&format.format, pixfmt, fmt->mbus_code);
-	ret = v4l2_subdev_call(epc660_dev->sd, pad, set_fmt, &pad_cfg,
-				&format);
-	if (ret < 0)
-		return ret;
-	v4l2_fill_pix_format(pixfmt, &format.format);
-	if (epc660_fmt) {
-		for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
-			fmt = &sf[i];
-			if (format.format.code == fmt->mbus_code)
-				break;
-		}
-		*epc660_fmt = *fmt;
-	}
-    /* @JAHA ToDo: Set this in epc660_s_fmt_vid_cap as epc660_try_format is only a test function */
-	pixfmt->bytesperline = pixfmt->width * epc660_fmt->pixel_depth_bytes;
-	pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
-	return 0;
-}
-#endif /*TRY_FORMAT*/
-
 /* this function isn't called but necessary for kernel function (v4l2_ioctl_ops) */
 static int epc660_g_fmt_vid_cap(struct file *file, void *priv,
 					struct v4l2_format *fmt)
@@ -972,12 +917,6 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	if (vb2_is_busy(vq))
 		return -EBUSY;
 
-    #if TRY_FORMAT
-    /* see if format works */
-	ret = epc660_try_format(epc660_dev, pixfmt, &epc660_fmt);
-	if (ret < 0)
-		return ret;
-    #else /* aus try_format*/
 	/* Searches in the format array of all available formats in the capture driver
     for that pixelformat which was given into driver by application. */
 	for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
@@ -992,7 +931,6 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 
 	pixfmt->bytesperline = pixfmt->width * epc660_fmt->pixel_depth_bytes;
 	pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
-    #endif /* TRY_FORMAT*/
 
     /* Fills format.format for usage in v4l2_subdev_call */
 	v4l2_fill_mbus_format(&format.format, pixfmt, epc660_fmt->mbus_code);
