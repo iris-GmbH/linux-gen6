@@ -50,6 +50,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
 
+/* Actually included Header file: arch/arm/mach-sc57x/include/mach/dma.h */
 #ifdef CONFIG_ARCH_HEADER_IN_MACH
 #include <mach/dma.h>
 #else
@@ -65,7 +66,8 @@
  * @brief Corresponds with WDSIZE_256 (e.g. with WDSIZE_128, PIXEL_PER_CYCLE is 8)
  */
 #define PIXEL_PER_CYCLE             16
-#define DEBUG                       0
+#define DEBUG                       1
+#define BUFFER_NO_2                 0
 
 struct imager_format {
 	char *desc;
@@ -160,8 +162,7 @@ struct epc660_device {
 	/* buffer queue used in videobuf2 */
 	struct vb2_queue buffer_queue;
 	struct dma_pool *dma_pool; ///< something to allocate memory for dma usage from
-	/* queue of filled frames */
-	struct list_head dma_queue;
+	struct list_head dma_queue; ///< queue of filled frames
 	struct dmasg dma_cfg_template; ///< a dma config holding information on how to paramererize the dma 
 	/* used in videobuf2 callback */
 	spinlock_t lock;
@@ -303,7 +304,7 @@ static int epc660_queue_setup(struct vb2_queue *vq,
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vq);
 
 	#if DEBUG
-    printk(KERN_INFO "#### epc660_queue_setup: num_buffers: %d *nbuffers: %d\n", vq->num_buffers, *nbuffers);
+    //printk(KERN_INFO "#### epc660_queue_setup: num_buffers: %d *nbuffers: %d\n", vq->num_buffers, *nbuffers);
 	#endif /*DEBUG*/
 
 	if (vq->num_buffers + *nbuffers < MIN_NUM_BUF)
@@ -457,17 +458,16 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
     	#endif /*DEBUG*/
 	}
 
-
-	#if DEBUG
-//	{
-//		struct list_head *pos;
-//		int listSize = 0;
-//		list_for_each(pos, &epc660_dev->dma_queue)
-//		{
-//			++listSize;
-//		}
-//		printk("listsize: %d\n", listSize);
-//	}
+	#if 0// DEBUG
+	{
+		struct list_head *pos;
+		int listSize = 0;
+		list_for_each(pos, &epc660_dev->dma_queue)
+		{
+			++listSize;
+		}
+		printk("listsize: %d\n", listSize);
+	}
 	#endif /*DEBUG*/
     
 	list_add_tail(&buf->list, &epc660_dev->dma_queue);
@@ -606,32 +606,32 @@ static void printDMAState(struct epc660_device *epc660_dev)
 {
 	printk("dma config:"
 			"\n\t next_desc_ptr %p"
-			"\n\t start_addr %lx"
+			/*"\n\t start_addr %lx"
 			"\n\t cfg %08lx"
 			"\n\t x_count %lu"
 			"\n\t x_modify %ld"
-			"\n\t y_count %lu"
-			"\n\t y_modify %ld"
+			"\n\t y_count %lu"*/
+			/*"\n\t y_modify %ld"*/
 			"\n\t curr_desc_ptr %p"
 			"\n\t prev_desc_ptr %p"
 			"\n\t curr_addr_ptr %08lx"
-			"\n\t irq_status %08lx"
-			"\n\t curr_x_count %ld"
-			"\n\t curr_y_count %ld\n",
+			/*"\n\t irq_status %08lx"*/
+			"\n\t curr_x_count %ld\n"
+			/*"\t curr_y_count %ld\n"*/,
 
-			get_dma_next_desc_ptr(epc660_dev->dma_channel),
-			get_dma_start_addr(epc660_dev->dma_channel),
+		    get_dma_next_desc_ptr(epc660_dev->dma_channel),
+			/*get_dma_start_addr(epc660_dev->dma_channel),
 			get_dma_config(epc660_dev->dma_channel),
 			get_dma_x_count(epc660_dev->dma_channel),
 			get_dma_x_modify(epc660_dev->dma_channel),
-			get_dma_y_count(epc660_dev->dma_channel),
-			get_dma_y_modify(epc660_dev->dma_channel),
+			get_dma_y_count(epc660_dev->dma_channel),*/
+			/*get_dma_y_modify(epc660_dev->dma_channel),*/
 			get_dma_curr_desc_ptr(epc660_dev->dma_channel),
 			get_dma_prev_desc_ptr(epc660_dev->dma_channel),
 			get_dma_curr_addr(epc660_dev->dma_channel),
-			get_dma_curr_irqstat(epc660_dev->dma_channel),
-			get_dma_curr_xcount(epc660_dev->dma_channel),
-			get_dma_curr_ycount(epc660_dev->dma_channel));
+			/*get_dma_curr_irqstat(epc660_dev->dma_channel),*/
+			get_dma_curr_xcount(epc660_dev->dma_channel)/*,
+            get_dma_curr_ycount(epc660_dev->dma_channel)*/);
 }
 #endif
 
@@ -654,30 +654,46 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 	clear_dma_irqstat(epc660_dev->dma_channel);
 
 	#if DEBUG
-	printk("## isr ## dmaStatus: 0x%08x\n", dmaStatus);
+	//printk("## isr ## dmaStatus: 0x%08x\n", dmaStatus);
+    /* Dieser Ausdruck macht den Prozeß für die Lieferung der Bilder stabil_!*/
+    printDMAState(epc660_dev);
 	#endif /*DEBUG*/
 	if (dmaStatus & DMA_DONE) {
 		// if there are at least two buffers in the queue we can deque one
+        #if BUFFER_NO_2
 		if (&epc660_dev->dma_queue == epc660_dev->dma_queue.next->next) {
 	        #if DEBUG
 			printk("buffer underrun in epc660 capture\n");
 //			epc660_stop_transfering(epc660_dev);
         	#endif /*DEBUG*/
 		} else {
+        #endif    
+            #if BUFFER_NO_2    
 			/* publish all buffers that are done */
 			int completedCnt = 0;
 			lastDmaDescriptor = (dma_addr_t)get_dma_prev_desc_ptr(epc660_dev->dma_channel);
+           	#if DEBUG
+       		printk("lastDmaDescriptor: 0x%08x\n", lastDmaDescriptor);
+           	#endif /*DEBUG*/
 			lastDmaDescriptor &= ~1; // the lowest bit masks when a decriptor fetch was invalid
+           	#if DEBUG
+       		printk("lastDmaDescriptor: 0x%08x\n", lastDmaDescriptor);
+           	#endif /*DEBUG*/
+
 			list_for_each(iterator, &epc660_dev->dma_queue) {
 				struct imager_buffer *buf = list_entry(iterator, struct imager_buffer, list);
+               	#if DEBUG
+	    		printk("lastDmaDescriptor: 0x%08x buf->desc_dma_addr: 0x%08x\n", lastDmaDescriptor, buf->desc_dma_addr);
+               	#endif /*DEBUG*/
 				if (buf->desc_dma_addr == lastDmaDescriptor) {
 					++completedCnt;
 					break;
 				}
 			}
-           	#if DEBUG
-			printk("lastDmaDescriptor: 0x%08x\n", lastDmaDescriptor);
-           	#endif /*DEBUG*/
+
+            /*  Hier: 
+            if (list_empty(&epc660_dev->dma_queue)) {}else {printk("list1 is NOT empty\n");} */
+
 			if (0 == completedCnt) {
 				printk("cannot find any completed buffers!\n");
             	#if DEBUG
@@ -687,16 +703,21 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 				struct imager_buffer* buf;
 				struct vb2_buffer *vb;
             	#if DEBUG
-				printk("found %d completed buffers\n", completedCnt);
+				//printk("found %d completed buffers\n", completedCnt);
             	#endif /*DEBUG*/
 				while (completedCnt--) {
+                    #if BUFFER_NO_2
 					if (&epc660_dev->dma_queue == epc660_dev->dma_queue.next->next) {
 						break;
 					}
+                    #endif
+            #endif /* BUFFER_NO_2 */
+                    struct imager_buffer *buf ;                     
+    				struct vb2_buffer *vb;
 					buf = list_entry(epc660_dev->dma_queue.next,
 							struct imager_buffer, list);
                 	#if DEBUG
-                	printk(KERN_INFO "#### epc660_isr: start_adresse: %x\n", buf->dma_desc[0].start_addr);
+                	//printk(KERN_INFO "#### epc660_isr: start_adresse: %x\n", buf->dma_desc[0].start_addr);
             	    #endif /*DEBUG*/
 					vb = &buf->vb.vb2_buf;
 					vb->timestamp = ktime_get_ns(); // this has been changed from type struct timeval to -> u64 type
@@ -706,12 +727,40 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 						vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 					}
 					list_del_init(&buf->list);
+
+                    /* An dieser Stelle: 
+                    if (list_empty(&epc660_dev->dma_queue)) {-->	printk("list2 is empty\n"); }*/
+
+                	#if DEBUG
+                	//printk("## isr ## dmaStatus: 0x%08x\n", dmaStatus);
+            	    #endif /*DEBUG*/
+
+                    /* Reset the DMA Channel Enable Bit DMAEN <0x00000001> in the config register */
+	                disable_dma(epc660_dev->dma_channel);
+
+            #if BUFFER_NO_2
 				}
 			}
 		}
+#endif        
 		/* clear error flag for the next frame */
 		ppi->err = false;
-	}
+	} else {
+        /* As the application ran stable so far, this wasn't used.
+        With an instable Interrupt, this code wasn't useful at all! */
+        //printDMAState(epc660_dev);
+        /* The ENABLE Bit is set separately after the other bits
+        to avoid side effects during setting the config register in the DMA:
+        First remove the DMA Enable Bit DMAEN from the template, then set the bit separately directly in the register.*/
+        //epc660_dev->dma_cfg_template.cfg = epc660_dev->dma_cfg_template.cfg & ~DMAEN;
+	    //set_dma_config(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.cfg);
+        //printDMAState(epc660_dev);
+        //enable_dma(epc660_dev->dma_channel);
+        dma_enable_irq(epc660_dev->dma_channel);
+        /* After using the template, reset it to original state */
+        //epc660_dev->dma_cfg_template.cfg = epc660_dev->dma_cfg_template.cfg | DMAEN;
+        printDMAState(epc660_dev);
+    }
 
 	spin_unlock(&epc660_dev->lock);
 
@@ -855,7 +904,7 @@ static int epc660_enum_input(struct file *file, void *priv,
 	u32 status;
     #endif
 	#if DEBUG
-	printk(KERN_INFO "#### epc660_enum_input\n");
+	//printk(KERN_INFO "#### epc660_enum_input\n");
 	#endif /*DEBUG*/
 
 	/* Compare the input value with the value in the driver */
@@ -951,7 +1000,7 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	int ret, i;
 
 	#if DEBUG
-	printk(KERN_INFO "#### epc660_s_fmt_vid_cap\n");
+	//printk(KERN_INFO "#### epc660_s_fmt_vid_cap\n");
 	#endif /*DEBUG*/
 
 	if (vb2_is_busy(vq))
@@ -1324,6 +1373,7 @@ static int epc660_probe(struct platform_device *pdev)
 
 	memset(&epc660_dev->cfg.board_info, 0, sizeof(epc660_dev->cfg.board_info));
 	strlcpy(epc660_dev->cfg.board_info.type, epc660_dev->cfg.card_name, sizeof(epc660_dev->cfg.board_info.type));
+    /* ToDo @JAHA: Set this magic value into Device Tree Configuration ... */
 	epc660_dev->cfg.board_info.addr = 0x22;
 	epc660_dev->cfg.board_info.platform_data = NULL;
 
