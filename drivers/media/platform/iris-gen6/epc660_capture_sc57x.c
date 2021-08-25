@@ -493,29 +493,17 @@ static void epc660_buffer_cleanup(struct vb2_buffer *vb)
 }
 
 /**
- * @brief The PPI params are defined and set in the ppi struct in epc660_dev. 
- * @param *vb - pointer onto queue buffer. count - unused variable.
- * @return "0" for OK 
+ * @brief Sets the PPI params locally and into PPI with the function of ppi->ops
+ * @brief Handles the error ret value of ppi->ops
+ * @param *epc660_dev - epc660 driver device struct
+ * @return "0" for OK or the error ret of ppi->ops
  */
-static int epc660_start_streaming(struct vb2_queue *vq, unsigned int count)
+static int set_PPI_params (struct epc660_device *epc660_dev)
 {
-	struct epc660_device *epc660_dev = vb2_get_drv_priv(vq);
 	struct ppi_if *ppi = epc660_dev->ppi;
 	struct ppi_params params;
 	int ret;
 
-	#if DEBUG
-	printk(KERN_INFO "#### epc660_start_streaming\n");
-	#endif /*DEBUG*/
-
-	/* enable streamon on the sub device */
-	ret = v4l2_subdev_call(epc660_dev->sd, video, s_stream, 1);
-	if (ret && (ret != -ENOIOCTLCMD)) {
-		v4l2_err(&epc660_dev->v4l2_dev, "stream on failed in subdev\n");
-		return ret;
-	}
-
-	/* set ppi params */
     /* As fmt.width==160, the length of the whole line is multipied with 2 (==320), as each Pixel contains of 2 Byte;
     As fmt.height==240, for the half picture filled it is divided by 2 (==120) */
 	params.width	   = epc660_dev->fmt.width * 2;
@@ -543,6 +531,32 @@ static int epc660_start_streaming(struct vb2_queue *vq, unsigned int count)
 		return ret;
 	}
 	return 0;
+}
+
+/**
+ * @brief Enbales streamon on sub device and calls the setting of PPI params 
+ * @param *vq - pointer onto queue buffer. count - unused variable.
+ * @return "0" for OK 
+ */
+static int epc660_start_streaming(struct vb2_queue *vq, unsigned int count)
+{
+	struct epc660_device *epc660_dev = vb2_get_drv_priv(vq);
+	int ret;
+
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_start_streaming\n");
+	#endif /*DEBUG*/
+
+	/* enable streamon on the sub device */
+	ret = v4l2_subdev_call(epc660_dev->sd, video, s_stream, 1);
+	if (ret && (ret != -ENOIOCTLCMD)) {
+		v4l2_err(&epc660_dev->v4l2_dev, "stream on failed in subdev\n");
+		return ret;
+	}
+
+    ret = set_PPI_params (epc660_dev);
+
+	return ret;
 }
 
 static void epc660_stop_streaming(struct vb2_queue *vq)
@@ -705,6 +719,32 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 }
 
 /**
+ * @brief This function sets registers of the DMA and enables the DMA with setting the enable bit.
+ * @brief Setting the DMA register requires a disabled DMA and the IRQ off.
+ * @brief This function is implemented to be used after epc660_s_fmt_vid_cap; otherwise it doesn't take any effect
+ * @param *epc660_dev - epc660 driver device struct
+ * @return "0" for OK 
+ */
+static int epc660_set_DMA_registers (struct epc660_device *epc660_dev)
+{
+	set_dma_x_count(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.x_count),
+	set_dma_x_modify(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.x_modify),
+    /* The ENABLE Bit is set separately after the other bits
+    to avoid side effects during setting the config register in the DMA:
+    First remove the DMA Enable Bit DMAEN from the template, then set the bit separately directly in the register.*/
+    epc660_dev->dma_cfg_template.cfg = epc660_dev->dma_cfg_template.cfg & ~DMAEN;
+	set_dma_config(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.cfg);
+    enable_dma(epc660_dev->dma_channel);
+    /* After using the template, reset it to original state */
+    epc660_dev->dma_cfg_template.cfg = epc660_dev->dma_cfg_template.cfg | DMAEN;
+	#if 0 //DEBUG
+    printDMAState(epc660_dev);
+    printk("#### epc660_set_DMA_registers: cfg %lx\n", epc660_dev->dma_cfg_template.cfg);
+	#endif /*DEBUG*/
+	return 0;
+}
+
+/**
  * @brief Requests the DMA channel. Sets the configuration registers and configures PPI as callback functionality.
  * @brief Starts the PPI and the DMA instance (the DMA by setting the config register and with it the DMA_ENABLE bit). 
  * @brief Used in epc660_streamon.
@@ -724,12 +764,12 @@ static int epc660_start_transfering(struct epc660_device *epc660_dev, dma_addr_t
 
 	/* attach ppi DMA irq handler */
 	set_dma_callback(epc660_dev->dma_channel, epc660_isr, epc660_dev->ppi);
-    /* Sets the different HW registers of the DMA on chip */
+    /* Sets the different HW registers of the DMA on chip.
+    As the descriptor doesn't change, it's called only once in the beginning. */
 	set_dma_next_desc_addr(epc660_dev->dma_channel, (void*)descrAddr);
-	set_dma_x_count(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.x_count),
-	set_dma_x_modify(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.x_modify),
-	set_dma_config(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.cfg);
 
+    /* Set the registers in the DMA and enables the DMA (explicitly) */
+    epc660_set_DMA_registers (epc660_dev);
 	/* enable ppi */
 	epc660_dev->ppi->ops->start(epc660_dev->ppi);
 
@@ -947,6 +987,8 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	epc660_dev->pixel_depth_bytes = epc660_fmt->pixel_depth_bytes;
 
     memset(&epc660_dev->dma_cfg_template, 0, sizeof(epc660_dev->dma_cfg_template));
+    /* The following config bits configure the DMA with the reg value 0x01024527
+    As DMA2D is not set, the DMA mode is 1D automatically.*/
 	epc660_dev->dma_cfg_template.cfg      = RESTART |                       ///< DMA Buffer Clear SYNC <0x00000004>
 						DMATOVEN |                      ///< DMA Trigger Overrun Error Enable <0x01000000>
 						WNR |                           ///< Channel Direction (W/R*) <0x00000002>
@@ -955,8 +997,6 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 						NDSIZE_2 |                      ///< Next Descriptor Size = 3 <0x00020000>
 						DMAFLOW_LIST |                  ///< Descriptor List Mode <0x00004000>
 						DMAEN;                          ///< DMA Channel Enable <0x00000001>
-    /* After this setting, the cfg-value for the DMA has got the following value: 0x01024527.
-    As DMA2D is not set, the DMA mode is 1D automatically.  */
 
     epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width * (epc660_dev->fmt.height) / PIXEL_PER_CYCLE; ///< The DMA shall throw an interrupt when the whole channel picture is read into storage
 	epc660_dev->dma_cfg_template.x_modify = epc660_dev->pixel_depth_bytes * PIXEL_PER_CYCLE;// After 32 Bytes = 256 Bit WORDSIZE
@@ -971,6 +1011,33 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 
 	dmaPoolMemorySize = (epc660_dev->pixel_channels ) * sizeof(struct imager_dma_desc_list_item);
 	epc660_dev->dma_pool = dma_pool_create(CAPTURE_DRV_NAME, epc660_dev->v4l2_dev.dev,  dmaPoolMemorySize, 16, 0);
+	return 0;
+}
+
+/**
+ * @brief Sets the variables necessary for configuration fo new picture format by application
+ * @brief For changing the format by application, before epc600_s_parm, "epc660_s_fmt_vid_cap" has to be called
+ * @param *strprm: struct with the variables set by application
+ * @return "0" for OK 
+ */
+static int epc600_s_parm (struct file *file, void *priv,
+			     struct v4l2_streamparm *strprm)
+{
+	struct epc660_device *epc660_dev = video_drvdata(file);
+
+    #if 0
+    set_PPI_params (epc660_dev);
+    /* This re-configuration has been successfully checked */ 
+    epc660_dev->dma_cfg_template.x_count = 4800;
+	epc660_dev->dma_cfg_template.x_modify = 64;
+    #endif
+    /* Function contains the re-enabling of DMA again */
+    epc660_set_DMA_registers (epc660_dev);
+
+	#if DEBUG
+	//printk(KERN_INFO "#### epc600_s_parm: raw_data[0]: %x\n", strprm->parm.raw_data[0]);
+	#endif /*DEBUG*/
+
 	return 0;
 }
 
@@ -990,6 +1057,7 @@ static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 {
 	.vidioc_g_fmt_vid_cap    = epc660_g_fmt_vid_cap, ///< No official usage, but driver doesn't run without the function implemented
 	.vidioc_s_fmt_vid_cap    = epc660_s_fmt_vid_cap, ///< Call during start phase by EPC660_Imager.cpp
+    .vidioc_s_parm           = epc600_s_parm, ///< Call with each new parameterizing by application
 	.vidioc_enum_input       = epc660_enum_input, ///< Call during start phase by EPC660_Imager.cpp
 	.vidioc_s_input          = epc660_s_input, ///< Call during start phase by  EPC660_Imager.cpp
 	.vidioc_reqbufs          = vb2_ioctl_reqbufs, ///< Call during start phase by EPC660_Imager.cpp
