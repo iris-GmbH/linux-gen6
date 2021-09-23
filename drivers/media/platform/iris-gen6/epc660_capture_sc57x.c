@@ -69,7 +69,11 @@
 #define PIXEL_PER_CYCLE             16
 #define DEBUG                       0
 #define BUFFER_NO_2                 0
-#define SWITCH                      0
+#define SWITCH                      1
+#define FIRST_DESC                  0
+#define SECOND_DESC                 1
+#define THIRD_DESC                  2
+#define FOURTH_DESC                 3
 
 struct imager_format {
 	char *desc;
@@ -1102,6 +1106,8 @@ static int adapt_DMA_DescriptorElements (struct epc660_device *epc660_dev, int n
 {
     struct imager_buffer* buf;
 	struct list_head* iterator;
+	struct imager_dma_desc_list_item *dma_desc;
+    dma_addr_t nextDescrDMAAddr;
 	int i;
 
     /* Problematik:
@@ -1120,12 +1126,83 @@ static int adapt_DMA_DescriptorElements (struct epc660_device *epc660_dev, int n
     #else
 	list_for_each(iterator, &epc660_dev->dma_queue) {
 		buf = list_entry(iterator, struct imager_buffer, list);
-        for (i=0; i < nrDCS_Frames; i++){
+        /* The dma_desc[i] array starts with "0", nrDCS_Frames contains 1,2,4 */
+        for (i= FIRST_DESC; i <= (nrDCS_Frames-1); i++){
+
            	#if DEBUG
-   	    	printk("#### DMA cfg: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+   	    	printk("#### DMA %d vorher      %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
        	    #endif /*DEBUG*/
-        }       
-	}
+            #if 1
+            /* Actions for the first descriptor element */   
+            if ( i == FIRST_DESC ){
+                /* Reset the first 12 Bits for reconfiguring them (in case the other bits are set already) 
+                except of DMATOVEN = <0x01000000>*/
+                //buf->dma_desc[i].cfg &= ~(0xFEF00000);
+                //buf->dma_desc[i].cfg = DMATOVEN;
+            	/* copy the descriptor config into the DMA_DSCPTR_PRV register to be read out from there (on the first transfer) */
+                //buf->dma_desc[i].cfg |= DESCIDCPY;/*<0x02000000>*/
+                if (nrDCS_Frames == SINGLE){
+                	/* the last transfer shall generate an interrupt */
+	                buf->dma_desc[i].cfg |= DI_EN_X; /*0x00100000*/
+                	/* the last transfer sets the Stop Mode by disabling the LIST_MODE */
+	                buf->dma_desc[i].cfg &= ~DMAFLOW_LIST; /*0x00004000*/
+	                /* the very last element must be a list element that makes the dma point to the beginning */
+                	buf->dma_desc[i].next_desc_addr = buf->desc_dma_addr;
+                    break;
+                } else {
+                	/* As the item isn't the last one, remove the interrupt generation*/
+	                buf->dma_desc[i].cfg &= ~DI_EN_X; /*0x00100000*/
+                    /* Activate descriptor list mode if element isn't the last one */
+                    buf->dma_desc[i].cfg |= DMAFLOW_LIST; /*0x00004000*/
+                    /* "next descriptor address" of first descriptor is the start address of the 2nd descriptor */
+                	nextDescrDMAAddr = buf->desc_dma_addr + sizeof(*dma_desc);
+                  	//printk("#### DMA nextDescrDMAAddr %08x\n", nextDescrDMAAddr);
+                	buf->dma_desc[i].next_desc_addr = nextDescrDMAAddr;
+                }
+            } 
+
+            if (i == SECOND_DESC) {
+                if (nrDCS_Frames == DUAL) {
+                	/* the last transfer shall generate an interrupt */
+	                buf->dma_desc[i].cfg |= DI_EN_X; /*0x00100000*/
+                	/* the last transfer sets the Stop Mode by disabling the LIST_MODE */
+	                buf->dma_desc[i].cfg &= ~DMAFLOW_LIST; /*0x00004000*/
+	                /* the very last element must be a list element that makes the dma point to the beginning */
+                	buf->dma_desc[i].next_desc_addr = buf->desc_dma_addr;
+                    break;
+                } else {
+                	/* As the item isn't the last one, remove the interrupt generation*/
+	                buf->dma_desc[i].cfg &= ~DI_EN_X; /*0x00100000*/
+                    /* Activate descriptor list mode if element isn't the last one */
+                    buf->dma_desc[i].cfg |= DMAFLOW_LIST; /*0x00004000*/
+                	/* Use the stored address of the 2nd descriptor for evaluating the next of the 2nd */
+                	buf->dma_desc[i].next_desc_addr = nextDescrDMAAddr + sizeof(*dma_desc);
+                }
+            }
+            /* The third element is never changed */
+            /* The fourth element also isn't changed. The next_desc_addr of the very last descriptor of the last buffer 
+            is set with the function buffer_prepare with the return of the buffer from application.
+            It doesn't have to be considered here. */   
+            if ( (i == FOURTH_DESC) && (nrDCS_Frames == QUAD) ){
+                	/* the last transfer shall generate an interrupt */
+	                //buf->dma_desc[i].cfg |= DI_EN_X; /*0x00100000*/
+	                /* the very last element must be a list element that makes the dma point to the beginning */
+                	//buf->dma_desc[i].next_desc_addr = buf->desc_dma_addr;
+                	/* the last transfer sets the Stop Mode by disabling the LIST_MODE */
+	                //buf->dma_desc[i].cfg &= ~DMAFLOW_LIST; /*0x00004000*/
+            }   
+           	#if DEBUG
+   	    	printk("#### DMA %d nachher     %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+       	    #endif /*DEBUG*/
+            #endif   
+        }   /*for*/    
+   	    #if DEBUG
+  	    printk("#### DMA %d nach for    %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+        #endif /*DEBUG*/
+	} /*list for each*/
+   	#if DEBUG
+  	//printk("#### DMA %d nachlisteach%d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+    #endif /*DEBUG*/
     #endif
     return 0;
 
@@ -1145,6 +1222,7 @@ static int epc600_s_parm (struct file *file, void *priv,
 	unsigned long flags;
     #endif /* SWITCH*/
 	static long unsigned int dmaStatus_s_parm = 0;
+    struct imager_buffer* buf;
 
     switch (strprm->parm.raw_data[0]){
 
@@ -1159,18 +1237,21 @@ static int epc600_s_parm (struct file *file, void *priv,
         epc660_dev->fmt.height = 120;//strprm->parm.raw_data[2];//240;/*240*/
         #endif
         #if 1
-        epc660_dev->fmt.width = 320;//strprm->parm.raw_data[1]*16;//176;/*176*/
-        epc660_dev->fmt.height = 120;//strprm->parm.raw_data[2];//240;/*240*/
+        epc660_dev->fmt.width = strprm->parm.raw_data[1]*16;//176;/*176*/
+        epc660_dev->fmt.height = strprm->parm.raw_data[2];//240;/*240*/
         #endif
         epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width * (epc660_dev->fmt.height) / PIXEL_PER_CYCLE; ///< The DMA shall throw an interrupt when the whole channel picture is read into storage
         #else
 	    #endif /* SWITCH*/
 
-        adapt_DMA_DescriptorElements (epc660_dev, epc660_dev->pixel_channels);
+        adapt_DMA_DescriptorElements (epc660_dev, strprm->parm.raw_data[3]);
+
 	    #if DEBUG
+	    //printk("#### epc600_s_parm 253: raw_data[3]: %d\n", strprm->parm.raw_data[3] );
 	    printk("#### epc600_s_parm 253: width: %d hght: %d\n", epc660_dev->fmt.width, epc660_dev->fmt.height);
 	    #endif /* DEBUG */
         #if SWITCH
+        buf = list_entry(epc660_dev->dma_queue.next, struct imager_buffer, list);
     	spin_lock_irqsave(&epc660_dev->lock, flags);
     	set_dma_next_desc_addr(epc660_dev->dma_channel, (void*)buf->desc_dma_addr);
         /* Function contains the re-enabling of DMA again */
