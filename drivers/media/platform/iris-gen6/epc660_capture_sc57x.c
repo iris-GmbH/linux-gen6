@@ -16,6 +16,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
+/**
+ * @file
+ * @brief Analog Devices video capture driver
+ */
 
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -46,6 +50,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
 
+/* Actually included Header file: arch/arm/mach-sc57x/include/mach/dma.h */
 #ifdef CONFIG_ARCH_HEADER_IN_MACH
 #include <mach/dma.h>
 #else
@@ -66,22 +71,31 @@ struct imager_format {
 	int pixel_depth_bytes;
 };
 
-
+/**
+ * @brief Points to memory that is allocated to be reacheable by the dma and holds an array of dma descriptors.
+ * @brief dma_addr_t - Bus address type of allocated DMA buffers
+ */ 
 struct imager_dma_desc_list_item {
 	dma_addr_t next_desc_addr;
 	dma_addr_t start_addr;
 	unsigned long cfg;
 }__packed;
 
+/**
+ * @brief Basic struct for one buffer and the belonging DMA descriptors
+ * @brief "imager_dma_desc_list_item" points to memory that is allocated
+ * @brief to be reacheable by the dma and holds an array of dma descriptors
+ */
 struct imager_buffer {
-	struct vb2_v4l2_buffer vb;
-	// points to memory that is allocated to be reacheable by the dma and holds an array of dma descriptors
+	struct vb2_v4l2_buffer vb; ///< Basic driver buffer, contains "struct vb2_buffer"
 	struct imager_dma_desc_list_item *dma_desc;
-	// the dma reacheable address of the dma_desc
-	dma_addr_t desc_dma_addr;
+	dma_addr_t desc_dma_addr; ///< the dma reacheable address of the dma_desc
 	struct list_head list;
 };
 
+/**
+ * @brief routing information for each input
+ */ 
 struct imager_route {
 	u32 input;
 	u32 output;
@@ -90,12 +104,9 @@ struct imager_route {
 struct capture_config {
 	/* card name */
 	const char *card_name;
-	/* inputs available at the sub device */
-	struct v4l2_input *inputs;
-	/* number of inputs supported */
-	int num_inputs;
-	/* routing information for each input */
-	struct imager_route *routes;
+	struct v4l2_input *inputs; ///< inputs available at the sub device. Instance of struct v4l2_input defined locally.
+	int num_inputs; ///< number of inputs supported
+	struct imager_route *routes; ///<  routing information for each input. Defined locally.
 	/* i2c bus adapter no */
 	int i2c_adapter_id;
 	/* i2c subdevice board info */
@@ -120,10 +131,8 @@ struct epc660_device {
 	struct video_device *video_dev;
 	/* sub device instance */
 	struct v4l2_subdev *sd;
-	/* capture config */
-	struct capture_config cfg;
-	/* dma channel */
-	int dma_channel;
+	struct capture_config cfg; ///< capture config, defined locally 
+	int dma_channel; ///< DMA channel
 	/* ppi interface */
 	struct ppi_if *ppi;
 	/* current input */
@@ -138,28 +147,26 @@ struct epc660_device {
 	int bpp;
 	/* data length for ppi in bits */
 	int dlen;
-	/* number of sub images */
-	int pixel_channels;
+	int pixel_channels; ///< Number of sub images 
 	/* the size of each pixel in bytes */
 	int pixel_depth_bytes;
-	/* used to store sensor supported format */
-	struct imager_format *sensor_formats;
-	/* number of sensor formats array */
-	int num_sensor_formats;
+	struct imager_format *sensor_formats; ///< used to store sensor supported formats, defined locally
+	int num_sensor_formats; ///< number of sensor formats array
 	/* buffer queue used in videobuf2 */
 	struct vb2_queue buffer_queue;
-	/* something to allocate memory for dma usage from */
-	struct dma_pool *dma_pool;
-	/* queue of filled frames */
-	struct list_head dma_queue;
-	/* a dma config holding information on how to paramererize the dma */
-	struct dmasg dma_cfg_template;
+	struct dma_pool *dma_pool; ///< something to allocate memory for dma usage from
+	struct list_head dma_queue; ///< queue of filled frames
+	struct dmasg dma_cfg_template; ///< a dma config holding information on how to paramererize the dma 
 	/* used in videobuf2 callback */
 	spinlock_t lock;
 	/* used to access capture device */
 	struct mutex mutex;
 };
 
+/**
+ * @brief used to store sensor supported format
+ * @brief corresponding with "static const struct epc660_datafmt epc660_monochrome_fmts[]" in epc660.c 
+ */
 static const struct imager_format epc660_formats[] = {
 	{
 		.desc	     = "12bit Grey Scale",
@@ -231,17 +238,25 @@ static int epc660_start_transfering(struct epc660_device *epc660_dev,
 				dma_addr_t descrAddr);
 static void epc660_stop_transfering(struct epc660_device *epc660_dev);
 
+/* Used by diff fcts */
 static struct imager_buffer *vb2v4l2_to_imagerbuffer(struct vb2_v4l2_buffer *vb)
 {
 	return container_of(vb, struct imager_buffer, vb);
 }
 
 /* The queue is busy if there is a owner and you are not that owner. */
+/* Used by epc660_streamon*/
 static inline bool vb2_queue_is_busy(struct video_device *vdev, struct file *file)
 {
 	return vdev->queue->owner && vdev->queue->owner != file->private_data;
 }
 
+/**
+ * @brief  Initializes all available sensor formats in subdevice.
+ * @brief  Used by epc660_probe, to be called once during boot
+ * @param *epc660_dev - epc660 driver device struct
+ * @return "0" for OK 
+ */
 static int epc660_init_sensor_formats(struct epc660_device *epc660_dev)
 {
 
@@ -284,6 +299,7 @@ static int epc660_init_sensor_formats(struct epc660_device *epc660_dev)
 	return 0;
 }
 
+/* Used by epc660_remove */
 static void epc660_free_sensor_formats(struct epc660_device *epc660_dev)
 {
 	epc660_dev->num_sensor_formats = 0;
@@ -311,6 +327,11 @@ static int epc660_queue_setup(struct vb2_queue *vq,
 	return 0;
 }
 
+/**
+ * @brief This function initializes and sets the DMA descriptor list/array for the given vb2-buffer
+ * @param *vb - pointer onto allocated buffer
+ * @return "0" for OK 
+ */
 static int epc660_buffer_init(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
@@ -324,6 +345,8 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 
 	INIT_LIST_HEAD(&buf->list);
 
+    /* The DMA-Pool of DMA descriptors is organized as a list. 
+    With each buffer, a new descriptor list is allocated and added to epc660_dev->dma_pool */
 	buf->dma_desc = dma_pool_alloc(epc660_dev->dma_pool, GFP_KERNEL, &buf->desc_dma_addr);
 	if (!buf->dma_desc) {
 		printk("cannot allocate memory from dma pool\n");
@@ -380,6 +403,11 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	return 0;
 }
 
+/**
+ * @brief This function checks if the given vb2-buffer is correctly dimensioned
+ * @param *vb - pointer onto allocated buffer
+ * @return "0" for OK 
+ */
 static int epc660_buffer_prepare(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
@@ -398,6 +426,11 @@ static int epc660_buffer_prepare(struct vb2_buffer *vb)
 	return 0;
 }
 
+/**
+ * @brief This function adds the given vb2-buffer to the descriptor queue. If the list isn't empty, the last element is added.
+ * @param *vb - pointer onto allocated buffer
+ * @return "0" for OK 
+ */
 static void epc660_buffer_queue(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
@@ -445,6 +478,11 @@ static void epc660_buffer_cleanup(struct vb2_buffer *vb)
 	dma_pool_free(epc660_dev->dma_pool, buf->dma_desc, buf->desc_dma_addr);
 }
 
+/**
+ * @brief Enables streamon on sub device and calls the setting of PPI params 
+ * @param *vq - pointer onto queue buffer. count - unused variable.
+ * @return "0" for OK 
+ */
 static int epc660_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vq);
@@ -514,15 +552,15 @@ static void epc660_stop_streaming(struct vb2_queue *vq)
 
 static struct vb2_ops epc660_video_qops =
 {
-	.queue_setup            = epc660_queue_setup,
-	.buf_init               = epc660_buffer_init,
-	.buf_prepare            = epc660_buffer_prepare,
-	.buf_cleanup            = epc660_buffer_cleanup,
-	.buf_queue              = epc660_buffer_queue,
-	.wait_prepare           = vb2_ops_wait_prepare,
-	.wait_finish            = vb2_ops_wait_finish,
-	.start_streaming        = epc660_start_streaming,
-	.stop_streaming         = epc660_stop_streaming,
+	.queue_setup            = epc660_queue_setup, /* Call in Startup-Phase */
+	.buf_init               = epc660_buffer_init, /* Call in Startup-Phase */
+	.buf_prepare            = epc660_buffer_prepare,/* Call in all three Phases */
+	.buf_cleanup            = epc660_buffer_cleanup,/* Call in Shutdown-Phase*/
+	.buf_queue              = epc660_buffer_queue, /* Call in all three Phases */
+	.wait_prepare           = vb2_ops_wait_prepare, /* Keine Anwendung */
+	.wait_finish            = vb2_ops_wait_finish, /* Keine Anwendung */
+	.start_streaming        = epc660_start_streaming,/* Call in Startup-Phase */
+	.stop_streaming         = epc660_stop_streaming,/* Call in Shutdown-Phase */
 };
 
 #if 0
@@ -624,6 +662,14 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+/**
+ * @brief Requests the DMA channel. Sets the configuration registers and configures PPI as callback functionality.
+ * @brief Starts the PPI and the DMA instance (the DMA by setting the config register and with it the DMA_ENABLE bit). 
+ * @brief Used in epc660_streamon.
+ * @param epc660_dev - Actual driver device structure
+ * @param descrAddr - start address of the (first) DMA descriptor
+ * @return ret - result of DMA allocation fct "request_dma", "0" for OK 
+ */
 static int epc660_start_transfering(struct epc660_device *epc660_dev, dma_addr_t descrAddr) {
 	int ret;
 	//printk("start DMA\n");
@@ -636,7 +682,8 @@ static int epc660_start_transfering(struct epc660_device *epc660_dev, dma_addr_t
 
 	/* attach ppi DMA irq handler */
 	set_dma_callback(epc660_dev->dma_channel, epc660_isr, epc660_dev->ppi);
-
+    /* Sets the different HW registers of the DMA on chip.
+    As the descriptor doesn't change, it's called only once in the beginning. */
 	set_dma_next_desc_addr(epc660_dev->dma_channel, (void*)descrAddr);
 	set_dma_x_count(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.x_count),
 	set_dma_x_modify(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.x_modify),
@@ -648,6 +695,7 @@ static int epc660_start_transfering(struct epc660_device *epc660_dev, dma_addr_t
 	return ret;
 }
 
+/* Used in epc660_stop_streaming*/
 static void epc660_stop_transfering(struct epc660_device *epc660_dev)
 {
 	/* disable ppi */
@@ -662,6 +710,12 @@ static void epc660_stop_transfering(struct epc660_device *epc660_dev)
 	//printk("stopped DMA\n");
 }
 
+/**
+ * @brief 
+ * @param *file -file descriptor of sub device
+ * @param *
+ * @return "0" for OK 
+ */
 static int epc660_streamon(struct file *file, void *priv,
 				enum v4l2_buf_type buf_type)
 {
@@ -700,6 +754,12 @@ err:
 	return ret;
 }
 
+/**
+ * @brief The function delivers the input instance according to the number which is set in struct input
+ * @param *file -file descriptor of sub device
+ * @param *input - instance to be filled with data according to the index value
+ * @return "0" for OK 
+ */
 static int epc660_enum_input(struct file *file, void *priv,
 				struct v4l2_input *input)
 {
@@ -709,9 +769,11 @@ static int epc660_enum_input(struct file *file, void *priv,
 	int ret;
 	u32 status;
 
+	/* Compare the input value with the value in the driver */
 	if (input->index >= config->num_inputs)
 		return -EINVAL;
 
+	/* set the input value for the required input instance */
 	*input = config->inputs[input->index];
 	/* get input status */
 	ret = v4l2_subdev_call(epc660_dev->sd, video, g_input_status, &status);
@@ -720,6 +782,13 @@ static int epc660_enum_input(struct file *file, void *priv,
 	return 0;
 }
 
+
+/**
+ * @brief This function sets "epc660_dev->cur_input" with the value "index" given from application
+ * @param *file -file descriptor of sub device
+ * @param *input - instance to be filled with data according to the index value
+ * @return "0" for OK 
+ */
 static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
@@ -785,6 +854,7 @@ static int epc660_try_format(struct epc660_device *epc660_dev,
 	return 0;
 }
 
+/* this function isn't called but necessary for kernel function (v4l2_ioctl_ops) */
 static int epc660_g_fmt_vid_cap(struct file *file, void *priv,
 					struct v4l2_format *fmt)
 {
@@ -794,6 +864,11 @@ static int epc660_g_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
+/**
+ * @brief Sets the sensor values of *fmt for Application, and of epc660_dev. Initial DMA configuration.
+ * @param *fmt: Representation of the platform device in the kernel to be set in this function
+ * @return "0" for OK 
+ */
 static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 				struct v4l2_format *fmt)
 {
@@ -819,6 +894,8 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	ret = v4l2_subdev_call(epc660_dev->sd, pad, set_fmt, NULL, &format);
 	if (ret < 0)
 		return ret;
+
+    /* Store the parameter of the configured video format (application) into epc660_dev module struct */ 
 	epc660_dev->fmt               = *pixfmt;
 	epc660_dev->bpp               = epc660_fmt.bpp;
 	epc660_dev->dlen              = epc660_fmt.dlen;
@@ -866,16 +943,16 @@ static int epc660_log_status(struct file *file, void *priv)
 
 static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 {
-	.vidioc_g_fmt_vid_cap    = epc660_g_fmt_vid_cap,
-	.vidioc_s_fmt_vid_cap    = epc660_s_fmt_vid_cap,
-	.vidioc_enum_input       = epc660_enum_input,
-	.vidioc_s_input          = epc660_s_input,
-	.vidioc_reqbufs          = vb2_ioctl_reqbufs,
-	.vidioc_querybuf         = vb2_ioctl_querybuf,
-	.vidioc_qbuf             = vb2_ioctl_qbuf,
-	.vidioc_dqbuf            = vb2_ioctl_dqbuf,
-	.vidioc_streamon         = epc660_streamon,
-	.vidioc_s_parm           = epc660_s_parm,
+	.vidioc_g_fmt_vid_cap    = epc660_g_fmt_vid_cap, ///< No official usage, but driver doesn't run without the function implemented
+	.vidioc_s_fmt_vid_cap    = epc660_s_fmt_vid_cap, ///< Call during start phase by EPC660_Imager.cpp
+	.vidioc_enum_input       = epc660_enum_input, ///< Call during start phase by EPC660_Imager.cpp
+	.vidioc_s_input          = epc660_s_input, ///< Call during start phase by  EPC660_Imager.cpp
+	.vidioc_reqbufs          = vb2_ioctl_reqbufs, ///< Call during start phase by EPC660_Imager.cpp
+	.vidioc_querybuf         = vb2_ioctl_querybuf, ///< Call in EPC660_Imager.cpp for V4L2_MEMORY_MMAP
+	.vidioc_qbuf             = vb2_ioctl_qbuf, ///< Call in EPC660_Imager.cpp during all three phases
+	.vidioc_dqbuf            = vb2_ioctl_dqbuf, ///< Call during all three phases
+	.vidioc_streamon         = epc660_streamon, ///< Call during start phase by EPC660_Imager.cpp
+    .vidioc_s_parm           = epc660_s_parm,
 	.vidioc_log_status       = epc660_log_status,
 };
 
@@ -912,8 +989,8 @@ static int epc660_release(struct file* filp) {
 
 static struct v4l2_file_operations epc660_fops = {
 	.owner = THIS_MODULE,
-	.open = epc660_open,
-	.release = epc660_release,
+	.open = epc660_open, ///< Call during start phase
+	.release = epc660_release, ///< Call during start and shutdown phase
 	.unlocked_ioctl = video_ioctl2,
 	.mmap = vb2_fop_mmap,
 #ifndef CONFIG_MMU
@@ -922,6 +999,9 @@ static struct v4l2_file_operations epc660_fops = {
 	.poll = vb2_fop_poll
 };
 
+/**
+ * @brief Wrapper for of_property_read_u32, used by diff fcts
+ */
 static int get_int_prop(struct device_node *dn, const char *s)
 {
 	int ret;
@@ -933,6 +1013,9 @@ static int get_int_prop(struct device_node *dn, const char *s)
 	return val;
 }
 
+/**
+ * @brief Basic structure for registering the driver to the kernel (with MODULE_DEVICE_TABLE, of = open firmware)
+ */
 static const struct of_device_id cap_match[] =
 {
 	{ .compatible = COMPATIBLE_DT_NAME, },
@@ -940,6 +1023,12 @@ static const struct of_device_id cap_match[] =
 };
 MODULE_DEVICE_TABLE(of, cap_match);
 
+/**
+ * @brief Used by epc660_probe to initialize/configure both input structs (ppi info struct and i2c config/infos)
+ * @param *pdev - representation of the platform device in the kernel
+ * @param *o_config - video capture/epc660 chip information
+ * @return "0" for OK or error msg
+ */
 static int fill_config(struct platform_device *pdev,
 		       struct capture_config *o_config)
 {
@@ -972,6 +1061,11 @@ static int fill_config(struct platform_device *pdev,
 	return 0;
 }
 
+/**
+ * @brief Basic function after initilization called by the kernel to gather structs/values of the driver device
+ * @param struct platform_device - Representation of the platform device in the kernel to be set in this function
+ * @return "0" for OK or error msg
+ */
 static int epc660_probe(struct platform_device *pdev)
 {
 	struct epc660_device *epc660_dev;
@@ -997,6 +1091,7 @@ static int epc660_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	/* struct device_node *of_node : associated device tree node */
 	if (dev->of_node) {
 		fill_config(pdev, &epc660_dev->cfg);
 	} else {
@@ -1105,6 +1200,7 @@ static int epc660_probe(struct platform_device *pdev)
 
 	memset(&epc660_dev->cfg.board_info, 0, sizeof(epc660_dev->cfg.board_info));
 	strlcpy(epc660_dev->cfg.board_info.type, epc660_dev->cfg.card_name, sizeof(epc660_dev->cfg.board_info.type));
+    /* ToDo @JAHA: Set this magic value into Device Tree Configuration ... */
 	epc660_dev->cfg.board_info.addr = 0x22;
 	epc660_dev->cfg.board_info.platform_data = NULL;
 
@@ -1200,6 +1296,11 @@ err_free_dev:
 	return ret;
 }
 
+/**
+ * @brief Basic function before freeing the driver device called by the kernel to free storage and remove structs
+ * @param struct platform_device - Representation of the platform device in the kernel 
+ * @return "0" for OK 
+ */
 static int epc660_remove(struct platform_device *pdev)
 {
 	struct v4l2_device *v4l2_dev = platform_get_drvdata(pdev);
@@ -1217,6 +1318,9 @@ static int epc660_remove(struct platform_device *pdev)
 	return 0;
 }
 
+/**
+ * @brief Basic structure for announcing the driver to the kernel (with "module_platform_driver")
+ */
 static struct platform_driver epc660_driver =
 {
 	.driver = { 
