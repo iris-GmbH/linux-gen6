@@ -60,6 +60,12 @@
 #define COMPATIBLE_DT_NAME	"iris,gen6-epc660"
 #define CAPTURE_DRV_NAME        "epc660_capture"
 #define MIN_NUM_BUF      	2
+/**
+ * @brief PIXEL_PER_CYCLE: With a WORDSIZE of 256, the DMA transfers 256 Bit = 32 Byte per cycle. 
+ * @brief With a size of 16 Bit/Pixel = 2 Bytes/Pixel, the DMA transfers 32 Byte/Cycle * (1/2) Pixel/Byte = 16 Pixel/Cycle
+ * @brief Corresponds with WDSIZE_256 (e.g. with WDSIZE_128, PIXEL_PER_CYCLE is 8)
+ */
+#define PIXEL_PER_CYCLE             16
 #define DEBUG                       0
 
 struct imager_format {
@@ -185,7 +191,7 @@ static const struct imager_format epc660_formats[] = {
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
 		.channels    = 2,
-		.pixel_depth_bytes = 4,
+		.pixel_depth_bytes = 2,
 	},
 	{
 		.desc	     = "4DCS_12bpp",
@@ -194,7 +200,7 @@ static const struct imager_format epc660_formats[] = {
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
 		.channels    = 4,
-		.pixel_depth_bytes = 8,
+		.pixel_depth_bytes = 2,
 	},
 };
 #define MAX_FMTS ARRAY_SIZE(epc660_formats)
@@ -323,11 +329,9 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
 	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
-	int dmaDescArrCount;
-	int i, channel;
-	dma_addr_t start_addr, channelStartAddr, nextDescrDMAAddr;
+    int channel;
+    dma_addr_t start_addr, nextDescrDMAAddr;
 	struct imager_dma_desc_list_item *dma_desc;
-	int halfImageSizeBytes, rowSizeBytes;
 
 	#if DEBUG
 //	printk(KERN_INFO "#### epc660_buffer_init\n");
@@ -343,38 +347,32 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 		return -ENOMEM;
 	}
 
-	dmaDescArrCount = epc660_dev->pixel_channels * epc660_dev->fmt.height;
-	start_addr = vb2_dma_contig_plane_dma_addr(vb, 0);
-	rowSizeBytes       = epc660_dev->fmt.width * epc660_dev->pixel_depth_bytes;
-	halfImageSizeBytes = rowSizeBytes * epc660_dev->fmt.height / 2;
-
+	#if DEBUG
+	printk(KERN_INFO "##buffer_init## fmt-width: %d fmt-height: %d pix-dpth: %d\n", epc660_dev->fmt.width, epc660_dev->fmt.height, epc660_dev->pixel_depth_bytes);
+	#endif /*DEBUG*/
+    /* With every call of this function, with a new DMA allocation a new start address is evaluated */
+    start_addr = vb2_dma_contig_plane_dma_addr(vb, 0);
 	dma_desc = buf->dma_desc;
 	nextDescrDMAAddr = buf->desc_dma_addr + sizeof(*dma_desc);
 	for (channel = 0; channel < epc660_dev->pixel_channels; ++channel) {
-		channelStartAddr = start_addr + channel * ((epc660_dev->bpp + 7) / 8) * 16; // * 16 because the dma transfers sixteen pixels at a time
-		for (i = 0; i < epc660_dev->fmt.height/2; i += 1) {
-			/* bottom half */
-			dma_desc->next_desc_addr = nextDescrDMAAddr;
-			dma_desc->start_addr = channelStartAddr + halfImageSizeBytes + i * rowSizeBytes;
-			dma_desc->cfg = epc660_dev->dma_cfg_template.cfg;
-			++dma_desc;
-			nextDescrDMAAddr += sizeof(*dma_desc);
-
-			/* top half */
-			dma_desc->next_desc_addr = nextDescrDMAAddr;
-			dma_desc->start_addr = channelStartAddr + halfImageSizeBytes - ((i+1) * rowSizeBytes);
-			dma_desc->cfg = epc660_dev->dma_cfg_template.cfg;
-			++dma_desc;
-			nextDescrDMAAddr += sizeof(*dma_desc);
-		}
-	}
-	/* copy the descriptor config on the first transfer */
-	buf->dma_desc->cfg |= DESCIDCPY;
-
+        /* ((epc660_dev->bpp + 7) / 8): We want the minimum necessary size of Bytes for a given number of bits.
+        Maximum pixel line length (fmt.width) and the complete line number of one picture (fmt.height): buffer for one channel/plane/picture*/
+    	dma_desc->start_addr = start_addr + channel * ((epc660_dev->bpp + 7) / 8) * epc660_dev->fmt.width * epc660_dev->fmt.height;
+    	#if DEBUG
+    	printk("##buffer_init##  start_addr %x; channel %d; dma_desc-start_addr: %x\n", start_addr, channel, dma_desc->start_addr );
+    	#endif /*DEBUG*/
+		dma_desc->next_desc_addr = nextDescrDMAAddr;
+        dma_desc->cfg = epc660_dev->dma_cfg_template.cfg;
+		++dma_desc;
+    	nextDescrDMAAddr += sizeof(*dma_desc);
+    }
+	/* copy the descriptor config into the DMA_DSCPTR_PRV register to be read out from there (on the first transfer) */
+	buf->dma_desc->cfg |= DESCIDCPY; /*<0x02000000>*/
+    /* If channel==1, the next two lines work on the one and only DMA descriptor element and overwrite some for-loop settings*/
 	/* the very last element must be a list element that makes the dma point to the beginning */
 	(dma_desc-1)->next_desc_addr = buf->desc_dma_addr;
 	/* the last transfer shall generate an interrupt */
-	(dma_desc-1)->cfg |= DI_EN_X;
+	(dma_desc-1)->cfg |= DI_EN_X; /*0x00100000*/
 
 	// print the descriptors
     #if DEBUG
@@ -441,7 +439,7 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
 	#if DEBUG
 //	printk(KERN_INFO "#### epc660_buffer_queue\n");
 	#endif /*DEBUG*/
-	last_dma_desc_idx = epc660_dev->pixel_channels * epc660_dev->fmt.height - 1;
+	last_dma_desc_idx = epc660_dev->pixel_channels - 1;
 	buf->dma_desc[last_dma_desc_idx].next_desc_addr = buf->desc_dma_addr;
 	#if DEBUG
 	printk(KERN_INFO "#### epc660_buffer_queue: start_adresse: %x desc_dma_addr: %x\n", buf->dma_desc[0].start_addr , buf->desc_dma_addr);
@@ -918,22 +916,29 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	epc660_dev->pixel_depth_bytes = epc660_fmt->pixel_depth_bytes;
 
 	memset(&epc660_dev->dma_cfg_template, 0, sizeof(epc660_dev->dma_cfg_template));
-	epc660_dev->dma_cfg_template.cfg      = RESTART | 
-						DMATOVEN |
-						WNR |
-						WDSIZE_256 |
-						PSIZE_32 |
-						NDSIZE_2 |
-						DMAFLOW_LIST |
-						DMAEN;
-	epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width / 16;
-	epc660_dev->dma_cfg_template.x_modify = epc660_dev->pixel_depth_bytes * 16;
+    /* The following config bits configure the DMA with the reg value 0x01024527
+    As DMA2D is not set, the DMA mode is 1D automatically.*/
+	epc660_dev->dma_cfg_template.cfg      = RESTART |                       ///< DMA Buffer Clear SYNC <0x00000004>
+						DMATOVEN |                      ///< DMA Trigger Overrun Error Enable <0x01000000>
+						WNR |                           ///< Channel Direction (W/R*) <0x00000002>
+						WDSIZE_256 |                    ///< Transfer Word Size 256 Bit <0x00000500> --> Corresponds to PIXEL_PER_CYCLE
+						PSIZE_32 |                      ///< Peripheral Transfer Word Size 32 Bit = 4 Byte <0x00000020>
+						NDSIZE_2 |                      ///< Next Descriptor Size = 3 <0x00020000>
+						DMAFLOW_LIST |                  ///< Descriptor List Mode <0x00004000>
+						DMAEN;                          ///< DMA Channel Enable <0x00000001>
+
+	epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width * (epc660_dev->fmt.height) / PIXEL_PER_CYCLE;
+	epc660_dev->dma_cfg_template.x_modify = epc660_dev->pixel_depth_bytes * PIXEL_PER_CYCLE;// After 32 Bytes = 256 Bit WORDSIZE
+
+	#if DEBUG
+    //printk("#### epc660_s_fmt_vid_cap: x_count %ld, x_modify %ld\n", epc660_dev->dma_cfg_template.x_count, epc660_dev->dma_cfg_template.x_modify);
+	#endif /*DEBUG*/
 
 	if (epc660_dev->dma_pool) {
 		dma_pool_destroy(epc660_dev->dma_pool);
 	}
 
-	dmaPoolMemorySize = (epc660_dev->pixel_channels * epc660_dev->fmt.height) * sizeof(struct imager_dma_desc_list_item);
+	dmaPoolMemorySize = (epc660_dev->pixel_channels ) * sizeof(struct imager_dma_desc_list_item);
 	epc660_dev->dma_pool = dma_pool_create(CAPTURE_DRV_NAME, epc660_dev->v4l2_dev.dev,  dmaPoolMemorySize, 16, 0);
 	return 0;
 }
