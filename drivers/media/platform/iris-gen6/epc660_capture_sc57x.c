@@ -700,37 +700,6 @@ err:
 	return ret;
 }
 
-static int epc660_querystd(struct file *file, void *priv, v4l2_std_id *std)
-{
-	struct epc660_device *epc660_dev = video_drvdata(file);
-
-	return v4l2_subdev_call(epc660_dev->sd, video, querystd, std);
-}
-
-static int epc660_g_std(struct file *file, void *priv, v4l2_std_id *std)
-{
-	struct epc660_device *epc660_dev = video_drvdata(file);
-
-	*std = epc660_dev->std;
-	return 0;
-}
-
-static int epc660_s_std(struct file *file, void *priv, v4l2_std_id std)
-{
-	struct epc660_device *epc660_dev = video_drvdata(file);
-	int ret;
-
-	if (vb2_is_busy(&epc660_dev->buffer_queue))
-		return -EBUSY;
-
-	ret = v4l2_subdev_call(epc660_dev->sd, video, s_std, std);
-	if (ret < 0)
-		return ret;
-
-	epc660_dev->std = std;
-	return 0;
-}
-
 static int epc660_enum_input(struct file *file, void *priv,
 				struct v4l2_input *input)
 {
@@ -748,14 +717,6 @@ static int epc660_enum_input(struct file *file, void *priv,
 	ret = v4l2_subdev_call(epc660_dev->sd, video, g_input_status, &status);
 	if (!ret)
 		input->status = status;
-	return 0;
-}
-
-static int epc660_g_input(struct file *file, void *priv, unsigned int *index)
-{
-	struct epc660_device *epc660_dev = video_drvdata(file);
-
-	*index = epc660_dev->cur_input;
 	return 0;
 }
 
@@ -824,30 +785,6 @@ static int epc660_try_format(struct epc660_device *epc660_dev,
 	return 0;
 }
 
-static int epc660_enum_fmt_vid_cap(struct file *file, void  *priv,
-					   struct v4l2_fmtdesc *fmt)
-{
-	struct epc660_device *epc660_dev = video_drvdata(file);
-	struct imager_format *sf = epc660_dev->sensor_formats;
-
-	if (fmt->index >= epc660_dev->num_sensor_formats)
-		return -EINVAL;
-
-	fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	strlcpy(fmt->description, sf[fmt->index].desc, sizeof(fmt->description));
-	fmt->pixelformat = sf[fmt->index].pixelformat;
-	return 0;
-}
-
-static int epc660_try_fmt_vid_cap(struct file *file, void *priv,
-					struct v4l2_format *fmt)
-{
-	struct epc660_device *epc660_dev = video_drvdata(file);
-	struct v4l2_pix_format *pixfmt = &fmt->fmt.pix;
-
-	return epc660_try_format(epc660_dev, pixfmt, NULL);
-}
-
 static int epc660_g_fmt_vid_cap(struct file *file, void *priv,
 					struct v4l2_format *fmt)
 {
@@ -910,28 +847,6 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-static int epc660_querycap(struct file *file, void *priv,
-				   struct v4l2_capability *cap)
-{
-	struct epc660_device *epc660_dev = video_drvdata(file);
-
-	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
-	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
-	strlcpy(cap->driver, CAPTURE_DRV_NAME, sizeof(cap->driver));
-	strlcpy(cap->bus_info, "Blackfin Platform", sizeof(cap->bus_info));
-	strlcpy(cap->card, epc660_dev->cfg.card_name, sizeof(cap->card));
-	return 0;
-}
-
-static int epc660_g_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
-{
-	struct epc660_device *epc660_dev = video_drvdata(file);
-
-	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-		return -EINVAL;
-	return v4l2_subdev_call(epc660_dev->sd, video, g_parm, a);
-}
-
 static int epc660_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
@@ -951,26 +866,15 @@ static int epc660_log_status(struct file *file, void *priv)
 
 static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 {
-	.vidioc_querycap         = epc660_querycap,
 	.vidioc_g_fmt_vid_cap    = epc660_g_fmt_vid_cap,
-	.vidioc_enum_fmt_vid_cap = epc660_enum_fmt_vid_cap,
 	.vidioc_s_fmt_vid_cap    = epc660_s_fmt_vid_cap,
-	.vidioc_try_fmt_vid_cap  = epc660_try_fmt_vid_cap,
 	.vidioc_enum_input       = epc660_enum_input,
-	.vidioc_g_input          = epc660_g_input,
 	.vidioc_s_input          = epc660_s_input,
-	.vidioc_querystd         = epc660_querystd,
-	.vidioc_s_std            = epc660_s_std,
-	.vidioc_g_std            = epc660_g_std,
 	.vidioc_reqbufs          = vb2_ioctl_reqbufs,
-	.vidioc_create_bufs      = vb2_ioctl_create_bufs,
 	.vidioc_querybuf         = vb2_ioctl_querybuf,
 	.vidioc_qbuf             = vb2_ioctl_qbuf,
 	.vidioc_dqbuf            = vb2_ioctl_dqbuf,
-	.vidioc_expbuf           = vb2_ioctl_expbuf,
 	.vidioc_streamon         = epc660_streamon,
-	.vidioc_streamoff        = vb2_ioctl_streamoff,
-	.vidioc_g_parm           = epc660_g_parm,
 	.vidioc_s_parm           = epc660_s_parm,
 	.vidioc_log_status       = epc660_log_status,
 };
