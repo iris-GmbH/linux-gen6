@@ -169,7 +169,7 @@ struct epc660_device {
  */
 static const struct imager_format epc660_formats[] = {
 	{
-		.desc	     = "12bit Grey Scale",
+		.desc	     = "1DCS_12bpp",
 		.pixelformat = V4L2_PIX_FMT_Y12,
 		.mbus_code   = MEDIA_BUS_FMT_Y12_1X12,
 		.bpp	     = 16,
@@ -178,7 +178,7 @@ static const struct imager_format epc660_formats[] = {
 		.pixel_depth_bytes = 2,
 	},
 	{
-		.desc	     = "2DCS interleaved",
+		.desc	     = "2DCS_12bpp",
 		.pixelformat = v4l2_fourcc('2', 'D', 'C', 'S'),
 		.mbus_code   = MEDIA_BUS_FMT_EPC660_2X12,
 		.bpp	     = 16,
@@ -187,16 +187,7 @@ static const struct imager_format epc660_formats[] = {
 		.pixel_depth_bytes = 4,
 	},
 	{
-		.desc	     = "2DCS + gray interleaved",
-		.pixelformat = v4l2_fourcc('2', 'D', 'C', 'G'),
-		.mbus_code   = MEDIA_BUS_FMT_EPC660_3X12,
-		.bpp	     = 16,
-		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = 3,
-		.pixel_depth_bytes = 8,
-	},
-	{
-		.desc	     = "4DCS interleaved",
+		.desc	     = "4DCS_12bpp",
 		.pixelformat = v4l2_fourcc('4', 'D', 'C', 'S'),
 		.mbus_code   = MEDIA_BUS_FMT_EPC660_4X12,
 		.bpp	     = 16,
@@ -204,16 +195,6 @@ static const struct imager_format epc660_formats[] = {
 		.channels    = 4,
 		.pixel_depth_bytes = 8,
 	},
-	{
-		.desc	     = "4DCS + gray interleaved",
-		.pixelformat = v4l2_fourcc('4', 'D', 'C', 'G'),
-		.mbus_code   = MEDIA_BUS_FMT_EPC660_5X12,
-		.bpp	     = 16,
-		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = 5,
-		.pixel_depth_bytes = 16,
-	},
-
 };
 #define MAX_FMTS ARRAY_SIZE(epc660_formats)
 
@@ -766,19 +747,13 @@ static int epc660_enum_input(struct file *file, void *priv,
 	struct epc660_device *epc660_dev = video_drvdata(file);
 	struct capture_config *config = &epc660_dev->cfg;
 
-	int ret;
-	u32 status;
-
 	/* Compare the input value with the value in the driver */
 	if (input->index >= config->num_inputs)
 		return -EINVAL;
 
 	/* set the input value for the required input instance */
 	*input = config->inputs[input->index];
-	/* get input status */
-	ret = v4l2_subdev_call(epc660_dev->sd, video, g_input_status, &status);
-	if (!ret)
-		input->status = status;
+
 	return 0;
 }
 
@@ -794,8 +769,6 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 	struct epc660_device *epc660_dev = video_drvdata(file);
 	struct vb2_queue *vq = &epc660_dev->buffer_queue;
 	struct capture_config *config = &epc660_dev->cfg;
-	struct imager_route *route;
-	int ret;
 
 	if (vb2_is_busy(vq))
 		return -EBUSY;
@@ -803,13 +776,6 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 	if (index >= config->num_inputs)
 		return -EINVAL;
 
-	route = &config->routes[index];
-	ret = v4l2_subdev_call(epc660_dev->sd, video, s_routing, route->input,
-			route->output, 0);
-	if ((ret < 0) && (ret != -ENOIOCTLCMD)) {
-		v4l2_err(&epc660_dev->v4l2_dev, "Failed to set input\n");
-		return ret;
-	}
 	epc660_dev->cur_input = index;
 	return 0;
 }
