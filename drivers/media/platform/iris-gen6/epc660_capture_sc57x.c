@@ -846,46 +846,6 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 	return 0;
 }
 
-static int epc660_try_format(struct epc660_device *epc660_dev,
-			     struct v4l2_pix_format *pixfmt,
-			     struct imager_format *epc660_fmt)
-{
-	struct imager_format *sf = epc660_dev->sensor_formats;
-	struct imager_format *fmt = NULL;
-	struct v4l2_subdev_pad_config pad_cfg;
-	struct v4l2_subdev_format format = {
-		.which = V4L2_SUBDEV_FORMAT_TRY,
-	};
-	int ret, i;
-
-	for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
-		fmt = &sf[i];
-		if (pixfmt->pixelformat == fmt->pixelformat)
-			break;
-	}
-	if (i == epc660_dev->num_sensor_formats)
-		fmt = &sf[0];
-
-	v4l2_fill_mbus_format(&format.format, pixfmt, fmt->mbus_code);
-	ret = v4l2_subdev_call(epc660_dev->sd, pad, set_fmt, &pad_cfg,
-				&format);
-	if (ret < 0)
-		return ret;
-	v4l2_fill_pix_format(pixfmt, &format.format);
-	if (epc660_fmt) {
-		for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
-			fmt = &sf[i];
-			if (format.format.code == fmt->mbus_code)
-				break;
-		}
-		*epc660_fmt = *fmt;
-	}
-
-	pixfmt->bytesperline = pixfmt->width * epc660_fmt->pixel_depth_bytes;
-	pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
-	return 0;
-}
-
 /* this function isn't called but necessary for kernel function (v4l2_ioctl_ops) */
 static int epc660_g_fmt_vid_cap(struct file *file, void *priv,
 					struct v4l2_format *fmt)
@@ -909,35 +869,53 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 				struct v4l2_format *fmt)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
+	struct imager_format *sf = epc660_dev->sensor_formats;
 	struct vb2_queue *vq = &epc660_dev->buffer_queue;
 	struct v4l2_subdev_format format = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
-	struct imager_format epc660_fmt;
+	struct imager_format *epc660_fmt;
 	struct v4l2_pix_format *pixfmt = &fmt->fmt.pix;
 	int dmaPoolMemorySize;
-	int ret;
+	int ret, i;
 
 	if (vb2_is_busy(vq))
 		return -EBUSY;
 
-	/* see if format works */
-	ret = epc660_try_format(epc660_dev, pixfmt, &epc660_fmt);
-	if (ret < 0)
-		return ret;
+	/* Searches in the format array of all available formats in the capture driver
+    for that pixelformat which was given into driver by application. */
+	for (i = 0; i < epc660_dev->num_sensor_formats; i++) {
+		epc660_fmt = &sf[i];
+		if (pixfmt->pixelformat == epc660_fmt->pixelformat)
+			break;
+	}
+    /* If the configured format isn't found in list, take the first one 
+    in array as default.*/
+	if (i == epc660_dev->num_sensor_formats)
+		epc660_fmt = &sf[0];
 
-	v4l2_fill_mbus_format(&format.format, pixfmt, epc660_fmt.mbus_code);
+	pixfmt->bytesperline = pixfmt->width * epc660_fmt->pixel_depth_bytes;
+	pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
+
+	#if DEBUG
+	printk(KERN_INFO "#### epc660_s_fmt_vid_cap width: %d, height: %d\n", pixfmt->width, pixfmt->height);
+	//printk(KERN_INFO "#### epc660_s_fmt_vid_cap wdth: %d, px_dpthbyts: %d, bytperln: %d, hght: %d\n", pixfmt->width, epc660_fmt->pixel_depth_bytes, pixfmt->bytesperline, pixfmt->height);
+	#endif /*DEBUG*/
+
+    /* Fills format.format for usage in v4l2_subdev_call */
+	v4l2_fill_mbus_format(&format.format, pixfmt, epc660_fmt->mbus_code);
+    /* Sets the format parameter in the epc660.c I2C- Driver 
+    This function might be called during runtime without further implications */
 	ret = v4l2_subdev_call(epc660_dev->sd, pad, set_fmt, NULL, &format);
 	if (ret < 0)
 		return ret;
 
     /* Store the parameter of the configured video format (application) into epc660_dev module struct */ 
 	epc660_dev->fmt               = *pixfmt;
-	epc660_dev->bpp               = epc660_fmt.bpp;
-	epc660_dev->dlen              = epc660_fmt.dlen;
-	epc660_dev->pixel_channels    = epc660_fmt.channels;
-	/* align the pixels to 4 bytes */
-	epc660_dev->pixel_depth_bytes = epc660_fmt.pixel_depth_bytes;
+	epc660_dev->bpp               = epc660_fmt->bpp;
+	epc660_dev->dlen              = epc660_fmt->dlen;
+	epc660_dev->pixel_channels    = epc660_fmt->channels;
+	epc660_dev->pixel_depth_bytes = epc660_fmt->pixel_depth_bytes;
 
 	memset(&epc660_dev->dma_cfg_template, 0, sizeof(epc660_dev->dma_cfg_template));
 	epc660_dev->dma_cfg_template.cfg      = RESTART | 
