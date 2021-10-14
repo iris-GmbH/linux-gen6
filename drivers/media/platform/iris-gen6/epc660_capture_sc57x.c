@@ -68,12 +68,8 @@
  */
 #define PIXEL_PER_CYCLE             16
 #define DEBUG                       0
-#define BUFFER_NO_2                 0
-#define SWITCH                      1
 #define FIRST_DESC                  0
 #define SECOND_DESC                 1
-#define THIRD_DESC                  2
-#define FOURTH_DESC                 3
 
 struct imager_format {
 	char *desc;
@@ -100,7 +96,7 @@ struct imager_dma_desc_list_item {
  */
 struct imager_buffer {
 	struct vb2_v4l2_buffer vb; ///< Basic driver buffer, contains "struct vb2_buffer"
-	struct imager_dma_desc_list_item *dma_desc; ///<  Defined locally
+	struct imager_dma_desc_list_item *dma_desc;
 	dma_addr_t desc_dma_addr; ///< the dma reacheable address of the dma_desc
 	struct list_head list;
 };
@@ -199,7 +195,7 @@ static const struct imager_format epc660_formats[] = {
 		.mbus_code   = MEDIA_BUS_FMT_Y12_1X12,
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = QUAD,
+		.channels    = QUAD,// Set to maximum value to get the maximum buffer size during initialization
 		.pixel_depth_bytes = 2,
 	},
 	{
@@ -392,10 +388,7 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	/* the last transfer shall generate an interrupt */
 	(dma_desc-1)->cfg |= DI_EN_X; /*0x00100000*/
 	/* the last transfer sets the Stop Mode by disabling the LIST_MODE */
-    #if SWITCH
 	(dma_desc-1)->cfg &= ~DMAFLOW_LIST; /*0x00004000*/
-    #else
-    #endif
 
 	// print the descriptors
     #if DEBUG
@@ -438,7 +431,7 @@ static int epc660_buffer_prepare(struct vb2_buffer *vb)
 	vb2_set_plane_payload(vb, 0, size);
 
 	#if DEBUG
-	printk(KERN_INFO "#### epc660_buffer_prepare: size: %ld, fmtfield: %d\n", size, epc660_dev->fmt.field);
+	//printk(KERN_INFO "#### epc660_buffer_prepare: size: %ld, fmtfield: %d\n", size, epc660_dev->fmt.field);
 	#endif /*DEBUG*/
 
 	vbuf->field = epc660_dev->fmt.field;
@@ -465,7 +458,7 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
 	last_dma_desc_idx = epc660_dev->pixel_channels - 1;
     buf->dma_desc[last_dma_desc_idx].next_desc_addr = buf->desc_dma_addr;
 	#if DEBUG
-	printk(KERN_INFO "#### epc660_buffer_queue: start_adresse: %x desc_dma_addr: %x\n", buf->dma_desc[0].start_addr , buf->desc_dma_addr);
+	//printk(KERN_INFO "#### epc660_buffer_queue: start_adresse: %x desc_dma_addr: %x\n", buf->dma_desc[0].start_addr , buf->desc_dma_addr);
 	#endif /*DEBUG*/
 	spin_lock_irqsave(&epc660_dev->lock, flags);
 
@@ -490,7 +483,7 @@ static void epc660_buffer_queue(struct vb2_buffer *vb)
 		printk("listsize: %d\n", listSize);
 	}
 	#endif /*DEBUG*/
-    
+
 	list_add_tail(&buf->list, &epc660_dev->dma_queue);
 
 	spin_unlock_irqrestore(&epc660_dev->lock, flags);
@@ -661,13 +654,10 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 	struct ppi_if *ppi = dev_id;
 	struct epc660_device *epc660_dev = ppi->priv;
 	int dmaStatus;
-	//dma_addr_t lastDmaDescriptor;
-	//struct list_head* iterator;
-	struct vb2_buffer *vb;
-    struct imager_buffer *buf ;                     
+	dma_addr_t lastDmaDescriptor;
+	struct list_head* iterator;
 
 	#if DEBUG
-//	printk("epc660_isr\n");
 //	printk(KERN_INFO "#### epc660_isr\n");
 	#endif /*DEBUG*/
 
@@ -676,39 +666,24 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 	dmaStatus = get_dma_curr_irqstat(epc660_dev->dma_channel);
 	clear_dma_irqstat(epc660_dev->dma_channel);
 
-    #if SWITCH
     disable_dma(epc660_dev->dma_channel);
     epc660_dev->ppi->ops->stop(epc660_dev->ppi);
-    #endif
 	#if DEBUG
     //printk("#### isr dmacfg %lx\n", get_dma_config(epc660_dev->dma_channel));
-	printk("## isr ## dmaStatus: 0x%08x\n", dmaStatus);
-   	//printk("## isr ## timestamp: %lld ns\n", ktime_get_ns());
-    /* Dieser Ausdruck macht den Prozeß für die Lieferung der Bilder stabil_!*/
-    //printDMAState(epc660_dev);
+	//printk("## isr ## dmaStatus: 0x%08x\n", dmaStatus);
 	#endif /*DEBUG*/
 	if (dmaStatus & DMA_DONE) {
 		// if there are at least two buffers in the queue we can deque one
-        #if BUFFER_NO_2
 		if (&epc660_dev->dma_queue == epc660_dev->dma_queue.next->next) {
 	        #if DEBUG
 			printk("buffer underrun in epc660 capture\n");
 //			epc660_stop_transfering(epc660_dev);
         	#endif /*DEBUG*/
 		} else {
-        #endif    
-            #if BUFFER_NO_2    
 			/* publish all buffers that are done */
 			int completedCnt = 0;
 			lastDmaDescriptor = (dma_addr_t)get_dma_prev_desc_ptr(epc660_dev->dma_channel);
-           	#if DEBUG
-       		printk("lastDmaDescriptor: 0x%08x\n", lastDmaDescriptor);
-           	#endif /*DEBUG*/
 			lastDmaDescriptor &= ~1; // the lowest bit masks when a decriptor fetch was invalid
-           	#if DEBUG
-       		//printk("lastDmaDescriptor: 0x%08x\n", lastDmaDescriptor);
-           	#endif /*DEBUG*/
-
 			list_for_each(iterator, &epc660_dev->dma_queue) {
 				struct imager_buffer *buf = list_entry(iterator, struct imager_buffer, list);
                	#if DEBUG
@@ -719,26 +694,24 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 					break;
 				}
 			}
-
-            /*  Hier: 
-            if (list_empty(&epc660_dev->dma_queue)) {}else {printk("list1 is NOT empty\n");} */
-
+           	#if DEBUG
+//			printk("lastDmaDescriptor: 0x%08x\n", lastDmaDescriptor);
+           	#endif /* DEBUG */
 			if (0 == completedCnt) {
-				printk("cannot find any completed buffers!\n");
             	#if DEBUG
+				printk("cannot find any completed buffers!\n");
 //				epc660_stop_transfering(epc660_dev);
-            	#endif /*DEBUG*/
+            	#endif /* DEBUG */
 			} else {
+				struct imager_buffer* buf;
+				struct vb2_buffer *vb;
             	#if DEBUG
 				//printk("found %d completed buffers\n", completedCnt);
             	#endif /*DEBUG*/
 				while (completedCnt--) {
-                    #if BUFFER_NO_2
 					if (&epc660_dev->dma_queue == epc660_dev->dma_queue.next->next) {
 						break;
 					}
-                    #endif
-            #endif /* BUFFER_NO_2 */
 					buf = list_entry(epc660_dev->dma_queue.next,
 							struct imager_buffer, list);
                 	#if DEBUG
@@ -752,40 +725,18 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 						vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 					}
 					list_del_init(&buf->list);
-
-                    /* An dieser Stelle: 
-                    if (list_empty(&epc660_dev->dma_queue)) {-->	printk("list2 is empty\n"); }*/
-
-                	#if DEBUG
-                	//printk("## isr ## timestamp: %lld ns\n", vb->timestamp);
-            	    #endif /*DEBUG*/
-
-            #if BUFFER_NO_2
 				}
 			}
 		}
-#endif        
 		/* clear error flag for the next frame */
 		ppi->err = false;
+
 	} else {
-        #if 0 //Development Tests
-        /* As the application ran stable so far, this wasn't used.
-        With an instable Interrupt, this code wasn't useful at all! */
-        printDMAState(epc660_dev);
-        /* The ENABLE Bit is set separately after the other bits
-        to avoid side effects during setting the config register in the DMA:
-        First remove the DMA Enable Bit DMAEN from the template, then set the bit separately directly in the register.*/
-        epc660_dev->dma_cfg_template.cfg = epc660_dev->dma_cfg_template.cfg & ~DMAEN;
-	    set_dma_config(epc660_dev->dma_channel, epc660_dev->dma_cfg_template.cfg);
-        //printDMAState(epc660_dev);
-        enable_dma(epc660_dev->dma_channel);
-        dma_enable_irq(epc660_dev->dma_channel);
-        /* After using the template, reset it to original state */
-        epc660_dev->dma_cfg_template.cfg = epc660_dev->dma_cfg_template.cfg | DMAEN;
-        printDMAState(epc660_dev);
-       	//printk("## isr ## timestamp: %lld ns\n", ktime_get_ns());
-        #endif   
-	    //printk("## isr ## dmaStatus: 0x%08x\n", dmaStatus);
+        /* The else path catches all other cases/reasons for the ISR than "DMA_DONE".
+        As it is empirically quite improbable, that the ISR is called without "DMA_DONE", those other cases aren't handled further.
+        The DMA and the PPI were disabled above already. They only are enabled by the call of "onImage" in the application, which is never called without "DMA_DONE".
+        For getting a result of analyzing the problem, this printk is set to get information about the cause of problems during runtime.*/
+	    printk("## isr ## dmaStatus: 0x%08x\n", dmaStatus);
     }
 
 	spin_unlock(&epc660_dev->lock);
@@ -815,8 +766,8 @@ static int epc660_set_DMA_registers (struct epc660_device *epc660_dev)
     /* After using the template, reset it to original state */
     epc660_dev->dma_cfg_template.cfg = epc660_dev->dma_cfg_template.cfg | DMAEN;
 	#if DEBUG
-    printk("#### epc660_set_DMA_registers\n");
-    printDMAState(epc660_dev);
+    //printk("#### epc660_set_DMA_registers\n");
+    //printDMAState(epc660_dev);
     //printk("#### epc660_set_DMA_registers: dmaStatus: 0x%08lx\n", get_dma_curr_irqstat(epc660_dev->dma_channel));
 	#endif /*DEBUG*/
 	return 0;
@@ -931,10 +882,7 @@ static int epc660_enum_input(struct file *file, void *priv,
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
 	struct capture_config *config = &epc660_dev->cfg;
-    #if 0
-	int ret;
-	u32 status;
-    #endif
+
 	#if DEBUG
 	//printk(KERN_INFO "#### epc660_enum_input\n");
 	#endif /*DEBUG*/
@@ -942,16 +890,10 @@ static int epc660_enum_input(struct file *file, void *priv,
 	/* Compare the input value with the value in the driver */
 	if (input->index >= config->num_inputs)
 		return -EINVAL;
+
 	/* set the input value for the required input instance */
 	*input = config->inputs[input->index];
 
-	/* As "get input status" (struct v4l2_subdev_video_ops, epc660.c) isn't implemented for EPC660 drivers,
-	this call always returns -ENOIOCTLCMD (see #define v4l2_subdev_call(...) ) */
-	#if 0
-	ret = v4l2_subdev_call(epc660_dev->sd, video, g_input_status, &status);
-	if (!ret)
-		input->status = status;
-	#endif	
 	return 0;
 }
 
@@ -967,10 +909,7 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 	struct epc660_device *epc660_dev = video_drvdata(file);
 	struct vb2_queue *vq = &epc660_dev->buffer_queue;
 	struct capture_config *config = &epc660_dev->cfg;
-	#if 0
-    struct imager_route *route;
-	int ret;
-    #endif
+
 	#if DEBUG
 	printk(KERN_INFO "#### epc660_s_input\n");
 	#endif /*DEBUG*/
@@ -980,19 +919,6 @@ static int epc660_s_input(struct file *file, void *priv, unsigned int index)
 
 	if (index >= config->num_inputs)
 		return -EINVAL;
-
-	/* As "s_routing" (struct v4l2_subdev_video_ops, epc660.c) isn't implemented for EPC660 drivers, 
-	this call always returns -ENOIOCTLCMD (see #define v4l2_subdev_call(...) ) 
-	(tested with (ret == -ENOIOCTLCMD))*/
-	#if 0
-	route = &config->routes[index];
-	ret = v4l2_subdev_call(epc660_dev->sd, video, s_routing, route->input,
-			route->output, 0);
-	if ((ret < 0) && (ret != -ENOIOCTLCMD)) {
-		v4l2_err(&epc660_dev->v4l2_dev, "Failed to set input\n");
-		return ret;
-	}
-	#endif
 
 	epc660_dev->cur_input = index;
 	return 0;
@@ -1110,29 +1036,15 @@ static int adapt_DMA_DescriptorElements (struct epc660_device *epc660_dev, int n
     dma_addr_t nextDescrDMAAddr;
 	int i;
 
-    /* Problematik:
-    Hier sind immer nur die drei aktuell im Treiber vorhandenen Buffer bearbeitbar. 
-    Man müßte also die Funktion mindestens zweimal aufrufen, um alle Buffer abzudecken. 
-    */
-    #if 0 /*So geht es!*/
-    buf = list_entry(epc660_dev->dma_queue.next, struct imager_buffer, list);
-    printk("#### 253: desc_dma_addr %08x start0: %08x, next0: %08x\n", buf->desc_dma_addr, buf->dma_desc[1].start_addr, buf->dma_desc[1].next_desc_addr);
-    buf = list_entry(epc660_dev->dma_queue.next->next, struct imager_buffer, list);
-    printk("#### 253: desc_dma_addr %08x start0: %08x, next0: %08x\n", buf->desc_dma_addr, buf->dma_desc[1].start_addr, buf->dma_desc[1].next_desc_addr);
-    buf = list_entry(epc660_dev->dma_queue.next->next->next,struct imager_buffer, list);
-    printk("#### 253: desc_dma_addr %08x start0: %08x, next0: %08x\n", buf->desc_dma_addr, buf->dma_desc[1].start_addr, buf->dma_desc[1].next_desc_addr);
-    //buf = list_entry(epc660_dev->dma_queue.next->next->next->next,struct imager_buffer, list);
-    //printk("#### 253: desc_dma_addr %08x start0: %08x, next0: %08x\n", buf->desc_dma_addr, buf->dma_desc[1].start_addr, buf->dma_desc[1].next_desc_addr);
-    #else
 	list_for_each(iterator, &epc660_dev->dma_queue) {
 		buf = list_entry(iterator, struct imager_buffer, list);
         /* The dma_desc[i] array starts with "0", nrDCS_Frames contains 1,2,4 */
         for (i= FIRST_DESC; i <= (nrDCS_Frames-1); i++){
 
            	#if DEBUG
-   	    	printk("#### DMA %d vorher      %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+   	    	//printk("#### DMA %d vorher      %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
        	    #endif /*DEBUG*/
-            #if 1
+
             /* Actions for the first descriptor element */   
             if ( i == FIRST_DESC ){
                 /* Reset the first 12 Bits for reconfiguring them (in case the other bits are set already) 
@@ -1182,45 +1094,34 @@ static int adapt_DMA_DescriptorElements (struct epc660_device *epc660_dev, int n
             /* The third element is never changed */
             /* The fourth element also isn't changed. The next_desc_addr of the very last descriptor of the last buffer 
             is set with the function buffer_prepare with the return of the buffer from application.
-            It doesn't have to be considered here. */   
-            if ( (i == FOURTH_DESC) && (nrDCS_Frames == QUAD) ){
-                	/* the last transfer shall generate an interrupt */
-	                //buf->dma_desc[i].cfg |= DI_EN_X; /*0x00100000*/
-	                /* the very last element must be a list element that makes the dma point to the beginning */
-                	//buf->dma_desc[i].next_desc_addr = buf->desc_dma_addr;
-                	/* the last transfer sets the Stop Mode by disabling the LIST_MODE */
-	                //buf->dma_desc[i].cfg &= ~DMAFLOW_LIST; /*0x00004000*/
-            }   
+            It doesn't have to be considered here. */
            	#if DEBUG
-   	    	printk("#### DMA %d nachher     %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+   	    	//printk("#### DMA %d nachher     %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
        	    #endif /*DEBUG*/
-            #endif   
         }   /*for*/    
    	    #if DEBUG
-  	    printk("#### DMA %d nach for    %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+  	    //printk("#### DMA %d nach for    %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
         #endif /*DEBUG*/
 	} /*list for each*/
    	#if DEBUG
   	//printk("#### DMA %d nachlisteach%d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
     #endif /*DEBUG*/
-    #endif
+
     return 0;
 
 }
 
 /**
  * @brief Sets the variables necessary for configuration fo new picture format by application
- * @brief For changing the format by application, before epc600_s_parm, "epc660_s_fmt_vid_cap" has to be called
+ * @brief For changing the format by application, before epc660_s_parm, "epc660_s_fmt_vid_cap" has to be called
  * @param *strprm: struct with the variables set by application
  * @return "0" for OK 
  */
-static int epc600_s_parm (struct file *file, void *priv,
+static int epc660_s_parm (struct file *file, void *priv,
 			     struct v4l2_streamparm *strprm)
 {
 	struct epc660_device *epc660_dev = video_drvdata(file);
-    #if SWITCH
 	unsigned long flags;
-    #endif /* SWITCH*/
 	static long unsigned int dmaStatus_s_parm = 0;
     struct imager_buffer* buf;
 
@@ -1231,26 +1132,20 @@ static int epc600_s_parm (struct file *file, void *priv,
         break;
 
     case 253: 
-        #if SWITCH
-        #if 0 /* Das geht soweit, nur halbes Bild in der Mitte --> folgerichtig*/
-        epc660_dev->fmt.width = 160;//strprm->parm.raw_data[1]*16;//176;/*176*/
-        epc660_dev->fmt.height = 120;//strprm->parm.raw_data[2];//240;/*240*/
-        #endif
-        #if 1
-        epc660_dev->fmt.width = strprm->parm.raw_data[1]*16;//176;/*176*/
-        epc660_dev->fmt.height = strprm->parm.raw_data[2];//240;/*240*/
-        #endif
+        /* As raw_data is an u8 value, it is limited to 255. 
+        All larger values have to be shrinked/resized. For binning_horizontal, the value is divided by 16 implicitly 
+        (horizontal size 160/320 --> 10/20) in EPC660_Imager.cpp and is multiplied here to regain original value. */
+        epc660_dev->fmt.width = strprm->parm.raw_data[1]*16;
+        epc660_dev->fmt.height = strprm->parm.raw_data[2];
         epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width * (epc660_dev->fmt.height) / PIXEL_PER_CYCLE; ///< The DMA shall throw an interrupt when the whole channel picture is read into storage
-        #else
-	    #endif /* SWITCH*/
 
         adapt_DMA_DescriptorElements (epc660_dev, strprm->parm.raw_data[3]);
 
 	    #if DEBUG
-	    //printk("#### epc600_s_parm 253: raw_data[3]: %d\n", strprm->parm.raw_data[3] );
-	    printk("#### epc600_s_parm 253: width: %d hght: %d\n", epc660_dev->fmt.width, epc660_dev->fmt.height);
+	    //printk("#### epc660_s_parm 253: raw_data[3]: %d\n", strprm->parm.raw_data[3] );
+	    //printk("#### epc660_s_parm 253: width: %d hght: %d\n", epc660_dev->fmt.width, epc660_dev->fmt.height);
 	    #endif /* DEBUG */
-        #if SWITCH
+
         buf = list_entry(epc660_dev->dma_queue.next, struct imager_buffer, list);
     	spin_lock_irqsave(&epc660_dev->lock, flags);
     	set_dma_next_desc_addr(epc660_dev->dma_channel, (void*)buf->desc_dma_addr);
@@ -1262,17 +1157,15 @@ static int epc600_s_parm (struct file *file, void *priv,
        	/* enable ppi */
     	epc660_dev->ppi->ops->start(epc660_dev->ppi);
     	spin_unlock_irqrestore(&epc660_dev->lock, flags);
-	    #endif /* SWITCH*/
-
         break;
 
     case 210:
-
 	    #if DEBUG
         //printDMAState(epc660_dev);
-        printk("\n#### epc600_s_parm: DMA strt addr: %lx\n", get_dma_start_addr(epc660_dev->dma_channel));
-        //printk("#### epc600_s_parm: dma cfg %lx, dmaStatus: 0x%08x curr_x_count_1: %ld curr_x_count_2: %ld \n", get_dma_config(epc660_dev->dma_channel), dmaStatus_s_parm, curr_x_count_1, curr_x_count_2 );
+        printk("\n#### epc660_s_parm: DMA strt addr: %lx\n", get_dma_start_addr(epc660_dev->dma_channel));
+        //printk("#### epc660_s_parm: dma cfg %lx, dmaStatus: 0x%08x curr_x_count_1: %ld curr_x_count_2: %ld \n", get_dma_config(epc660_dev->dma_channel), dmaStatus_s_parm, curr_x_count_1, curr_x_count_2 );
         #endif /*DEBUG*/
+        break;
 
     default:
         break;
@@ -1280,7 +1173,7 @@ static int epc600_s_parm (struct file *file, void *priv,
     }
 
 	#if DEBUG
-	//printk(KERN_INFO "#### epc600_s_parm: raw_data[0]: %d\n", strprm->parm.raw_data[0]);
+	//printk(KERN_INFO "#### epc660_s_parm: raw_data[0]: %d\n", strprm->parm.raw_data[0]);
 	#endif /*DEBUG*/
 
 	return 0;
@@ -1302,7 +1195,6 @@ static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 {
 	.vidioc_g_fmt_vid_cap    = epc660_g_fmt_vid_cap, ///< No official usage, but driver doesn't run without the function implemented
 	.vidioc_s_fmt_vid_cap    = epc660_s_fmt_vid_cap, ///< Call during start phase by EPC660_Imager.cpp
-    .vidioc_s_parm           = epc600_s_parm, ///< Call with each new parameterizing by application
 	.vidioc_enum_input       = epc660_enum_input, ///< Call during start phase by EPC660_Imager.cpp
 	.vidioc_s_input          = epc660_s_input, ///< Call during start phase by  EPC660_Imager.cpp
 	.vidioc_reqbufs          = vb2_ioctl_reqbufs, ///< Call during start phase by EPC660_Imager.cpp
@@ -1310,6 +1202,7 @@ static const struct v4l2_ioctl_ops epc660_ioctl_ops =
 	.vidioc_qbuf             = vb2_ioctl_qbuf, ///< Call in EPC660_Imager.cpp during all three phases
 	.vidioc_dqbuf            = vb2_ioctl_dqbuf, ///< Call during all three phases
 	.vidioc_streamon         = epc660_streamon, ///< Call during start phase by EPC660_Imager.cpp
+    .vidioc_s_parm           = epc660_s_parm, ///< Call with each new parameterizing by application
 	.vidioc_log_status       = epc660_log_status,
 };
 
