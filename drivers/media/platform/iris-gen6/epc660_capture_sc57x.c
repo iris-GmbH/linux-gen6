@@ -68,6 +68,8 @@
  */
 #define PIXEL_PER_CYCLE             16
 #define DEBUG                       0
+#define FIRST_DESC                  0
+#define SECOND_DESC                 1
 
 struct imager_format {
 	char *desc;
@@ -170,6 +172,15 @@ struct epc660_device {
 	/* used to access capture device */
 	struct mutex mutex;
 };
+
+/**
+ * @brief enum replacing 1 DCS, 2 DCS and 4 DCS 
+ */
+enum NumberDcsFrames {
+    ONE_DCS = 1,
+    TWO_DCS = 2,
+    FOUR_DCS = 4
+}; 
 
 /**
  * @brief used to store sensor supported format
@@ -374,7 +385,10 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	(dma_desc-1)->next_desc_addr = buf->desc_dma_addr;
 	/* the last transfer shall generate an interrupt */
 	(dma_desc-1)->cfg |= DI_EN_X; /*0x00100000*/
-	/* the last transfer sets the Stop Mode by disabling the LIST_MODE */
+	/* After the last transfer, the Stop Mode is set by disabling the LIST_MODE in the last descriptor.
+    This prevents the DMA from automatically loading the next descriptor with finishing the last transfer.
+    So, the descriptor list may be re-configured (see function epc660_s_parm).
+    Then the next descriptor has to be loaded manually and the DMA can be re-started. */
 	(dma_desc-1)->cfg &= ~DMAFLOW_LIST; /*0x00004000*/
 
 	// print the descriptors
@@ -706,7 +720,14 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 		}
 		/* clear error flag for the next frame */
 		ppi->err = false;
-	}
+
+	} else {
+        /* The else path catches all other cases/reasons for the ISR than "DMA_DONE".
+        As it is empirically quite improbable, that the ISR is called without "DMA_DONE", those other cases aren't handled further.
+        The DMA and the PPI were disabled above already. They only are enabled by the call of "onImage" in the application, which is never called without "DMA_DONE".
+        For getting a result of analyzing the problem, this printk is set to get information about the cause of problems during runtime.*/
+	    printk("## isr ## dmaStatus: 0x%08x\n", dmaStatus);
+    }
 
 	spin_unlock(&epc660_dev->lock);
 
@@ -993,6 +1014,90 @@ static int epc660_s_fmt_vid_cap(struct file *file, void *priv,
 }
 
 /**
+ * @brief  The DMA descriptor element list is adapted according the number of DCS frames.
+ * @brief  Only the last element of the list changes (--> adaptation for DCS=1 and DCS=2).
+ * @brief  Precondition for function call: For re-arranging the descriptor elements and re-loading the DMA descriptor,
+ * @brief  the DMA has to be set to "Stop Mode" with the last transfer (in the last descriptor; see also function "buffer_init").
+ * @param  int nrDCS_Frames - Number of configured DCS frames
+ * @return "0" for OK 
+ */
+static int adapt_DMA_DescriptorElements (struct epc660_device *epc660_dev, int nrDCS_Frames)
+{
+    struct imager_buffer* buf;
+	struct list_head* iterator;
+	struct imager_dma_desc_list_item *dma_desc;
+    dma_addr_t nextDescrDMAAddr;
+	int i;
+
+	list_for_each(iterator, &epc660_dev->dma_queue) {
+		buf = list_entry(iterator, struct imager_buffer, list);
+        /* The dma_desc[i] array starts with "0", nrDCS_Frames contains 1,2,4 */
+        for (i= FIRST_DESC; i <= (nrDCS_Frames-1); i++){
+
+           	#if DEBUG
+   	    	//printk("#### DMA %d vorher      %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+       	    #endif /*DEBUG*/
+
+            /* Actions for the first descriptor element */   
+            if ( i == FIRST_DESC ){
+                if (nrDCS_Frames == ONE_DCS){
+                	/* the last transfer shall generate an interrupt */
+	                buf->dma_desc[i].cfg |= DI_EN_X; /*0x00100000*/
+                	/* the last transfer sets the Stop Mode by disabling the LIST_MODE */
+	                buf->dma_desc[i].cfg &= ~DMAFLOW_LIST; /*0x00004000*/
+	                /* the very last element must be a list element that makes the dma point to the beginning */
+                	buf->dma_desc[i].next_desc_addr = buf->desc_dma_addr;
+                    break;
+                } else {
+                	/* As the item isn't the last one, remove the interrupt generation*/
+	                buf->dma_desc[i].cfg &= ~DI_EN_X; /*0x00100000*/
+                    /* Activate descriptor list mode if element isn't the last one */
+                    buf->dma_desc[i].cfg |= DMAFLOW_LIST; /*0x00004000*/
+                    /* "next descriptor address" of first descriptor is the start address of the 2nd descriptor */
+                	nextDescrDMAAddr = buf->desc_dma_addr + sizeof(*dma_desc);
+                	buf->dma_desc[i].next_desc_addr = nextDescrDMAAddr;
+                }
+            } 
+
+            if (i == SECOND_DESC) {
+                if (nrDCS_Frames == TWO_DCS) {
+                	/* the last transfer shall generate an interrupt */
+	                buf->dma_desc[i].cfg |= DI_EN_X; /*0x00100000*/
+                	/* the last transfer sets the Stop Mode by disabling the LIST_MODE */
+	                buf->dma_desc[i].cfg &= ~DMAFLOW_LIST; /*0x00004000*/
+	                /* the very last element must be a list element that makes the dma point to the beginning */
+                	buf->dma_desc[i].next_desc_addr = buf->desc_dma_addr;
+                    break;
+                } else {
+                	/* As the item isn't the last one, remove the interrupt generation*/
+	                buf->dma_desc[i].cfg &= ~DI_EN_X; /*0x00100000*/
+                    /* Activate descriptor list mode if element isn't the last one */
+                    buf->dma_desc[i].cfg |= DMAFLOW_LIST; /*0x00004000*/
+                	/* Use the stored address of the 2nd descriptor for evaluating the next of the 2nd */
+                	buf->dma_desc[i].next_desc_addr = nextDescrDMAAddr + sizeof(*dma_desc);
+                }
+            }
+            /* The third element is never changed */
+            /* The fourth element also isn't changed. The next_desc_addr of the very last descriptor of the last buffer 
+            is set with the function buffer_prepare with the return of the buffer from application.
+            It doesn't have to be considered here. */
+           	#if DEBUG
+   	    	//printk("#### DMA %d nachher     %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+       	    #endif /*DEBUG*/
+        }   /*for*/    
+   	    #if DEBUG
+  	    //printk("#### DMA %d nach for    %d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+        #endif /*DEBUG*/
+	} /*list for each*/
+   	#if DEBUG
+  	//printk("#### DMA %d nachlisteach%d: 0x%08lx buf->desc_dma_addr: 0x%08x start: %08x, next: %08x\n", nrDCS_Frames, i, buf->dma_desc[i].cfg, buf->desc_dma_addr, buf->dma_desc[i].start_addr, buf->dma_desc[i].next_desc_addr );
+    #endif /*DEBUG*/
+
+    return 0;
+
+}
+
+/**
  * @brief Sets the variables necessary for configuration fo new picture format by application
  * @brief For changing the format by application, before epc660_s_parm, "epc660_s_fmt_vid_cap" has to be called
  * @param *strprm: struct with the variables set by application
@@ -1013,9 +1118,22 @@ static int epc660_s_parm (struct file *file, void *priv,
         break;
 
     case 253: 
+        /* As raw_data is an u8 value, it is limited to 255. 
+        All larger values have to be shrinked/resized. For binning_horizontal, the value is divided by 16 implicitly 
+        (horizontal size 160/320 --> 10/20) in EPC660_Imager.cpp and is multiplied here to regain original value. */
+        epc660_dev->fmt.width = strprm->parm.raw_data[1]*16;
+        epc660_dev->fmt.height = strprm->parm.raw_data[2];
+        epc660_dev->dma_cfg_template.x_count  = epc660_dev->fmt.width * (epc660_dev->fmt.height) / PIXEL_PER_CYCLE; ///< The DMA shall throw an interrupt when the whole channel picture is read into storage
+
 	    #if DEBUG
-	    printk("#### epc660_s_parm 253: width: %d hght: %d\n", epc660_dev->fmt.width, epc660_dev->fmt.height);
+	    //printk("#### epc660_s_parm 253: raw_data[3]: %d\n", strprm->parm.raw_data[3] );
+	    //printk("#### epc660_s_parm 253: width: %d hght: %d\n", epc660_dev->fmt.width, epc660_dev->fmt.height);
 	    #endif /* DEBUG */
+
+        /* Precondition: For re-arranging the descriptor elements and re-loading the DMA descriptor (set_dma_next_desc_addr),
+        the DMA has to be set to "Stop Mode" with the last transfer/in the last descriptor.
+        See function "buffer_init". */
+        adapt_DMA_DescriptorElements (epc660_dev, strprm->parm.raw_data[3]);
 
         buf = list_entry(epc660_dev->dma_queue.next, struct imager_buffer, list);
     	spin_lock_irqsave(&epc660_dev->lock, flags);
