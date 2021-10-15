@@ -60,6 +60,7 @@
 #define COMPATIBLE_DT_NAME	"iris,gen6-epc660"
 #define CAPTURE_DRV_NAME        "epc660_capture"
 #define MIN_NUM_BUF      	2
+#define MAX_DCS_IMAGES      4 ///<  This value corresponds to "maxDcsImages" in EPC660_Sensor.h/EPC660_Imager.cpp
 /**
  * @brief PIXEL_PER_CYCLE: With a WORDSIZE of 256, the DMA transfers 256 Bit = 32 Byte per cycle. 
  * @brief With a size of 16 Bit/Pixel = 2 Bytes/Pixel, the DMA transfers 32 Byte/Cycle * (1/2) Pixel/Byte = 16 Pixel/Cycle
@@ -181,7 +182,7 @@ static const struct imager_format epc660_formats[] = {
 		.mbus_code   = MEDIA_BUS_FMT_Y12_1X12,
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = 1,
+		.channels    = 4,// Set to maximum value to get the maximum buffer size during initialization
 		.pixel_depth_bytes = 2,
 	},
 	{
@@ -314,7 +315,7 @@ static int epc660_queue_setup(struct vb2_queue *vq,
 		return sizes[0] < epc660_dev->fmt.sizeimage ? -EINVAL : 0;
 
 	*nplanes = 1;
-	sizes[0] = epc660_dev->fmt.sizeimage;
+	sizes[0] = (epc660_dev->fmt.sizeimage * MAX_DCS_IMAGES);
 
 	return 0;
 }
@@ -373,6 +374,8 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 	(dma_desc-1)->next_desc_addr = buf->desc_dma_addr;
 	/* the last transfer shall generate an interrupt */
 	(dma_desc-1)->cfg |= DI_EN_X; /*0x00100000*/
+	/* the last transfer sets the Stop Mode by disabling the LIST_MODE */
+	(dma_desc-1)->cfg &= ~DMAFLOW_LIST; /*0x00004000*/
 
 	// print the descriptors
     #if DEBUG
@@ -405,7 +408,7 @@ static int epc660_buffer_prepare(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
-	unsigned long size = epc660_dev->fmt.sizeimage;
+	unsigned long size = epc660_dev->fmt.sizeimage * MAX_DCS_IMAGES;
 
 	if (vb2_plane_size(vb, 0) < size) {
 		v4l2_err(&epc660_dev->v4l2_dev, "buffer too small (%lu < %lu)\n",
@@ -651,6 +654,8 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 	dmaStatus = get_dma_curr_irqstat(epc660_dev->dma_channel);
 	clear_dma_irqstat(epc660_dev->dma_channel);
 
+    disable_dma(epc660_dev->dma_channel);
+    epc660_dev->ppi->ops->stop(epc660_dev->ppi);
 	if (dmaStatus & DMA_DONE) {
 		// if there are at least two buffers in the queue we can deque one
 		if (&epc660_dev->dma_queue == epc660_dev->dma_queue.next->next) {
