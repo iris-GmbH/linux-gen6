@@ -60,7 +60,7 @@
 #define COMPATIBLE_DT_NAME	"iris,gen6-epc660"
 #define CAPTURE_DRV_NAME        "epc660_capture"
 #define MIN_NUM_BUF      	2
-#define MAX_DCS_IMAGES      4 ///<  This value corresponds to "maxDcsImages" in EPC660_Sensor.h/EPC660_Imager.cpp
+#define MAX_DCS_IMAGES      4 ///<  This value corresponds to "EPC660_MAX_DCS_IMAGES" in EPC660_Sensor.h/EPC660_Imager.cpp
 /**
  * @brief PIXEL_PER_CYCLE: With a WORDSIZE of 256, the DMA transfers 256 Bit = 32 Byte per cycle. 
  * @brief With a size of 16 Bit/Pixel = 2 Bytes/Pixel, the DMA transfers 32 Byte/Cycle * (1/2) Pixel/Byte = 16 Pixel/Cycle
@@ -193,7 +193,7 @@ static const struct imager_format epc660_formats[] = {
 		.mbus_code   = MEDIA_BUS_FMT_Y12_1X12,
 		.bpp	     = 16,
 		.dlen	     = 12, // 12 bit samples are mapped to 16 bits
-		.channels    = 4,// Set to maximum value to get the maximum buffer size during initialization
+		.channels    = 1,
 		.pixel_depth_bytes = 2,
 	},
 	{
