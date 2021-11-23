@@ -29,19 +29,25 @@
 		#size-cells = <1>;
 		ranges;
 
-		cont_memory: dsp_res@0x80000000 {
+		cont_memory: dsp_res@80000000 {
 			compatible = "iris,gen6-cont-memory";
-			reg = <0x80000000 0x1000000>;
+			reg = <0x80000000 0x0A00000>;
 			reg-names = "cont_memory";
 		};
 
-		cont_memory_dma: ddr_res_dma@0x80000000 {
+		sharc_l3_code: sharc_l3_code_res@80000000 {
+			compatible = "iris,gen6-cont-dma-memory";
+			reg = <0x80A00000 0x00600000>;
+			reg-names = "sharc_l3_code";
+		};
+
+		sharc_l3_heap: sharc_l3_heap_res@80000000 {
 			compatible = "iris,gen6-cont-dma-memory";
 			reg = <0x81000000 0x1000000>;
-			reg-names = "cont_memory_dma";
+			reg-names = "sharc_l3_heap";
 		};
 		
-		sram_mem_dma: sram_res_dma@0x20001000 {
+		sram_mem_dma: sram_res_dma@20001000 {
 			compatible = "iris,gen6-cont-dma-memory";
 			reg = <0x20001000 0x000FE000>;
 			reg-names = "sram_mem_dma";
@@ -50,24 +56,29 @@
 	};
 
 	scb {
-		cont_memory_dma {
-			compatible = "iris,gen6-cont-dma-memory";
-			memory-region = <&sram_mem_dma &cont_memory_dma>;
-		};
-
 		cont_memory {
 			compatible = "iris,gen6-cont-memory";
 			memory-region = <&cont_memory>;
 		};
 
-		left_sharc: left_sharc@0x20000000 {
+		sharc_l3_code {
+			compatible = "iris,gen6-cont-dma-memory";
+			memory-region = <&sharc_l3_code>;
+		};
+
+		sharc_l3_heap {
+			compatible = "iris,gen6-cont-dma-memory";
+			memory-region = <&sharc_l3_heap>;
+		};
+
+		left_sharc: left_sharc@20000000 {
 			compatible = "iris,sharc";
 			reg = <0x20000000 0x0800>;
 			coreid = <1>;
 			interrupt-parent = <&gic>;
 			interrupts = <0 203 1>;
 		};
-		right_sharc: right_sharc@0x20000800 {
+		right_sharc: right_sharc@20000800 {
 			compatible = "iris,sharc";
 			reg = <0x20000800 0x0800>;
 			coreid = <2>;
