@@ -396,6 +396,8 @@ static int adi_gpio_irq_type(struct irq_data *d, unsigned int type)
 	int ret = 0;
 	char buf[16];
 
+	printk(KERN_WARNING "HELLO!");
+	
 	if (!port) {
 		pr_err("GPIO IRQ %d :Not exist\n", d->irq);
 		return -ENODEV;
