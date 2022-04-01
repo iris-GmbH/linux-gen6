@@ -280,7 +280,7 @@ static void adi_gpio_ack_irq(struct irq_data *d)
 
 	writel(pintbit, &regs->request);
 	
-	printk(KERN_INFO "adi_gpio_ack_irq: pintbit=%i hwirq=%i invert_set=%i invert_clear=%i", pintbit, d->hwirq, regs->invert_set, regs->invert_clear);
+	printk(KERN_WARNING "adi_gpio_ack_irq: pintbit=%i hwirq=%i invert_set=%i invert_clear=%i", pintbit, d->hwirq, regs->invert_set, regs->invert_clear);
 
 	spin_unlock(&port->pint->lock);
 	spin_unlock_irqrestore(&port->lock, flags);
@@ -306,7 +306,7 @@ static void adi_gpio_mask_ack_irq(struct irq_data *d)
 	writel(pintbit, &regs->request);
 	writel(pintbit, &regs->mask_clear);
 
-	printk(KERN_INFO "adi_gpio_mask_ack_irq: pintbit=%i hwirq=%i invert_set=%i invert_clear=%i", pintbit, d->hwirq, regs->invert_set, regs->invert_clear);
+	printk(KERN_WARNING "adi_gpio_mask_ack_irq: pintbit=%i hwirq=%i invert_set=%i invert_clear=%i", pintbit, d->hwirq, regs->invert_set, regs->invert_clear);
 
 	spin_unlock(&port->pint->lock);
 	spin_unlock_irqrestore(&port->lock, flags);
