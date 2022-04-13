@@ -71,7 +71,7 @@ static int cont_mem_mmap(struct file *file, struct vm_area_struct *vma)
 	} else if (dd->mode == MODE_DMA) {
 		if (remap_pfn_range(vma, vma->vm_start,
 				    dd->r.start >> PAGE_SHIFT, size,
-				    pgprot_dmacoherent(PAGE_SHARED))) {
+				    pgprot_noncached(PAGE_SHARED))) {
 			dev_err(dd->misc_device.parent,
 				"remap page range failed\n");
 			return -ENXIO;
