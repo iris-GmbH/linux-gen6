@@ -87,21 +87,21 @@
 			compatible = "adi,twi";
 			reg = <0x31001400 0xFF>;
 			interrupts = <0 115 0>;
-			clock-khz = <100>;
+			clock-khz = <400>;
 		};
 
 		i2c1: twi@0x31001500 {
 			compatible = "adi,twi";
 			reg = <0x31001500 0xFF>;
 			interrupts = <0 116 0>;
-			clock-khz = <100>;
+			clock-khz = <400>;
 		};
 
 		i2c2: twi@0x31001600 {
 			compatible = "adi,twi";
 			reg = <0x31001600 0xFF>;
 			interrupts = <0 117 0>;
-			clock-khz = <100>;
+			clock-khz = <400>;
 		};
 
 /*		
