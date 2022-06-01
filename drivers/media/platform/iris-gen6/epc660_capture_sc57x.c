@@ -244,7 +244,7 @@ static inline bool vb2_queue_is_busy(struct video_device *vdev, struct file *fil
 
 static int epc660_init_sensor_formats(struct epc660_device *epc660_dev)
 {
-
+	printk("epc660_init_sensor_formats\n");
 	struct v4l2_subdev_mbus_code_enum code = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
@@ -297,6 +297,7 @@ static int epc660_queue_setup(struct vb2_queue *vq,
 				unsigned int sizes[],
 				struct device *alloc_devs[])
 {
+	printk("epc660_queue_setup\n");
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vq);
 
 	if (vq->num_buffers + *nbuffers < MIN_NUM_BUF)
@@ -313,6 +314,7 @@ static int epc660_queue_setup(struct vb2_queue *vq,
 
 static int epc660_buffer_init(struct vb2_buffer *vb)
 {
+	printk("epc660_buffer_init\n");
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
 	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
@@ -382,6 +384,7 @@ static int epc660_buffer_init(struct vb2_buffer *vb)
 
 static int epc660_buffer_prepare(struct vb2_buffer *vb)
 {
+	printk("epc660_buffer_prepare\n");
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
 	unsigned long size = epc660_dev->fmt.sizeimage;
@@ -400,6 +403,7 @@ static int epc660_buffer_prepare(struct vb2_buffer *vb)
 
 static void epc660_buffer_queue(struct vb2_buffer *vb)
 {
+	printk("epc660_buffer_queue\n");
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct epc660_device *epc660_dev = vb2_get_drv_priv(vb->vb2_queue);
 	struct imager_buffer *buf = vb2v4l2_to_imagerbuffer(vbuf);
@@ -567,7 +571,7 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 	dma_addr_t lastDmaDescriptor;
 	struct list_head* iterator;
 
-//	printk("epc660_isr\n");
+	printk("epc660_isr\n");
 	spin_lock(&epc660_dev->lock);
 
 	dmaStatus = get_dma_curr_irqstat(epc660_dev->dma_channel);
@@ -597,7 +601,7 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 			} else {
 				struct imager_buffer* buf;
 				struct vb2_buffer *vb;
-//				printk("found %d completed buffers\n", completedCnt);
+				printk("found %d completed buffers\n", completedCnt);
 				while (completedCnt--) {
 					if (&epc660_dev->dma_queue == epc660_dev->dma_queue.next->next) {
 						break;
@@ -626,7 +630,7 @@ static irqreturn_t epc660_isr(int irq, void *dev_id)
 
 static int epc660_start_transfering(struct epc660_device *epc660_dev, dma_addr_t descrAddr) {
 	int ret;
-	//printk("start DMA\n");
+	printk("start DMA\n");
 
 	ret = request_dma(epc660_dev->dma_channel, "EPC660_dma");
 	if (ret) {
@@ -659,12 +663,13 @@ static void epc660_stop_transfering(struct epc660_device *epc660_dev)
 	clear_dma_irqstat(epc660_dev->dma_channel);
 
 	free_dma(epc660_dev->dma_channel);
-	//printk("stopped DMA\n");
+	printk("stopped DMA\n");
 }
 
 static int epc660_streamon(struct file *file, void *priv,
 				enum v4l2_buf_type buf_type)
 {
+	printk("epc660_streamon\n");
 	struct epc660_device *epc660_dev = video_drvdata(file);
 	struct vb2_queue *vq = &epc660_dev->buffer_queue;
 	unsigned long flags;
