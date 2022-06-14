@@ -45,7 +45,10 @@ struct epc660_datafmt {
 	enum v4l2_colorspace		colorspace;
 };
 
-/* Find a data format by a pixel code in an array */
+/**
+ * @brief Find a data format by a pixel code in an array
+ * @brief Used in epc660_set_fmt
+ */
 static const struct epc660_datafmt *epc660_find_datafmt(
 	u32 code, const struct epc660_datafmt *fmt,
 	int n)
@@ -58,13 +61,15 @@ static const struct epc660_datafmt *epc660_find_datafmt(
 	return NULL;
 }
 
+/**
+ * @brief used to store sensor supported formats
+ * @brief corresponding with "static const struct imager_format epc660_formats[]" in epc660_capture_sc57x.c  @JAHA ToDo: Change this?
+ */
 static const struct epc660_datafmt epc660_monochrome_fmts[] = {
 	/* Order important - see above */
 	{MEDIA_BUS_FMT_Y12_1X12, V4L2_COLORSPACE_JPEG},
 	{MEDIA_BUS_FMT_EPC660_2X12, V4L2_COLORSPACE_JPEG},
-	{MEDIA_BUS_FMT_EPC660_3X12, V4L2_COLORSPACE_JPEG},
 	{MEDIA_BUS_FMT_EPC660_4X12, V4L2_COLORSPACE_JPEG},
-	{MEDIA_BUS_FMT_EPC660_5X12, V4L2_COLORSPACE_JPEG},
 };
 
 struct epc660 {
@@ -166,9 +171,8 @@ fail:
 }
 
 /*
- * Send an I2C sequence to the imager.
- *
- * Return 0 on success, otherwise the i2c return code.
+ * @brief Send an I2C sequence to the imager. Used in function epc660_load_fw
+ * @brief Return 0 on success, otherwise the i2c return code.
  */
 static int epc660_send_i2c_sequence(struct i2c_client *client,
 									const u8 *seq)
@@ -405,6 +409,9 @@ static long epc660_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void* arg)
 	return 0;
 }
 
+/**
+ * @brief Function for (re-)setting the reset pin of the EPC660
+ */
 static int epc660_reset(struct v4l2_subdev *sd, u32 val) {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct epc660 *epc660 = to_epc660(client);
@@ -457,8 +464,8 @@ static int epc660_load_fw(struct v4l2_subdev *sd) {
 
 
 /*
- * Interface active, can use i2c. If it fails, it can indeed mean, that
- * this wasn't our capture interface, so, we wait for the right one
+ * @brief Interface active, can use i2c. If it fails, it can indeed mean, that
+ * @brief this wasn't our capture interface, so, we wait for the right one. Used by epc660_probe.
  */
 static int epc660_video_probe(struct i2c_client *client)
 {
