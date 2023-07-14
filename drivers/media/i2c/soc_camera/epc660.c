@@ -445,7 +445,7 @@ static int epc660_load_fw(struct v4l2_subdev *sd) {
 		return ret;
 	};
 	printk(KERN_INFO "EPC660 initialization done.\n");
-	printk(KERN_INFO "EPC660 sequencer programming");
+	printk(KERN_INFO "EPC660 sequencer programming: %s\n", SEQUENCER_VERSION);
 	ret = epc660_send_i2c_sequence(client, epc660_003_Seq_Prog_8MHz_Default_8);
 	if (ret < 0) {
 		return ret;
