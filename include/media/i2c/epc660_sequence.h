@@ -90,6 +90,8 @@ static const u8 epc660_init_sequence[] = {
  *
  * EPC660 Sequencer programm according to Datasheet_epc660-V2.20.pdf page 65/70
  */
+#define SEQUENCER_VERSION "v14"
+
 static const u8 epc660_003_Seq_Prog_8MHz_Default_8[] = {
 	2, 0xa4, 0x00,
 	2, 0x91, 0x00,
