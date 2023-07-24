@@ -415,9 +415,10 @@ static int epc660_reset(struct v4l2_subdev *sd, u32 val) {
 	    dev_err(&client->dev, "EPC660: cannot set nrst_gpio to %d\n", val);
 	} else {
 		dev_info(&client->dev, "EPC660 reset %d\n", val);
-		//wait for tStartup
-		usleep_range(7000, 10000);
-	}		
+	}	
+
+	//wait for tStartup
+	usleep_range(7000, 10000);	
 	return ret;
 }
 
