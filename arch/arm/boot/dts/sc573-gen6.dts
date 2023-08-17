@@ -249,37 +249,5 @@
 			    };
 			};
 		};
-
-		video_decoder_aptina: cap_aptina {
-			compatible = "iris,gen6-aptina_mt9v022";
-			card-name = "mt9v022";
-			type = <2>;
-			dma-channel = <28>;
-			interrupts = <0 83 0>;
-			reg = <0x3102D000 0xfff>;
-			spu_securep_id = <95>;
-			i2c_bus_id = <0>;
-			pinctrl-names = "8bit", "10bit", "12bit";
-			pinctrl-0 = <&ppi0_8b>;
-			pinctrl-1 = <&ppi0_10b>;
-			pinctrl-2 = <&ppi0_12b>;
-		};
-
-		video_decoder_epc660: cap_epc660 {
-			compatible = "iris,gen6-epc660";
-			card-name = "epc660";
-			type = <2>;
-			dma-channel = <28>;
-			interrupts = <0 83 0>;
-			reg = <0x3102D000 0xfff>;
-			spu_securep_id = <95>;
-			i2c_bus_id = <0>;
-			pinctrl-names = "8bit", "10bit", "12bit";
-			pinctrl-0 = <&ppi0_8b>;
-			pinctrl-1 = <&ppi0_10b>;
-			pinctrl-2 = <&ppi0_12b>;
-			
-			nrst-gpios = <&gpb 4 0>;
-		};
 	};
 };
