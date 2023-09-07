@@ -212,8 +212,9 @@ static int epc660_s_stream(struct v4l2_subdev *sd, int enable)
 		/* Enable power */
 		if (reg_write_byte(client, EPC660_REG_POWER_CTRL, 0x07) < 0)
 		  return -EIO;
-		if (reg_write_byte(client, EPC660_REG_LED_DRIVER, 0xe0) < 0)
-		  return -EIO;
+		// Do not set the LED driver register as the application shall have the possibilty to do that by hand
+		// 	if (reg_write_byte(client, EPC660_REG_LED_DRIVER, 0xe0) < 0)
+		//		return -EIO;
 		/* Switch to multi frame mode and enable shutter */
 //		do not switch on the automatic shutter as the application shall have the possibilty to do that by hand
 //		if (reg_write_byte(client, EPC660_REG_SHUTTER_CTRL, 0x03) < 0)
