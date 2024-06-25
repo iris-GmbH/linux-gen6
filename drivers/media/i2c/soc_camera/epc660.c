@@ -398,7 +398,7 @@ static long epc660_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void* arg)
 			}
 			break;
 		case EPC_660_IOCTL_CMD_RESET:
-			epc660_reset(sd, 0);
+			epc660_load_fw(sd); // reset and reload fw
 			break;
 		default:
 			break;
@@ -422,6 +422,16 @@ static int epc660_reset(struct v4l2_subdev *sd, u32 val) {
 		}
 	}
 	return ret;
+}
+
+static int epc660_load_fw_ops(struct v4l2_subdev *sd) {
+	// subdev operation not allowed, but callback is required
+	return 0;
+}
+
+static int epc660_reset_ops(struct v4l2_subdev *sd, u32 val) {
+	// subdev operation not allowed, but callback is required
+	return 0;
 }
 
 static int epc660_load_fw(struct v4l2_subdev *sd) {
@@ -562,9 +572,9 @@ static struct v4l2_subdev_core_ops epc660_subdev_core_ops = {
 	.g_register	= epc660_g_register,
 	.s_register	= epc660_s_register,
 #endif
-	.ioctl        = epc660_ioctl,
-	.load_fw      = epc660_load_fw,
-	.reset        = epc660_reset,
+	.ioctl 		= epc660_ioctl,
+	.load_fw 	= epc660_load_fw_ops,
+	.reset 		= epc660_reset_ops,
 };
 
 static struct v4l2_subdev_video_ops epc660_subdev_video_ops = {
