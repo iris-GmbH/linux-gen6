@@ -258,12 +258,6 @@ static int epc660_set_fmt(struct v4l2_subdev *sd,
 	struct v4l2_mbus_framefmt *mf = &format->format;
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct epc660 *epc660 = to_epc660(client);
-	const int centerX = (324+4)/2;
-	const int centerY = (246+6)/2;
-	const int bY = centerY-1;
-	int lX;
-	int rX;
-	int uY;
 	int walign = 4;
 	int halign = 1;
 
@@ -277,18 +271,6 @@ static int epc660_set_fmt(struct v4l2_subdev *sd,
 	epc660->fmt = epc660_find_datafmt(mf->code, epc660->fmts,
 				   epc660->num_fmts);
 	mf->colorspace	= epc660->fmt->colorspace;
-
-	// set the ROI on the EPC
-	lX = (centerX - mf->width / 2) & ~1; // the ROI has to start at an even offset
-	rX = lX + mf->width - 1;
-	uY = (centerY - mf->height / 2) & ~1; // the ROI has to start at an even offset
-
-	lX = ((lX >> 8) & 0xff) | ((lX << 8) & 0xff00);
-	rX = ((rX >> 8) & 0xff) | ((rX << 8) & 0xff00);
-	reg_write(client, EPC660_REG_ROI_TL_X_HI, lX);
-	reg_write(client, EPC660_REG_ROI_BR_X_HI, rX);
-	reg_write_byte(client, EPC660_REG_ROI_TL_Y, uY);
-	reg_write_byte(client, EPC660_REG_ROI_BR_Y, bY);
 
 	epc660->rect.width  = mf->width;
 	epc660->rect.height = mf->height;
