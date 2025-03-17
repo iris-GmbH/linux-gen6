@@ -199,38 +199,7 @@ fail:
 
 static int epc660_s_stream(struct v4l2_subdev *sd, int enable)
 {
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
-
-	/*
-	 * 8.7.15. Shutter_Control ("Datasheet_epc660-V1.03.pdf" page 99)
-	 * 0xA4/0xA5 (because 16bit access here)
-	 * 0xA4 Shutter-Ctrl => bit[1]=multi_frame_en(0/1), bit[0]=shutter_en(0/1);
-	 * 0xA5 Power-Ctrl => bit[2:0] = 111b
-	 */
-
-	if (enable) {
-		/* Enable power */
-		if (reg_write_byte(client, EPC660_REG_POWER_CTRL, 0x07) < 0)
-		  return -EIO;
-		// Do not set the LED driver register as the application shall have the possibilty to do that by hand
-		// 	if (reg_write_byte(client, EPC660_REG_LED_DRIVER, 0xe0) < 0)
-		//		return -EIO;
-		/* Switch to multi frame mode and enable shutter */
-//		do not switch on the automatic shutter as the application shall have the possibilty to do that by hand
-//		if (reg_write_byte(client, EPC660_REG_SHUTTER_CTRL, 0x03) < 0)
-//		  return -EIO;
-	} else {
-		/* Switch off image acquisition */
-		if (reg_write_byte(client, EPC660_REG_SHUTTER_CTRL, 0x00) < 0)
-		  return -EIO;
-		/* turn LEDs driver off */
-		if (reg_write_byte(client, EPC660_REG_LED_DRIVER, 0x00) < 0)
-		  return -EIO;
-		/* Disable power */
-		if (reg_write_byte(client, EPC660_REG_POWER_CTRL, 0x00) < 0)
-		  return -EIO;
-	}
-
+	v4l2_info(sd, "%sable\n", enable ? "en" : "dis");
 	return 0;
 }
 
@@ -258,16 +227,10 @@ static int epc660_set_fmt(struct v4l2_subdev *sd,
 	struct v4l2_mbus_framefmt *mf = &format->format;
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct epc660 *epc660 = to_epc660(client);
-	int walign = 4;
-	int halign = 1;
 
 	if (format->pad)
 		return -EINVAL;
 
-	v4l_bound_align_image(&mf->width, EPC660_MIN_WIDTH,
-		EPC660_MAX_WIDTH, walign,
-		&mf->height, EPC660_MIN_HEIGHT,
-		EPC660_MAX_HEIGHT, halign, 0);
 	epc660->fmt = epc660_find_datafmt(mf->code, epc660->fmts,
 				   epc660->num_fmts);
 	mf->colorspace	= epc660->fmt->colorspace;
