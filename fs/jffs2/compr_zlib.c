@@ -80,7 +80,7 @@ static int jffs2_zlib_compress(unsigned char *data_in,
 
 	mutex_lock(&deflate_mutex);
 
-	if (Z_OK != zlib_deflateInit(&def_strm, 3)) {
+	if (Z_OK != zlib_deflateInit(&def_strm, 9)) {
 		pr_warn("deflateInit failed\n");
 		mutex_unlock(&deflate_mutex);
 		return -1;
