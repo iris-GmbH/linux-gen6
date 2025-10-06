@@ -270,6 +270,7 @@
 			snps,force_sf_dma_mode;
 			snps,perfect-filter-entries = <32>;
 			phy-mode = "rmii";
+			snps,phy-addr = <1>;
 			clock-names = "stmmaceth";
 			pinctrl-names = "default";
 			pinctrl-0 = <&eth0_default>;
