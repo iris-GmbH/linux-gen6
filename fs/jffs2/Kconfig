@@ -14,7 +14,7 @@ config JFFS2_FS
 config JFFS2_FS_DEBUG
 	int "JFFS2 debugging verbosity (0 = quiet, 2 = noisy)"
 	depends on JFFS2_FS
-	default "0"
+	default "1"
 	help
 	  This controls the amount of debugging messages produced by the JFFS2
 	  code. Set it to zero for use in production systems. For evaluation,
