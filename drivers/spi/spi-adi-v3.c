@@ -1,7 +1,7 @@
 /*
  * Analog Devices SPI3 controller driver
  *
- * Copyright (c) 2014 Analog Devices Inc.
+ * Copyright (c) 2014 - 2018 Analog Devices Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -212,7 +212,7 @@ static void adi_spi_u8_read(struct adi_spi_master *drv_data)
 	struct spi_transfer *t = drv_data->cur_transfer;
 
 	while (drv_data->rx < drv_data->rx_end) {
-		if (t->rx_nbits != 4)
+		if (t->rx_nbits != SPI_NBITS_QUAD)
 			iowrite32(tx_val, &drv_data->regs->tfifo);
 		while (ioread32(&drv_data->regs->status) & SPI_STAT_RFE)
 			cpu_relax();
@@ -253,7 +253,7 @@ static void adi_spi_u16_read(struct adi_spi_master *drv_data)
 	struct spi_transfer *t = drv_data->cur_transfer;
 
 	while (drv_data->rx < drv_data->rx_end) {
-		if (t->rx_nbits != 4)
+		if (t->rx_nbits != SPI_NBITS_QUAD)
 			iowrite32(tx_val, &drv_data->regs->tfifo);
 		while (ioread32(&drv_data->regs->status) & SPI_STAT_RFE)
 			cpu_relax();
@@ -297,7 +297,7 @@ static void adi_spi_u32_read(struct adi_spi_master *drv_data)
 	struct spi_transfer *t = drv_data->cur_transfer;
 
 	while (drv_data->rx < drv_data->rx_end) {
-		if (t->rx_nbits != 4)
+		if (t->rx_nbits != SPI_NBITS_QUAD)
 			iowrite32(tx_val, &drv_data->regs->tfifo);
 		while (ioread32(&drv_data->regs->status) & SPI_STAT_RFE)
 			cpu_relax();
@@ -393,9 +393,9 @@ static int adi_spi_setup_transfer(struct adi_spi_master *drv)
 
 	cr &= ~SPI_CTL_SOSI;
 	cr &= ~SPI_CTL_MIOM;
-	if (t->rx_nbits == 4 || t->tx_nbits == 4)
+	if (t->rx_nbits == SPI_NBITS_QUAD || t->tx_nbits == SPI_NBITS_QUAD)
 		cr |= SPI_CTL_MIO_QUAD;
-	else if (t-> rx_nbits == 2 || t->tx_nbits == 4)
+	else if (t->rx_nbits == SPI_NBITS_DUAL || t->tx_nbits == SPI_NBITS_DUAL)
 		cr |= SPI_CTL_MIO_DUAL;
 
 	iowrite32(cr, &drv->regs->control);
@@ -487,7 +487,7 @@ static int adi_spi_dma_xfer(struct adi_spi_master *drv_data)
 	set_dma_config(drv_data->rx_dma, dma_config | WNR);
 	enable_dma(drv_data->rx_dma);
 
-	if (!drv_data->tx && t->rx_nbits == 4) {
+	if (!drv_data->tx && t->rx_nbits == SPI_NBITS_QUAD) {
 		iowrite32(SPI_RXCTL_REN | SPI_RXCTL_RTI | SPI_RXCTL_RDR_NE,
 				&drv_data->regs->rx_control);
 		iowrite32(0, &drv_data->regs->tx_control);
@@ -521,7 +521,7 @@ static int adi_spi_pio_xfer(struct adi_spi_master *drv_data)
 			return -EIO;
 	} else if (!drv_data->tx) {
 		/* read only half duplex */
-		if (t->rx_nbits == 4) {
+		if (t->rx_nbits == SPI_NBITS_QUAD) {
 			iowrite32(SPI_RXCTL_REN | SPI_RXCTL_RTI,
 					&drv_data->regs->rx_control);
 			iowrite32(0, &drv_data->regs->tx_control);
@@ -741,7 +741,7 @@ static irqreturn_t adi_spi_rx_dma_isr(int irq, void *dev_id)
 	iowrite32(0, &drv_data->regs->tx_control);
 	iowrite32(0, &drv_data->regs->rx_control);
 	if (drv_data->rx_num != drv_data->tx_num)
-		dev_dbg(&drv_data->master->dev,
+		dev_err(&drv_data->master->dev,
 				"dma interrupt missing: tx=%d,rx=%d\n",
 				drv_data->tx_num, drv_data->rx_num);
 	tasklet_schedule(&drv_data->pump_transfers);
@@ -754,8 +754,7 @@ static irqreturn_t spi_irq_err(int irq, void *dev_id)
 	u32 status;
 
 	status = ioread32(&drv_data->regs->status);
-	if (status & SPI_STAT_ROE)
-		dev_err(&drv_data->master->dev, "spi rx overrun\n");
+	dev_err(&drv_data->master->dev, "spi error irq, status = 0x%x\n", status);
 	iowrite32(status, &drv_data->regs->status);
 	drv_data->state = ERROR_STATE;
 	iowrite32(0, &drv_data->regs->tx_control);
@@ -936,8 +935,7 @@ static int adi_spi_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM
-static int adi_spi_suspend(struct device *dev)
+static int __maybe_unused adi_spi_suspend(struct device *dev)
 {
 	struct spi_master *master = dev_get_drvdata(dev);
 	struct adi_spi_master *drv_data = spi_master_get_devdata(master);
@@ -955,7 +953,7 @@ static int adi_spi_suspend(struct device *dev)
 	return 0;
 }
 
-static int adi_spi_resume(struct device *dev)
+static int __maybe_unused adi_spi_resume(struct device *dev)
 {
 	struct spi_master *master = dev_get_drvdata(dev);
 	struct adi_spi_master *drv_data = spi_master_get_devdata(master);
@@ -977,7 +975,7 @@ static int adi_spi_resume(struct device *dev)
 
 	return ret;
 }
-#endif
+
 static const struct dev_pm_ops adi_spi_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(adi_spi_suspend, adi_spi_resume)
 };
