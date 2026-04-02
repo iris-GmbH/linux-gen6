@@ -143,10 +143,23 @@ static u32 hz_to_spi_clock(u32 sclk, u32 speed_hz)
 static int adi_spi_flush(struct adi_spi_master *drv_data)
 {
 	unsigned long limit = loops_per_jiffy << 1;
+        u32 status = 0;
 
 	/* wait for stop and clear stat */
-	while (!(ioread32(&drv_data->regs->status) & SPI_STAT_SPIF) && --limit)
+	while (!((status = ioread32(&drv_data->regs->status)) & SPI_STAT_SPIF) && --limit)
 		cpu_relax();
+
+	if (!limit) {
+		struct spi_message *msg = drv_data->cur_msg;
+
+		dev_err(&drv_data->master->dev,
+			"spi flush timeout: status=%08x ctl=%08x txctl=%08x rxctl=%08x state=%d\n",
+			status,
+			ioread32(&drv_data->regs->control),
+			ioread32(&drv_data->regs->tx_control),
+			ioread32(&drv_data->regs->rx_control),
+			drv_data->state);
+	}
 
 	iowrite32(0xFFFFFFFF, &drv_data->regs->status);
 
@@ -754,7 +767,14 @@ static irqreturn_t spi_irq_err(int irq, void *dev_id)
 	u32 status;
 
 	status = ioread32(&drv_data->regs->status);
-	dev_err(&drv_data->master->dev, "spi error irq, status = 0x%x\n", status);
+	dev_err(&drv_data->master->dev,
+		"spi error irq: status=%08x ctl=%08x txctl=%08x rxctl=%08x state=%d\n",
+		status,
+		ioread32(&drv_data->regs->control),
+		ioread32(&drv_data->regs->tx_control),
+		ioread32(&drv_data->regs->rx_control),
+		drv_data->state);
+
 	iowrite32(status, &drv_data->regs->status);
 	drv_data->state = ERROR_STATE;
 	iowrite32(0, &drv_data->regs->tx_control);
