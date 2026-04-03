@@ -608,10 +608,12 @@ static void adi_spi_pump_transfers(unsigned long data)
 	adi_spi_cs_active(drv_data, chip);
 	drv_data->state = RUNNING_STATE;
 
-	if (chip->enable_dma)
+	if (chip->enable_dma) {
+	        printk( "GLEMBO: adi_spi_pump_transfers: DMA sollte disabled sein\n");
 		ret = adi_spi_dma_xfer(drv_data);
-	else
+	} else {
 		ret = adi_spi_pio_xfer(drv_data);
+	}
 	if (ret) {
 		msg->status = ret;
 		adi_spi_giveback(drv_data);
@@ -650,6 +652,7 @@ static int adi_spi_setup(struct spi_device *spi)
 			return -ENOMEM;
 
 		if (chip_info) {
+		        dev_err(&spi->dev, "GLEMBO: 1a. adi_spi_setup: chip_info==true\n");
 			if (chip_info->control & ~ctl_reg) {
 				dev_err(&spi->dev,
 					"do not set bits that the SPI framework manages\n");
@@ -660,10 +663,19 @@ static int adi_spi_setup(struct spi_device *spi)
 			chip->tx_dummy_val = chip_info->tx_dummy_val;
 			chip->enable_dma = chip_info->enable_dma;
 		} else if (spi->dev.of_node) {
+		        dev_err(&spi->dev, "GLEMBO: 1b. adi_spi_setup: of_find_property\n");
 			if (of_find_property(spi->dev.of_node,
 						"dma-mode", NULL))
 				chip->enable_dma = true;
 		}
+		
+		dev_err(&spi->dev, "GLEMBO: 2. adi_spi_setup: chip->enable_dma: %d\n", chip->enable_dma);
+		
+		//disable dma for testing purposes
+		chip->enable_dma = false;
+		
+		dev_err(&spi->dev, "GLEMBO: 3. adi_spi_setup: chip->enable_dma: %d\n", chip->enable_dma);
+		
 		chip->cs_gpio = spi->chip_select;
 		ret = gpio_request_one(chip->cs_gpio, GPIOF_OUT_INIT_HIGH,
 					dev_name(&spi->dev));
@@ -754,7 +766,7 @@ static irqreturn_t adi_spi_rx_dma_isr(int irq, void *dev_id)
 	iowrite32(0, &drv_data->regs->tx_control);
 	iowrite32(0, &drv_data->regs->rx_control);
 	if (drv_data->rx_num != drv_data->tx_num)
-		dev_err(&drv_data->master->dev,
+		 dev_err_ratelimited(&drv_data->master->dev,
 				"dma interrupt missing: tx=%d,rx=%d\n",
 				drv_data->tx_num, drv_data->rx_num);
 	tasklet_schedule(&drv_data->pump_transfers);
