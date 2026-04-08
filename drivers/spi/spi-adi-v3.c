@@ -842,8 +842,17 @@ static irqreturn_t spi_irq_err(int irq, void *dev_id)
 	bool complete = false;
 
 	status = ioread32(&drv_data->regs->status);
+
+	dev_err(&drv_data->master->dev, "spi status: 0x%08x\n", status);
 	if (status & SPI_STAT_ROE)
 		dev_err(&drv_data->master->dev, "spi rx overrun\n");
+	if (status & SPI_STAT_TUE)
+		dev_err(&drv_data->master->dev, "spi tx underrun\n");
+	if (status & SPI_STAT_TCE)
+		dev_err(&drv_data->master->dev, "spi tx collision\n");
+	if (status & SPI_STAT_MODF)
+		dev_err(&drv_data->master->dev, "spi mode fault\n");
+
 	iowrite32(status, &drv_data->regs->status);
 
 	disable_dma(drv_data->tx_dma);
