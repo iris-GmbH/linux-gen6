@@ -98,6 +98,17 @@ struct adi_spi_master {
 	enum adi_spi_state state;
 
 	const struct adi_spi_transfer_ops *ops;
+
+	/* debug state for current transfer */
+	unsigned int debug_transfer_id;
+	bool debug_last_used_dma;
+	u32 debug_last_len;
+	u8 debug_last_bits_per_word;
+	u8 debug_last_tx_nbits;
+	u8 debug_last_rx_nbits;
+	u32 debug_last_speed_hz;
+	bool debug_last_has_tx;
+	bool debug_last_has_rx;
 };
 
 struct adi_spi_device {
@@ -111,6 +122,49 @@ struct adi_spi_device {
 	bool enable_dma;
 	const struct adi_spi_transfer_ops *ops;
 };
+
+#define adi_spi_dbg(drv_data, fmt, ...) \
+	dev_info(&(drv_data)->master->dev, "adi-spi3: " fmt, ##__VA_ARGS__)
+
+static void adi_spi_log_dma_state(struct adi_spi_master *drv_data,
+				  const char *tag)
+{
+	adi_spi_dbg(drv_data,
+		    "%s: xfer=%u state=%d tx_dma=%u rx_dma=%u tx_irq=%#lx rx_irq=%#lx tx_cfg=%#lx rx_cfg=%#lx tx_xcnt=%lu rx_xcnt=%lu tx_cur=%#lx rx_cur=%#lx tx_start=%#lx rx_start=%#lx\n",
+		    tag,
+		    drv_data->debug_transfer_id,
+		    drv_data->state,
+		    drv_data->tx_dma,
+		    drv_data->rx_dma,
+		    get_dma_curr_irqstat(drv_data->tx_dma),
+		    get_dma_curr_irqstat(drv_data->rx_dma),
+		    get_dma_config(drv_data->tx_dma),
+		    get_dma_config(drv_data->rx_dma),
+		    get_dma_curr_xcount(drv_data->tx_dma),
+		    get_dma_curr_xcount(drv_data->rx_dma),
+		    get_dma_curr_addr(drv_data->tx_dma),
+		    get_dma_curr_addr(drv_data->rx_dma),
+		    get_dma_start_addr(drv_data->tx_dma),
+		    get_dma_start_addr(drv_data->rx_dma));
+}
+
+static void adi_spi_cache_transfer_debug(struct adi_spi_master *drv_data,
+					 bool use_dma)
+{
+	struct spi_transfer *t = drv_data->cur_transfer;
+
+	if (!t)
+		return;
+
+	drv_data->debug_last_used_dma = use_dma;
+	drv_data->debug_last_len = drv_data->transfer_len;
+	drv_data->debug_last_bits_per_word = t->bits_per_word;
+	drv_data->debug_last_tx_nbits = t->tx_nbits;
+	drv_data->debug_last_rx_nbits = t->rx_nbits;
+	drv_data->debug_last_speed_hz = t->speed_hz;
+	drv_data->debug_last_has_tx = !!t->tx_buf;
+	drv_data->debug_last_has_rx = !!t->rx_buf;
+}
 
 static void adi_spi_enable(struct adi_spi_master *drv_data)
 {
@@ -414,6 +468,8 @@ static int adi_spi_dma_xfer(struct adi_spi_master *drv_data)
 	unsigned long word_count, word_size;
 	void *tx_buf, *rx_buf;
 
+	adi_spi_cache_transfer_debug(drv_data, true);
+
 	switch (t->bits_per_word) {
 	case 8:
 		dma_config = WDSIZE_8 | PSIZE_8;
@@ -507,6 +563,8 @@ static int adi_spi_pio_xfer(struct adi_spi_master *drv_data)
 	struct spi_message *msg = drv_data->cur_msg;
 	struct spi_transfer *t = drv_data->cur_transfer;
 
+	adi_spi_cache_transfer_debug(drv_data, false);
+
 	dummy_read(drv_data);
 
 	iowrite32(SPI_RXCTL_REN,
@@ -594,6 +652,7 @@ static void adi_spi_pump_transfers(unsigned long data)
 	iowrite32(0xFFFFFFFF, &drv_data->regs->status);
 	adi_spi_cs_active(drv_data, chip);
 	drv_data->state = RUNNING_STATE;
+	drv_data->debug_transfer_id++;
 
 	if (chip->enable_dma)
 		ret = adi_spi_dma_xfer(drv_data);
@@ -712,6 +771,7 @@ static irqreturn_t adi_spi_tx_dma_isr(int irq, void *dev_id)
 	} else {
 		dev_err(&drv_data->master->dev,
 				"spi tx dma error: %d\n", dma_stat);
+		adi_spi_log_dma_state(drv_data, "tx-dma-error");
 		if (drv_data->tx)
 			drv_data->state = ERROR_STATE;
 	}
@@ -737,6 +797,7 @@ static irqreturn_t adi_spi_rx_dma_isr(int irq, void *dev_id)
 		drv_data->state = ERROR_STATE;
 		dev_err(&drv_data->master->dev,
 				"spi rx dma error: %d\n", dma_stat);
+		adi_spi_log_dma_state(drv_data, "rx-dma-error");
 	}
 	iowrite32(0, &drv_data->regs->tx_control);
 	iowrite32(0, &drv_data->regs->rx_control);
@@ -756,6 +817,23 @@ static irqreturn_t spi_irq_err(int irq, void *dev_id)
 	status = ioread32(&drv_data->regs->status);
 	if (status & SPI_STAT_ROE)
 		dev_err(&drv_data->master->dev, "spi rx overrun\n");
+	adi_spi_dbg(drv_data,
+		    "spi-error: xfer=%u state=%d status=0x%x rxctl=0x%x txctl=0x%x control=0x%x mode=%s len=%u bpw=%u tx=%d rx=%d tx_nbits=%u rx_nbits=%u speed=%u\n",
+		    drv_data->debug_transfer_id,
+		    drv_data->state,
+		    status,
+		    ioread32(&drv_data->regs->rx_control),
+		    ioread32(&drv_data->regs->tx_control),
+		    ioread32(&drv_data->regs->control),
+		    drv_data->debug_last_used_dma ? "dma" : "pio",
+		    drv_data->debug_last_len,
+		    drv_data->debug_last_bits_per_word,
+		    drv_data->debug_last_has_tx,
+		    drv_data->debug_last_has_rx,
+		    drv_data->debug_last_tx_nbits,
+		    drv_data->debug_last_rx_nbits,
+		    drv_data->debug_last_speed_hz);
+	adi_spi_log_dma_state(drv_data, "spi-error-dma");
 	iowrite32(status, &drv_data->regs->status);
 	drv_data->state = ERROR_STATE;
 	iowrite32(0, &drv_data->regs->tx_control);
