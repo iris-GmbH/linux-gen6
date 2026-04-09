@@ -89,6 +89,7 @@ struct adi_spi_master {
 	unsigned long rx_dma_size;
 	int tx_num;
 	int rx_num;
+	bool dma_mapped;
 
 	/* store register value for suspend/resume */
 	u32 control;
@@ -187,6 +188,7 @@ static void adi_spi_restore_state(struct adi_spi_master *drv_data)
 	adi_spi_enable(drv_data);
 	drv_data->tx_num = drv_data->rx_num = 0;
 	adi_spi_cs_active(drv_data, chip);
+	drv_data->dma_mapped = false;
 }
 
 /* discard invalid rx data and empty rfifo */
@@ -477,6 +479,8 @@ static int adi_spi_dma_xfer(struct adi_spi_master *drv_data)
 		return -ENOMEM;
 	}
 
+	drv_data->dma_mapped = true;
+
 	dummy_read(drv_data);
 	set_dma_x_count(drv_data->tx_dma, word_count);
 	set_dma_x_count(drv_data->rx_dma, word_count);
@@ -651,6 +655,11 @@ static int adi_spi_setup(struct spi_device *spi)
 						"dma-mode", NULL))
 				chip->enable_dma = true;
 		}
+
+		dev_notice(&spi->dev, "spi dma %s (%d)\n",
+			chip->enable_dma ? "enabled" : "disabled",
+			chip->enable_dma);
+
 		chip->cs_gpio = spi->chip_select;
 		ret = gpio_request_one(chip->cs_gpio, GPIOF_OUT_INIT_HIGH,
 					dev_name(&spi->dev));
@@ -700,6 +709,26 @@ static void adi_spi_cleanup(struct spi_device *spi)
 	spi_set_ctldata(spi, NULL);
 }
 
+static void adi_spi_dma_unmap(struct adi_spi_master *drv_data)
+{
+	struct spi_message *msg = drv_data->cur_msg;
+
+	if (!drv_data->dma_mapped || !msg)
+		return;
+
+	dma_unmap_single(&msg->spi->dev,
+			 drv_data->tx_dma_addr,
+			 drv_data->tx_dma_size,
+			 DMA_TO_DEVICE);
+
+	dma_unmap_single(&msg->spi->dev,
+			 drv_data->rx_dma_addr,
+			 drv_data->rx_dma_size,
+			 DMA_FROM_DEVICE);
+
+	drv_data->dma_mapped = false;
+}
+
 static irqreturn_t adi_spi_tx_dma_isr(int irq, void *dev_id)
 {
 	struct adi_spi_master *drv_data = dev_id;
@@ -738,6 +767,9 @@ static irqreturn_t adi_spi_rx_dma_isr(int irq, void *dev_id)
 		dev_err(&drv_data->master->dev,
 				"spi rx dma error: %d\n", dma_stat);
 	}
+
+	adi_spi_dma_unmap(drv_data);
+
 	iowrite32(0, &drv_data->regs->tx_control);
 	iowrite32(0, &drv_data->regs->rx_control);
 	if (drv_data->rx_num != drv_data->tx_num)
@@ -762,6 +794,9 @@ static irqreturn_t spi_irq_err(int irq, void *dev_id)
 	iowrite32(0, &drv_data->regs->rx_control);
 	disable_dma(drv_data->tx_dma);
 	disable_dma(drv_data->rx_dma);
+
+	adi_spi_dma_unmap(drv_data);
+
 	tasklet_schedule(&drv_data->pump_transfers);
 	return IRQ_HANDLED;
 }
