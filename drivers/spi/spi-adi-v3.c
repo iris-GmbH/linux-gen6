@@ -90,6 +90,13 @@ struct adi_spi_master {
 	int tx_num;
 	int rx_num;
 
+	/* dma tx/rx synchronization */
+	spinlock_t dma_lock;
+	bool tx_done;
+	bool rx_done;
+	bool dma_mapped;
+	bool dma_completed;
+
 	/* store register value for suspend/resume */
 	u32 control;
 	u32 ssel;
@@ -187,6 +194,11 @@ static void adi_spi_restore_state(struct adi_spi_master *drv_data)
 	adi_spi_enable(drv_data);
 	drv_data->tx_num = drv_data->rx_num = 0;
 	adi_spi_cs_active(drv_data, chip);
+
+	drv_data->tx_done = false;
+	drv_data->rx_done = false;
+	drv_data->dma_mapped = false;
+	drv_data->dma_completed = false;
 }
 
 /* discard invalid rx data and empty rfifo */
@@ -477,6 +489,11 @@ static int adi_spi_dma_xfer(struct adi_spi_master *drv_data)
 		return -ENOMEM;
 	}
 
+	drv_data->tx_done = (!drv_data->tx && t->rx_nbits == 4);
+	drv_data->rx_done = false;
+	drv_data->dma_completed = false;
+	drv_data->dma_mapped = true;
+
 	dummy_read(drv_data);
 	set_dma_x_count(drv_data->tx_dma, word_count);
 	set_dma_x_count(drv_data->rx_dma, word_count);
@@ -500,6 +517,46 @@ static int adi_spi_dma_xfer(struct adi_spi_master *drv_data)
 	}
 
 	return 0;
+}
+
+static void adi_spi_dma_unmap(struct adi_spi_master *drv_data)
+{
+	struct spi_message *msg = drv_data->cur_msg;
+
+	if (!drv_data->dma_mapped || !msg)
+		return;
+
+	dma_unmap_single(&msg->spi->dev,
+			 drv_data->tx_dma_addr,
+			 drv_data->tx_dma_size,
+			 DMA_TO_DEVICE);
+	dma_unmap_single(&msg->spi->dev,
+			 drv_data->rx_dma_addr,
+			 drv_data->rx_dma_size,
+			 DMA_FROM_DEVICE);
+
+	drv_data->dma_mapped = false;
+}
+
+static void adi_spi_dma_complete(struct adi_spi_master *drv_data)
+{
+	struct spi_message *msg = drv_data->cur_msg;
+
+	adi_spi_dma_unmap(drv_data);
+
+	if (!( !drv_data->tx && drv_data->cur_transfer->rx_nbits == 4) &&
+	    drv_data->rx_num != drv_data->tx_num)
+		dev_err_ratelimited(&drv_data->master->dev,
+				"dma interrupt missing: tx=%d,rx=%d\n",
+				drv_data->tx_num, drv_data->rx_num);
+
+	iowrite32(0, &drv_data->regs->tx_control);
+	iowrite32(0, &drv_data->regs->rx_control);
+
+	if (drv_data->state != ERROR_STATE)
+		msg->actual_length += drv_data->transfer_len;
+
+	tasklet_schedule(&drv_data->pump_transfers);
 }
 
 static int adi_spi_pio_xfer(struct adi_spi_master *drv_data)
@@ -651,6 +708,10 @@ static int adi_spi_setup(struct spi_device *spi)
 						"dma-mode", NULL))
 				chip->enable_dma = true;
 		}
+		dev_notice(&spi->dev, "SPI DMA %s (%d)\n",
+			chip->enable_dma ? "enabled" : "disabled",
+			chip->enable_dma);
+
 		chip->cs_gpio = spi->chip_select;
 		ret = gpio_request_one(chip->cs_gpio, GPIOF_OUT_INIT_HIGH,
 					dev_name(&spi->dev));
@@ -703,66 +764,107 @@ static void adi_spi_cleanup(struct spi_device *spi)
 static irqreturn_t adi_spi_tx_dma_isr(int irq, void *dev_id)
 {
 	struct adi_spi_master *drv_data = dev_id;
+	unsigned long flags;
 	u32 dma_stat = get_dma_curr_irqstat(drv_data->tx_dma);
 	u32 tx_ctl;
+	bool complete = false;
 
 	clear_dma_irqstat(drv_data->tx_dma);
+
+	spin_lock_irqsave(&drv_data->dma_lock, flags);
+
 	if (dma_stat & DMA_DONE) {
 		drv_data->tx_num++;
 	} else {
 		dev_err(&drv_data->master->dev,
 				"spi tx dma error: %d\n", dma_stat);
-		if (drv_data->tx)
-			drv_data->state = ERROR_STATE;
+		drv_data->state = ERROR_STATE;
 	}
+	drv_data->tx_done = true;
+
 	tx_ctl = ioread32(&drv_data->regs->tx_control);
 	tx_ctl &= ~SPI_TXCTL_TDR_NF;
 	iowrite32(tx_ctl, &drv_data->regs->tx_control);
+
+	if (!drv_data->dma_completed &&
+	    drv_data->tx_done && drv_data->rx_done) {
+		drv_data->dma_completed = true;
+		complete = true;
+	}
+
+	spin_unlock_irqrestore(&drv_data->dma_lock, flags);
+
+	if (complete)
+		adi_spi_dma_complete(drv_data);
+
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t adi_spi_rx_dma_isr(int irq, void *dev_id)
 {
 	struct adi_spi_master *drv_data = dev_id;
-	struct spi_message *msg = drv_data->cur_msg;
+	unsigned long flags;
 	u32 dma_stat = get_dma_curr_irqstat(drv_data->rx_dma);
+	bool complete = false;
 
 	clear_dma_irqstat(drv_data->rx_dma);
+
+	spin_lock_irqsave(&drv_data->dma_lock, flags);
+
 	if (dma_stat & DMA_DONE) {
 		drv_data->rx_num++;
-		/* we may fail on tx dma */
-		if (drv_data->state != ERROR_STATE)
-			msg->actual_length += drv_data->transfer_len;
 	} else {
 		drv_data->state = ERROR_STATE;
 		dev_err(&drv_data->master->dev,
 				"spi rx dma error: %d\n", dma_stat);
 	}
-	iowrite32(0, &drv_data->regs->tx_control);
-	iowrite32(0, &drv_data->regs->rx_control);
-	if (drv_data->rx_num != drv_data->tx_num)
-		dev_dbg(&drv_data->master->dev,
-				"dma interrupt missing: tx=%d,rx=%d\n",
-				drv_data->tx_num, drv_data->rx_num);
-	tasklet_schedule(&drv_data->pump_transfers);
+	drv_data->rx_done = true;
+
+	if (!drv_data->dma_completed &&
+	    drv_data->tx_done && drv_data->rx_done) {
+		drv_data->dma_completed = true;
+		complete = true;
+	}
+
+	spin_unlock_irqrestore(&drv_data->dma_lock, flags);
+
+	if (complete)
+		adi_spi_dma_complete(drv_data);
+
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t spi_irq_err(int irq, void *dev_id)
 {
 	struct adi_spi_master *drv_data = dev_id;
+	unsigned long flags;
 	u32 status;
+	bool complete = false;
 
 	status = ioread32(&drv_data->regs->status);
 	if (status & SPI_STAT_ROE)
 		dev_err(&drv_data->master->dev, "spi rx overrun\n");
 	iowrite32(status, &drv_data->regs->status);
-	drv_data->state = ERROR_STATE;
-	iowrite32(0, &drv_data->regs->tx_control);
-	iowrite32(0, &drv_data->regs->rx_control);
+
 	disable_dma(drv_data->tx_dma);
 	disable_dma(drv_data->rx_dma);
-	tasklet_schedule(&drv_data->pump_transfers);
+
+	spin_lock_irqsave(&drv_data->dma_lock, flags);
+
+	drv_data->state = ERROR_STATE;
+	drv_data->tx_done = true;
+	drv_data->rx_done = true;
+
+	if (!drv_data->dma_completed) {
+		drv_data->dma_completed = true;
+		complete = true;
+	}
+
+	spin_unlock_irqrestore(&drv_data->dma_lock, flags);
+
+	if (complete)
+		adi_spi_dma_complete(drv_data);
+
 	return IRQ_HANDLED;
 }
 
@@ -861,6 +963,8 @@ static int adi_spi_probe(struct platform_device *pdev)
 	drv_data->tx_dma = tx_dma;
 	drv_data->rx_dma = rx_dma;
 	drv_data->sclk = clk_get_rate(sclk);
+
+	spin_lock_init(&drv_data->dma_lock);
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	drv_data->regs = devm_ioremap_resource(dev, mem);
