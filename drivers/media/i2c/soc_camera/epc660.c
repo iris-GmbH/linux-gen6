@@ -199,37 +199,7 @@ fail:
 
 static int epc660_s_stream(struct v4l2_subdev *sd, int enable)
 {
-	struct i2c_client *client = v4l2_get_subdevdata(sd);
-
-	/*
-	 * 8.7.15. Shutter_Control ("Datasheet_epc660-V1.03.pdf" page 99)
-	 * 0xA4/0xA5 (because 16bit access here)
-	 * 0xA4 Shutter-Ctrl => bit[1]=multi_frame_en(0/1), bit[0]=shutter_en(0/1);
-	 * 0xA5 Power-Ctrl => bit[2:0] = 111b
-	 */
-
-	if (enable) {
-		/* Enable power */
-		if (reg_write_byte(client, EPC660_REG_POWER_CTRL, 0x07) < 0)
-		  return -EIO;
-		if (reg_write_byte(client, EPC660_REG_LED_DRIVER, 0xe0) < 0)
-		  return -EIO;
-		/* Switch to multi frame mode and enable shutter */
-//		do not switch on the automatic shutter as the application shall have the possibilty to do that by hand
-//		if (reg_write_byte(client, EPC660_REG_SHUTTER_CTRL, 0x03) < 0)
-//		  return -EIO;
-	} else {
-		/* Switch off image acquisition */
-		if (reg_write_byte(client, EPC660_REG_SHUTTER_CTRL, 0x00) < 0)
-		  return -EIO;
-		/* turn LEDs driver off */
-		if (reg_write_byte(client, EPC660_REG_LED_DRIVER, 0x00) < 0)
-		  return -EIO;
-		/* Disable power */
-		if (reg_write_byte(client, EPC660_REG_POWER_CTRL, 0x00) < 0)
-		  return -EIO;
-	}
-
+	v4l2_info(sd, "%sable\n", enable ? "en" : "dis");
 	return 0;
 }
 
@@ -257,37 +227,13 @@ static int epc660_set_fmt(struct v4l2_subdev *sd,
 	struct v4l2_mbus_framefmt *mf = &format->format;
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct epc660 *epc660 = to_epc660(client);
-	const int centerX = (324+4)/2;
-	const int centerY = (246+6)/2;
-	const int bY = centerY-1;
-	int lX;
-	int rX;
-	int uY;
-	int walign = 4;
-	int halign = 1;
 
 	if (format->pad)
 		return -EINVAL;
 
-	v4l_bound_align_image(&mf->width, EPC660_MIN_WIDTH,
-		EPC660_MAX_WIDTH, walign,
-		&mf->height, EPC660_MIN_HEIGHT,
-		EPC660_MAX_HEIGHT, halign, 0);
 	epc660->fmt = epc660_find_datafmt(mf->code, epc660->fmts,
 				   epc660->num_fmts);
 	mf->colorspace	= epc660->fmt->colorspace;
-
-	// set the ROI on the EPC
-	lX = (centerX - mf->width / 2) & ~1; // the ROI has to start at an even offset
-	rX = lX + mf->width - 1;
-	uY = (centerY - mf->height / 2) & ~1; // the ROI has to start at an even offset
-
-	lX = ((lX >> 8) & 0xff) | ((lX << 8) & 0xff00);
-	rX = ((rX >> 8) & 0xff) | ((rX << 8) & 0xff00);
-	reg_write(client, EPC660_REG_ROI_TL_X_HI, lX);
-	reg_write(client, EPC660_REG_ROI_BR_X_HI, rX);
-	reg_write_byte(client, EPC660_REG_ROI_TL_Y, uY);
-	reg_write_byte(client, EPC660_REG_ROI_BR_Y, bY);
 
 	epc660->rect.width  = mf->width;
 	epc660->rect.height = mf->height;
@@ -397,7 +343,7 @@ static long epc660_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void* arg)
 			}
 			break;
 		case EPC_660_IOCTL_CMD_RESET:
-			epc660_reset(sd, 0);
+			epc660_load_fw(sd); // reset and reload fw
 			break;
 		default:
 			break;
@@ -423,6 +369,16 @@ static int epc660_reset(struct v4l2_subdev *sd, u32 val) {
 	return ret;
 }
 
+static int epc660_load_fw_ops(struct v4l2_subdev *sd) {
+	// subdev operation not allowed, but callback is required
+	return 0;
+}
+
+static int epc660_reset_ops(struct v4l2_subdev *sd, u32 val) {
+	// subdev operation not allowed, but callback is required
+	return 0;
+}
+
 static int epc660_load_fw(struct v4l2_subdev *sd) {
 	int ret;
 	struct i2c_client *client;
@@ -445,7 +401,7 @@ static int epc660_load_fw(struct v4l2_subdev *sd) {
 		return ret;
 	};
 	printk(KERN_INFO "EPC660 initialization done.\n");
-	printk(KERN_INFO "EPC660 sequencer programming");
+	printk(KERN_INFO "EPC660 sequencer programming: %s\n", SEQUENCER_VERSION);
 	ret = epc660_send_i2c_sequence(client, epc660_003_Seq_Prog_8MHz_Default_8);
 	if (ret < 0) {
 		return ret;
@@ -561,9 +517,9 @@ static struct v4l2_subdev_core_ops epc660_subdev_core_ops = {
 	.g_register	= epc660_g_register,
 	.s_register	= epc660_s_register,
 #endif
-	.ioctl        = epc660_ioctl,
-	.load_fw      = epc660_load_fw,
-	.reset        = epc660_reset,
+	.ioctl 		= epc660_ioctl,
+	.load_fw 	= epc660_load_fw_ops,
+	.reset 		= epc660_reset_ops,
 };
 
 static struct v4l2_subdev_video_ops epc660_subdev_video_ops = {
